@@ -32,6 +32,25 @@ A ogni avvio BIG-BOB controlla se c'è una versione nuova. Se c'è, compare un b
 (i tuoi dati non vengono toccati). Puoi controllare anche a mano da ⚙ Impostazioni → Controlla aggiornamenti, o dal menu
 Start → BIG-BOB → Aggiorna BIG-BOB. La prima volta GitHub chiede di accedere: fallo una volta da "Aggiorna BIG-BOB".
 
+## Modalità CREAZIONE MAZZO
+Il pulsante della modalità gira tra **ALLENAMENTO → RANKED → CREAZIONE**. In creazione compare il pannello **LABORATORIO**:
+1. **CREA MAZZO**: scrivi cosa vuoi (una leggendaria, uno stile… o niente) e quante partite di test per versione.
+   BIG-BOB studia il meta di OriginsMeta (statistiche, liste migliori e le loro guide), confronta 2-3 candidati e crea
+   il mazzo **v1**, dicendoti le carte da costruire nel gioco e da quali mazzi meta parte.
+2. **Partite di test**: con NUOVA scegli il mazzo del laboratorio (è il primo della lista). In partita ti consiglia le
+   mosse come in allenamento; ogni partita conta per la versione attuale. Il pannello mostra partite fatte/necessarie,
+   vittorie e quante ne mancano.
+3. **A fine partita** valuta il mazzo: quando il test della versione è finito trova il punto debole principale (carte che
+   restano in mano, che entrano tardi, con cui perdi; matchup; lezioni) e propone **una** miglioria guardando anche le
+   carte che rendono nel meta. Tu la costruisci nel gioco e premi **APPLICA MIGLIORIA**: nasce la versione successiva.
+4. **Quante partite**: 10 per la v1 e per i cambi grandi, 8 per il cambio di una carta (le scegli tu o BIG-BOB). Se dopo
+   almeno 6 partite il confronto con la versione precedente è già netto (90%), il test finisce prima. Se una versione va
+   peggio, ti propone di tornare indietro.
+5. **STATISTICHE DEL MAZZO**: per ogni versione vittorie, winrate con l'intervallo di confidenza, cosa è cambiato e
+   perché; per le carte pescata/giocata, winrate quando giocata e non, round medio; risultati contro ogni leggendaria.
+Con poche partite il winrate oscilla molto (±30 punti con 10 partite): per questo BIG-BOB guarda anche carte, matchup
+e lezioni prima di cambiare il mazzo. Il comando `/mazzo` in Claude Code può creare un progetto allo stesso modo.
+
 ## Carte, location e meta da OriginsMeta (automatico)
 BIG-BOB legge da solo [originsmeta.com](https://originsmeta.com) ogni 12 ore (subito, se il database delle carte è vuoto):
 - **carte e location**: aggiunge quelle che mancano; i cambiamenti di costo/attacco/vita diventano una patch

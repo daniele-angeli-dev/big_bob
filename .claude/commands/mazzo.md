@@ -21,4 +21,6 @@ Segui la sezione "Deckbuilding" di CLAUDE.md:
 3. Valida ogni lista con `validate_deck` e confrontale con `deck_lab` (anche contro i mazzi già salvati di
    Daniele): giocate per round, mana sfruttato, attacco in campo, leggendaria pescata. Riporta i numeri in una
    piccola tabella e usali per motivare la scelta (sono partite in solitario: misurano la fluidità, non i matchup).
-4. Chiedi quale salvare e salvala con `save_deck` solo dopo conferma.
+4. Chiedi quale salvare e salvala solo dopo conferma: se Daniele vuole metterla alla prova e migliorarla con le
+   partite, crea un progetto con `deck_project_start` (modalità creazione mazzo, con versioni e statistiche);
+   altrimenti `save_deck`. Per i progetti esistenti usa `deck_project_status` e `deck_project_propose`.

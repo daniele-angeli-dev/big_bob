@@ -36,6 +36,21 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .sk{transform:skewX(-10deg);border:none;padding:6px 11px;font-weight:700;font-size:13px}
 .mode{background:var(--yellow);color:var(--bg);font-family:var(--display);font-weight:400;font-size:14px;letter-spacing:1px}
 .mode.ranked{background:var(--orange);color:#241000}
+.mode.lab{background:var(--teal);color:var(--bg)}
+/* laboratorio: modalità creazione mazzo */
+.labp{margin:0 12px 10px;padding:10px 12px;background:var(--panel);border:2px solid var(--teal);border-radius:10px;display:flex;flex-direction:column;gap:7px;flex-shrink:0}
+.lab-top{display:flex;align-items:baseline;gap:8px;min-width:0}
+.lab-k{font-family:var(--display);font-size:12px;letter-spacing:1.5px;color:var(--teal-t);flex-shrink:0}
+.lab-n{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-grow:1;min-width:0}
+.lab-v{font-family:var(--display);font-size:16px;color:var(--yellow);flex-shrink:0}
+.lab-prog{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--dim)}
+.lab-bar{flex-grow:1;height:10px;background:var(--bg);transform:skewX(-15deg);overflow:hidden}
+.lab-bar i{display:block;height:100%;background:var(--teal);width:0}
+.lab-txt{font-size:13px;font-weight:600;color:var(--dim);line-height:1.35}
+.lab-txt b{color:#fff}
+.lab-btns{display:flex;gap:6px;flex-wrap:wrap}
+.lab-btns button{border:2px solid var(--teal);border-radius:8px;background:transparent;color:var(--teal-t);font-weight:700;padding:5px 9px;font-size:12px}
+.lab-btns button.main{background:var(--teal);color:var(--bg)}
 .tog{border:2px solid var(--line);background:transparent;color:var(--dim)}
 .tog[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:var(--bg)}
 .tog.rec[aria-pressed="true"]{background:#FF4D6D;border-color:#FF4D6D;color:#fff}
@@ -195,6 +210,17 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <button class="sk act" id="btnEnd">FINE</button>
   </div>
 
+  <section class="labp hidden" id="labp" aria-label="Mazzo in creazione">
+    <div class="lab-top"><div class="lab-k">LABORATORIO</div><div class="lab-n" id="labName">Nessun mazzo in creazione</div><div class="lab-v" id="labVer"></div></div>
+    <div class="lab-prog" id="labProg"><div class="lab-bar"><i id="labFill"></i></div><span id="labCount"></span></div>
+    <div class="lab-txt" id="labTxt">Premi CREA MAZZO: BIG-BOB parte dai mazzi del meta e lo migliora con le tue partite di test.</div>
+    <div class="lab-btns">
+      <button type="button" id="btnLabApply" class="main hidden">APPLICA MIGLIORIA</button>
+      <button type="button" id="btnCreate">CREA MAZZO</button>
+      <button type="button" id="btnLabStats" class="hidden">STATISTICHE DEL MAZZO</button>
+    </div>
+  </section>
+
   <section class="hud" id="hud" aria-label="Stato della partita">
     <div class="empty" id="hudEmpty"><b>NESSUNA PARTITA</b>Premi NUOVA e scegli il mazzo</div>
     <div id="hudBody" class="hidden" style="display:flex;flex-direction:column;gap:10px">
@@ -244,6 +270,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <label for="deckIn" class="sr">Mazzo</label>
     <input class="inp" id="deckIn" placeholder="Nome del mazzo o istruzione">
     <div class="bbtns"><button type="button" class="no" data-close>ANNULLA</button><button class="ok" type="submit">INIZIA</button></div>
+  </form>
+</div>
+<div class="modal hidden" id="mCreate" role="dialog" aria-modal="true" aria-labelledby="mCreateT">
+  <form class="box" id="fCreate">
+    <h2 id="mCreateT">CREA UN MAZZO</h2>
+    <label class="hint" for="goalIn">Cosa vuoi? Una leggendaria, uno stile, una carta da usare… o lascia vuoto e sceglie BIG-BOB guardando il meta.</label>
+    <input class="inp" id="goalIn" placeholder="es. Robin Hood aggressivo">
+    <label class="hint" for="gamesIn">Partite di test per ogni versione (più partite = giudizio più affidabile)</label>
+    <input class="inp" id="gamesIn" type="number" min="3" max="40" value="10" style="width:110px;flex-grow:0">
+    <div class="bbtns"><button type="button" class="no" data-close>ANNULLA</button><button class="ok" type="submit">CREA</button></div>
   </form>
 </div>
 <div class="modal hidden" id="mEnd" role="dialog" aria-modal="true" aria-labelledby="mEndT">
@@ -379,6 +415,32 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('feed').scrollTop = 0;  // la mossa in cima, subito leggibile
   }
 
+  /* ---------- laboratorio (creazione mazzo) ---------- */
+  function renderLab(on, lab){
+    $('labp').classList.toggle('hidden', !on);
+    if (!on) return;
+    var has = !!lab;
+    $('labName').textContent = has ? lab.nome : 'Nessun mazzo in creazione';
+    $('labVer').textContent = has ? 'v' + lab.v : '';
+    $('labProg').classList.toggle('hidden', !has);
+    $('btnLabStats').classList.toggle('hidden', !has);
+    $('btnLabApply').classList.toggle('hidden', !(has && lab.proposta));
+    $('btnCreate').textContent = has ? 'NUOVO MAZZO' : 'CREA MAZZO';
+    if (!has){ $('labTxt').textContent = 'Premi CREA MAZZO: BIG-BOB parte dai mazzi del meta e lo migliora con le tue partite di test.'; return; }
+    var done = Math.min(lab.partite, lab.obiettivo);
+    $('labFill').style.width = (lab.obiettivo ? (lab.mancanti === 0 ? 100 : done / lab.obiettivo * 100) : 0) + '%';
+    $('labCount').textContent = lab.partite + '/' + lab.obiettivo + ' partite · ' + lab.vinte + 'V ' + lab.perse + 'S';
+    var t = $('labTxt'); t.innerHTML = '';
+    var line = lab.mancanti > 0 ? ('Ne mancano <b>' + lab.mancanti + '</b> per valutare la v' + lab.v) : '<b>Test della versione finito</b>';
+    if (lab.confronto && lab.confronto.p_migliore != null) line += ' · migliore della v' + lab.confronto.contro_versione + ': <b>' + lab.confronto.p_migliore + '%</b>';
+    t.innerHTML = line;
+    if (lab.proposta){ var d = el('div', null, 'Miglioria: ' + lab.proposta); d.style.marginTop = '3px'; d.style.color = '#fff'; t.appendChild(d); }
+  }
+  $('btnCreate').onclick = function(){ $('goalIn').value = ''; show('mCreate', 'goalIn'); };
+  $('fCreate').onsubmit = function(e){ e.preventDefault(); hide(); call('create_deck', $('goalIn').value.trim(), parseInt($('gamesIn').value || '10', 10)); };
+  $('btnLabStats').onclick = function(){ call('open_lab'); };
+  $('btnLabApply').onclick = function(){ call('lab_apply'); };
+
   /* ---------- timer ---------- */
   var STEPS = { get_screen: 'Guardo lo schermo…', update_match: 'Aggiorno la partita e calcolo le probabilità…',
     simulate_combat: 'Simulo il combattimento…', mulligan_advice: 'Valuto il mulligan…', get_card: 'Leggo una carta…',
@@ -424,8 +486,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   function renderState(s){
     state = Object.assign(state, s); ROUND = s.round_seconds || ROUND; BUDGET = s.budget_seconds || BUDGET;
     SCALE = Math.round(BUDGET / 0.75);
-    var b = $('btnMode'); var r = s.mode === 'ranked';
-    b.textContent = r ? 'RANKED · TRACKER' : 'ALLENAMENTO'; b.classList.toggle('ranked', r);
+    var b = $('btnMode'); var r = s.mode === 'ranked', c = s.mode === 'creazione';
+    b.textContent = r ? 'RANKED · TRACKER' : (c ? 'CREAZIONE' : 'ALLENAMENTO'); b.classList.toggle('ranked', r); b.classList.toggle('lab', c);
+    b.title = 'Modalità: allenamento → ranked (solo tracker) → creazione mazzo';
+    renderLab(c, s.lab);
     $('btnAuto').setAttribute('aria-pressed', s.auto ? 'true' : 'false');
     $('btnRec').setAttribute('aria-pressed', s.rec ? 'true' : 'false');
     $('btnRec').textContent = s.rec ? '● REC' : 'REGISTRA';

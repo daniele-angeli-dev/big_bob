@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP, Image  # noqa: E402
 
-from origins import combat, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
+from origins import combat, deckproj, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
 from origins.store import canonical, load, now, save  # noqa: E402
 
 mcp = FastMCP("origins")
@@ -275,9 +275,13 @@ def start_match(my_deck: str, opponent_legendary: str = "") -> str:
          "turno": 0, "mia_mano": [], "miei_giocati": [], "miei_scartati": [],
          "avv_leggendaria": canonical(opponent_legendary) if opponent_legendary else "",
          "avv_giocati": [], "avv_scartati": [], "avv_mano": None, "location": [], "note": [],
-         "inizio": now()}
+         "viste_in_mano": [], "prima_giocata": {}, "inizio": now(), **deckproj.tag_match(d["nome"])}
     save("match", m)
-    return _j(m)
+    out = _j(m)
+    if m.get("progetto"):
+        out += (f"\n\nQuesta partita è un TEST del progetto «{m['progetto']}» v{m['versione']} (modalità creazione "
+                "mazzo): consiglia le mosse come in allenamento.")
+    return out
 
 
 @mcp.tool()
@@ -313,6 +317,11 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
     for k, v in upd.items():
         if v is not None:
             m[k] = _canon_list(v) if isinstance(v, list) else v
+    # per il laboratorio dei mazzi: carte passate dalla mano e round della prima giocata
+    m["viste_in_mano"] = list(dict.fromkeys((m.get("viste_in_mano") or []) + (m.get("mia_mano") or [])))
+    first = m.setdefault("prima_giocata", {})
+    for c in m.get("miei_giocati") or []:
+        first.setdefault(c, m.get("turno"))
     if locations is not None:
         m["location"] = [canonical(x, "locations") for x in locations]
     extra = {"mana": mana, "barrier_mie": my_barriers, "barrier_avv": opp_barriers,
@@ -507,6 +516,68 @@ def meta_report() -> str:
     return _j({"avversari_di_daniele": store.meta_summary(),
                "originsmeta": {"ultimo_sync": st.get("ultimo_sync"), "liste_per_leggendaria": by_leg,
                                "nota": "pesano nelle probabilità della mano avversaria; dettagli con community_decks"}})
+
+
+# ======================= CREAZIONE MAZZO (laboratorio) =======================
+
+@mcp.tool()
+def deck_project_start(nome: str, leggendaria: str, carte: list[str], obiettivo: str = "", motivo: str = "",
+                       fonti: list[str] | None = None, partite: int = 0) -> str:
+    """Crea un progetto di mazzo (modalità CREAZIONE MAZZO) con la sua versione 1 e lo salva come mazzo con lo
+    stesso nome: le partite giocate scegliendolo con NUOVA contano come partite di test di quella versione.
+    motivo: perché queste carte (piano di gioco); fonti: i mazzi meta a cui ti sei ispirato (es. "SNIPER
+    (OriginsMeta)"); partite: quante partite di test servono per valutare la v1 (0 = 10)."""
+    return _j(deckproj.start(nome, leggendaria, carte, obiettivo, motivo, fonti, partite or None))
+
+
+@mcp.tool()
+def deck_project_status(nome: str = "") -> str:
+    """Stato di un progetto di mazzo (vuoto = quello attivo): versioni con vittorie, winrate e intervallo al 95%,
+    confronto con la versione precedente (probabilità che sia migliore), partite di test mancanti, statistiche delle
+    carte (pescata, giocata, winrate quando giocata, round medio), matchup per leggendaria, punti deboli, miglioria
+    in attesa."""
+    p = deckproj.get(nome)
+    return _j(deckproj.status(p)) if p else "Nessun progetto di mazzo: crealo con deck_project_start."
+
+
+@mcp.tool()
+def deck_project_propose(togli: list[str], metti: list[str], motivo: str, nome: str = "", partite: int = 0) -> str:
+    """Propone una miglioria per la prossima versione (stesso numero di carte da togliere e mettere, nomi delle carte
+    normali: ognuna vale 2 copie). motivo: quale punto debole risolve e perché (statistiche, lezioni, carte del meta).
+    Daniele la applica con il pulsante APPLICA dopo aver cambiato il mazzo nel gioco (o chiedi deck_project_apply se
+    te lo dice lui). partite: quante partite di test servono per valutarla (0 = 8 per una carta, 10 per di più)."""
+    return _j(deckproj.propose(nome, togli, metti, motivo, partite or None))
+
+
+@mcp.tool()
+def deck_project_apply(nome: str = "") -> str:
+    """Applica la miglioria proposta: nasce la versione successiva (solo quando Daniele conferma di averla fatta nel
+    gioco)."""
+    return _j(deckproj.apply(nome))
+
+
+@mcp.tool()
+def deck_project_revert(versione: int, nome: str = "", motivo: str = "") -> str:
+    """Torna alle carte di una versione precedente (diventa una versione nuova, lo storico resta)."""
+    return _j(deckproj.revert(nome, versione, motivo))
+
+
+@mcp.tool()
+def deck_project_options(nome: str = "", partite: int = 0, stato: str = "", attivo: bool = False) -> str:
+    """Cambia le partite di test della versione attuale, lo stato ('in test' | 'concluso') o rende attivo il
+    progetto."""
+    return _j(deckproj.set_options(nome, partite or None, stato, attivo))
+
+
+@mcp.tool()
+def deck_project_list() -> str:
+    """I progetti di mazzo con versione attuale, partite e stato."""
+    out = []
+    for p in deckproj.load():
+        s = deckproj.summary(p)
+        out.append({"nome": p["nome"], "stato": p.get("stato"), "versione": s["v"], "partite_versione": s["partite"],
+                    "mancanti": s["mancanti"], "obiettivo": p.get("obiettivo")})
+    return _j(out)
 
 
 # ======================= ORIGINSMETA (meta della community) =======================

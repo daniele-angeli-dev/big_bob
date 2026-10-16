@@ -22,16 +22,17 @@ FILES = {
     "rules": DATA / "rules.json",
     "lessons": DATA / "lessons.json",
     "originsmeta": DATA / "originsmeta.json",
+    "projects": DATA / "progetti_mazzo.json",
     "config": ROOT / "config.json",
 }
 
 DEFAULTS = {
-    "cards": [], "locations": [], "decks": [], "meta": [], "patches": [], "match": {}, "matches": [], "rules": [], "lessons": [], "originsmeta": {},
+    "cards": [], "locations": [], "decks": [], "meta": [], "patches": [], "match": {}, "matches": [], "rules": [], "lessons": [], "originsmeta": {}, "projects": [],
     "config": {"modalita": "allenamento", "modello_live": "sonnet", "hotkey_analisi": "f8",
                "hotkey_scan": "f9", "titolo_finestra": "Origins", "patch_corrente": "",
                "max_thinking_live": 4000, "apprendimento_live": True, "voce": True,
                "apri_claude_code_all_avvio": False, "connessione": "abbonamento",
-               "controlla_aggiornamenti": True, "meta_originsmeta": True},
+               "controlla_aggiornamenti": True, "meta_originsmeta": True, "progetto_mazzo": ""},
 }
 
 

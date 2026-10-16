@@ -20,7 +20,7 @@ import threading
 import time
 from pathlib import Path
 
-from origins import screen, store
+from origins import deckproj, screen, store
 from origins.voice import Voice
 
 ROOT = Path(__file__).resolve().parent
@@ -43,6 +43,25 @@ PROMPT_AUTO = (
     "(modalità {mode}). Se non è cambiato niente di rilevante rispondi solo: '—'."
 )
 PROMPT_CHAT = "{text}\n\n(Modalità: {mode}. Se ti serve vedere la partita usa get_screen.)"
+PROMPT_CREA = (
+    "[CREAZIONE MAZZO] Daniele vuole che tu crei un mazzo nuovo da mettere alla prova con le partite di allenamento. "
+    "Richiesta: {goal}. Segui la sezione 'Creazione mazzo' di CLAUDE.md: guarda il meta (community_stats, "
+    "community_decks delle leggendarie più forti e community_deck delle 2-3 liste migliori), le carte "
+    "(card_pool_compact), le lezioni (lessons_get) e il regolamento; confronta 2-3 candidati con deck_lab; poi crea il "
+    "progetto con deck_project_start (nome breve e riconoscibile, motivo = piano di gioco, fonti = i mazzi meta da cui "
+    "parti, partite = {games}). Rispondi in testo semplice, senza markdown, massimo 12 righe: nome, leggendaria e le 12 "
+    "carte da costruire nel gioco, il piano in 2 righe, da quali mazzi meta parte e cosa cambia rispetto a loro, quante "
+    "partite di test servono. Chiudi ricordando di costruirlo nel gioco e di sceglierlo con NUOVA."
+)
+PROMPT_FINE_TEST = (
+    " Questa partita era un TEST del progetto «{nome}» versione {v} (modalità creazione mazzo). Chiama "
+    "deck_project_status. Se mancano ancora partite di test, aggiungi una riga con cosa stai osservando sul mazzo e "
+    "quante partite mancano. Se il test della versione è finito (partite_mancanti 0), trova il punto debole principale "
+    "(punti_deboli, statistiche delle carte, matchup, lezioni; per i sostituti guarda community_stats delle carte e i "
+    "mazzi meta della stessa leggendaria con community_decks) e chiama deck_project_propose con UNA miglioria precisa "
+    "(1-2 carte) e il suo motivo; se la versione va peggio della precedente proponi di tornare indietro. In quel caso "
+    "scrivi anche la miglioria e il motivo in 2 righe."
+)
 PROMPT_IMPARA = (
     "[APPRENDIMENTO · in background: Daniele non sta aspettando questa risposta] Confronta ciò che avevi "
     "previsto al round precedente (la tua risposta e le probabilità) con ciò che la schermata di questo round "
@@ -294,8 +313,17 @@ class Controller:
                    "voice": bool(cfg.get("voce", True)) and self.voice.available(),
                    "voice_available": self.voice.available(),
                    "budget_seconds": BUDGET_SECONDS,
-                   "decks": [d["nome"] for d in store.load("decks")]})
+                   "decks": self._deck_names(), "lab": deckproj.summary()})
         self._emit_hud(force=True)
+
+    @staticmethod
+    def _deck_names() -> list[str]:
+        names = [d["nome"] for d in store.load("decks")]
+        p = deckproj.active()
+        if p and deckproj.deck_name(p) in names:  # il mazzo in creazione per primo
+            names.remove(deckproj.deck_name(p))
+            names.insert(0, deckproj.deck_name(p))
+        return names
 
     # ------------------------------------------------ API pubblica (chiamata da finestra e tasti)
     def analyze(self, auto: bool = False) -> None:
@@ -320,11 +348,64 @@ class Controller:
         if note and note.strip():
             self._q.put(("flag", note.strip()))
 
+    MODES = ("allenamento", "ranked", "creazione")
+
     def toggle_mode(self) -> None:
         cfg = store.load("config")
-        cfg["modalita"] = "allenamento" if cfg.get("modalita") == "ranked" else "ranked"
+        cur = cfg.get("modalita") if cfg.get("modalita") in self.MODES else "allenamento"
+        cfg["modalita"] = self.MODES[(self.MODES.index(cur) + 1) % len(self.MODES)]
         store.save("config", cfg)
         self.emit_state()
+        if cfg["modalita"] == "creazione" and not deckproj.active():
+            self.say("Modalità CREAZIONE MAZZO: premi CREA MAZZO e BIG-BOB costruisce un mazzo partendo dal meta, poi "
+                     "lo migliora partita dopo partita.", "dim")
+
+    # ------------------------------------------------ creazione mazzo (laboratorio)
+    def create_deck(self, goal: str = "", games: int = 10) -> None:
+        try:
+            games = max(3, min(40, int(games or 10)))
+        except (TypeError, ValueError):
+            games = 10
+        self._q.put(("create_deck", ((goal or "").strip(), games)))
+
+    def _do_create_deck(self, arg) -> None:
+        goal, games = arg
+        self._ask(PROMPT_CREA.format(goal=goal or "nessuna preferenza: scegli tu la leggendaria più promettente",
+                                     games=games),
+                  label="Crea mazzo" + (f": {goal}" if goal else ""), kind="crea")
+
+    def lab_apply(self) -> None:
+        res = deckproj.apply()
+        if res.get("errore"):
+            self.say(res["errore"], "warn")
+        else:
+            self.say(f"Versione {res['versione']} pronta. {res['nel_gioco']} Servono {res['partite_di_test']} partite "
+                     "di test: scegli il mazzo con NUOVA.", "lesson")
+        self.emit_state()
+
+    def open_lab(self) -> None:
+        from origins import report
+        p = deckproj.active()
+        if not p:
+            self.say("Nessun mazzo in creazione: premi CREA MAZZO.", "dim")
+            return
+        try:
+            self._open(report.lab_html(p["nome"]))
+        except Exception as e:  # noqa: BLE001
+            log.exception("pagina laboratorio")
+            self.say(f"Pagina non generata: {e}", "warn")
+
+    def _lab_after(self, kind: str) -> None:
+        """Dopo la creazione o la fine di una partita di test: aggiorna il pannello e offre i pulsanti giusti."""
+        if kind not in ("crea", "fine"):
+            return
+        p = deckproj.active()
+        if not p:
+            return
+        self.emit_state()
+        if p.get("proposta"):
+            self.emit({"type": "action", "label": "APPLICA MIGLIORIA", "call": "lab_apply"})
+        self.emit({"type": "action", "label": "STATISTICHE DEL MAZZO", "call": "open_lab"})
 
     # ------------------------------------------------ aggiornamenti
     def _startup_updates(self) -> None:
@@ -595,11 +676,14 @@ class Controller:
                      + "\nPer ciascuno capisci cosa avevi sbagliato e registra una lezione con record_lesson "
                      "(tipo errore_coach, fonte \"Daniele\"); se era un errore di lettura dello schermo, la lezione "
                      "dice come leggerlo giusto.")
+        cur = store.load("match") if store.FILES["match"].exists() else {}
+        test = PROMPT_FINE_TEST.format(nome=cur["progetto"], v=cur.get("versione")) if cur.get("progetto") else ""
         self._ask(f"Partita finita: {result}. Chiama end_match con il risultato e tutte le carte avversarie "
                   "viste. Ripensa alla partita intera: registra con record_lesson le lezioni sul piano "
                   "dell'avversario e sui momenti decisivi che non avevi ancora registrato (niente doppioni: quelle "
-                  f"simili vengono rafforzate).{flags} Poi dammi in 3 righe: il mio errore principale, cosa ha fatto "
-                  "bene l'avversario, un consiglio per il prossimo match.", label=f"Fine partita · {result}",
+                  f"simili vengono rafforzate).{flags} Poi dammi in 3 righe di testo semplice (niente markdown, niente "
+                  "asterischi): il mio errore principale, cosa ha fatto "
+                  f"bene l'avversario, un consiglio per il prossimo match.{test}", label=f"Fine partita · {result}",
                   kind="fine")
         if self.rec_on:
             self._do_record(False)
@@ -694,7 +778,8 @@ class Controller:
         self._journal(f"## #{self.req_n} · {time.strftime('%H:%M:%S')} · {label or 'AUTO'}{img_note}")
         self.busy = True
         self.last_call = time.time()
-        what = {"live": "Penso alla mossa", "fine": "Analizzo la partita"}.get(kind, "Penso alla risposta")
+        what = {"live": "Penso alla mossa", "fine": "Analizzo la partita",
+                "crea": "Creo il mazzo"}.get(kind, "Penso alla risposta")
         self.emit({"type": "busy", "value": True, "what": what})
         content: list[dict] = []
         if attach and shot is not None:
@@ -730,7 +815,7 @@ class Controller:
                     if ev.get("is_error"):
                         self.say(final or "Errore da Claude Code", "warn")
                     elif final not in ("—", "-", ""):
-                        parsed = parse_live(final) if kind != "fine" else None  # il riepilogo finale è testo
+                        parsed = parse_live(final) if kind not in ("fine", "crea") else None  # testo semplice
                         self.emit({"type": "answer", "text": final, "parsed": parsed, "secs": round(dt, 1)})
                         if parsed and parsed.get("mossa") and store.load("config").get("voce", True):
                             self.voice.say(parsed["mossa"])
@@ -745,6 +830,10 @@ class Controller:
             self.busy = False
             self.emit({"type": "busy", "value": False})
             self._emit_hud(force=True)
+            try:
+                self._lab_after(kind)
+            except Exception:  # noqa: BLE001
+                log.exception("aggiornamento laboratorio")
             if learn:
                 self._learn()
             self._session_free.set()

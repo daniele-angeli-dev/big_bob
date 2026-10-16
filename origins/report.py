@@ -11,7 +11,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from origins import lessons, rules, store
+from origins import deckproj, lessons, rules, store
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGS = ROOT / "logs"
@@ -59,6 +59,20 @@ th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line)}th{co
 .note{background:#14405A;border-radius:6px;padding:8px 10px;font-size:14px;margin-bottom:10px;white-space:pre-wrap}
 td.st{white-space:nowrap}
 @media (max-width:720px){.sess li{grid-template-columns:1fr}}
+.ver{background:var(--panel);border-radius:10px;padding:12px 14px;margin-bottom:10px;display:grid;grid-template-columns:70px minmax(0,1fr) minmax(160px,260px);gap:12px;align-items:center}
+.ver.cur{border:2px solid var(--teal)}
+.ver .vn{font-family:Impact,sans-serif;font-size:28px;color:var(--yellow)}
+.ver .chg{font-size:14px}.ver .chg .out{color:#FF9CB0}.ver .chg .in{color:#7DEDE2}
+.ver .why{color:var(--dim);font-size:13px;margin-top:3px}
+.ci{position:relative;height:16px;background:var(--bg);border-radius:4px}
+.ci .rng{position:absolute;top:3px;bottom:3px;background:#14405A;border-radius:3px}
+.ci .pt{position:absolute;top:-2px;width:4px;height:20px;background:var(--teal);border-radius:2px;margin-left:-2px}
+.ci .fifty{position:absolute;top:-3px;bottom:-3px;left:50%;width:1px;background:var(--dim);opacity:.5}
+.cival{color:var(--dim);font-size:12px;margin-top:4px;text-align:right}
+tr.weak td{background:#5A1630}
+.deck{display:flex;flex-wrap:wrap;gap:6px}.deck span{background:var(--panel);border-radius:6px;padding:5px 9px;font-size:14px}
+.deck span.lg{background:var(--yellow);color:var(--bg);font-weight:700}
+@media (max-width:720px){.ver{grid-template-columns:1fr}}
 @media (max-width:720px){.round{grid-template-columns:1fr}.bar{grid-template-columns:110px 1fr 90px}}
 """
 
@@ -401,8 +415,103 @@ def learned_html() -> Path:
     return out
 
 
+# ---------------------------------------------------------------- laboratorio (creazione mazzo)
+
+def lab_html(name: str = "") -> Path:
+    p = deckproj.get(name)
+    if p is None:
+        raise ValueError("nessun progetto di mazzo")
+    st = deckproj.status(p)
+    cur = st["statistiche_versione_attuale"]
+    e = html.escape
+    conf = st.get("confronto") or {}
+    tiles = [(f"v{st['versione_attuale']}", "VERSIONE ATTUALE"),
+             (f"{cur['partite']}/{cur['partite_obiettivo']}", "PARTITE DI TEST"),
+             (f"{cur['winrate']}%" if cur["winrate"] is not None else "–",
+              f"WINRATE (±{cur['margine']})" if cur["margine"] else "WINRATE"),
+             (str(st["partite_mancanti"]), "PARTITE MANCANTI"),
+             (f"{conf['p_migliore']}%" if conf.get("p_migliore") is not None else "–",
+              f"MIGLIORE DELLA v{conf['contro_versione']}" if conf else "CONFRONTO")]
+    body = [f"<h1>LABORATORIO · {e(p['nome'].upper())}</h1>",
+            f"<p class='sub'>{e(p.get('obiettivo') or 'Mazzo creato da BIG-BOB')} · creato {e(p['creato'])} · "
+            f"{e(p.get('stato') or '')} · aggiornato {store.now()}</p>",
+            "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles)
+            + "</div>",
+            f"<h2>A che punto siamo</h2><div class='note'>{e(st['consiglio'])}"
+            + (f"\nMiglioria proposta: {e(deckproj.instructions(p['proposta']))} {e(p['proposta']['motivo'])}"
+               if p.get("proposta") else "") + "</div>",
+            "<h2>Mazzo attuale</h2><div class='deck'>"
+            + f"<span class='lg'>★ {e(st['mazzo']['leggendaria'])}</span>"
+            + "".join(f"<span>{e(c)} ×2</span>" for c in st["mazzo"]["carte"]) + "</div>"]
+
+    body.append("<h2>Versioni</h2>")
+    for i, v in enumerate(reversed(st["versioni"])):
+        chg = ""
+        if v["tolte"] or v["messe"]:
+            chg = (" ".join(f"<span class='out'>− {e(x)}</span>" for x in v["tolte"]) + " "
+                   + " ".join(f"<span class='in'>+ {e(x)}</span>" for x in v["messe"]))
+        else:
+            chg = "Versione iniziale"
+        if v["partite"]:
+            lo, hi = v["intervallo_95"]
+            ci = (f"<div class='ci' title='winrate {v['winrate']}%, intervallo al 95% {lo}–{hi}%'>"
+                  f"<div class='fifty'></div><div class='rng' style='left:{lo}%;width:{max(hi - lo, 1)}%'></div>"
+                  f"<div class='pt' style='left:{v['winrate']}%'></div></div>"
+                  f"<div class='cival'>{v['vinte']}V {v['perse']}S · {v['winrate']}% (95%: {lo}–{hi}%) · "
+                  f"{v['partite']}/{v['partite_obiettivo']} partite</div>")
+        else:
+            ci = f"<div class='cival'>ancora nessuna partita · servono {v['partite_obiettivo']}</div>"
+        body.append(f"<div class='ver{' cur' if i == 0 else ''}'><div class='vn'>v{v['v']}</div>"
+                    f"<div><div class='chg'>{chg}</div><div class='why'>{e(v['motivo'] or '')}</div></div>"
+                    f"<div>{ci}</div></div>")
+
+    weak = st["punti_deboli"]
+    body.append("<h2>Punti deboli della versione attuale</h2>" + (
+        "<ul>" + "".join(f"<li>{e(w)}</li>" for w in weak) + "</ul>" if weak else
+        "<div class='empty'>Nessun punto debole evidente dai numeri" + (" (ancora poche partite)" if cur["partite"] < 5
+                                                                         else "") + ".</div>"))
+    weak_cards = {w.split(":")[0] for w in weak}
+    src, src_label = cur, "Carte nella versione attuale"
+    if not cur["partite"]:  # versione appena nata: mostro i dati dell'ultima versione giocata
+        prev_v = next((v for v in reversed(p["versioni"][:-1]) if deckproj.matches_of(p, v["v"])), None)
+        if prev_v:
+            src = deckproj.version_stats(p, prev_v)
+            src_label = f"Carte nella v{prev_v['v']} (l'ultima con partite: la v{cur['v']} non ne ha ancora)"
+    rows = []
+    for c, s_ in sorted(src["carte"].items(), key=lambda kv: (not kv[1]["leggendaria"], kv[1]["costo"] or 0, kv[0])):
+        fmt = lambda x, suf="": "–" if x is None else f"{x}{suf}"  # noqa: E731
+        rows.append(f"<tr class='{'weak' if c in weak_cards else ''}'><td>{'★ ' if s_['leggendaria'] else ''}{e(c)}</td>"
+                    f"<td>{fmt(s_['costo'])}</td><td>{s_['pescata']}</td><td>{s_['giocata']}</td>"
+                    f"<td>{fmt(s_['winrate_giocata'], '%')}</td><td>{fmt(s_['winrate_non_giocata'], '%')}</td>"
+                    f"<td>{fmt(s_['round_medio'])}</td></tr>")
+    body.append(f"<h2>{e(src_label)}</h2><table><thead><tr><th>Carta</th><th>Costo</th><th>Pescata</th>"
+                "<th>Giocata</th><th>Winrate se giocata</th><th>Winrate se non giocata</th><th>Round medio</th></tr>"
+                f"</thead><tbody>{''.join(rows)}</tbody></table>")
+    allm = deckproj.matches_of(p)
+    by_opp: dict = defaultdict(lambda: [0, 0])
+    for m in allm:
+        by_opp[m.get("avv_leggendaria") or "?"][0] += str(m.get("risultato", "")).lower().startswith("v")
+        by_opp[m.get("avv_leggendaria") or "?"][1] += 1
+    body.append("<h2>Contro le leggendarie (tutte le versioni)</h2>" + _bars([(k, v[0], v[1]) for k, v in by_opp.items()]))
+    if allm:
+        rows = "".join(f"<tr><td>{e(str(m.get('fine', '')))}</td><td>v{m.get('versione')}</td>"
+                       f"<td>{e(str(m.get('avv_leggendaria') or ''))}</td><td>{e(str(m.get('risultato', '')))}</td></tr>"
+                       for m in reversed(allm[-40:]))
+        body.append("<h2>Partite di test</h2><table><thead><tr><th>Data</th><th>Versione</th><th>Avversario</th>"
+                    f"<th>Risultato</th></tr></thead><tbody>{rows}</tbody></table>")
+    body.append("<p class='sub' style='margin-top:18px'>Con poche partite il winrate oscilla molto: la barra mostra "
+                "l'intervallo in cui sta probabilmente il valore vero (95%). Per questo BIG-BOB guarda anche le carte, "
+                "i matchup e le lezioni prima di cambiare il mazzo.</p>")
+    out = LOGS / "laboratorio.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_page(f"BIG-BOB · laboratorio {p['nome']}", "".join(body)), encoding="utf-8")
+    return out
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "imparato":
+    if len(sys.argv) > 1 and sys.argv[1] == "laboratorio":
+        print(lab_html(sys.argv[2] if len(sys.argv) > 2 else ""))
+    elif len(sys.argv) > 1 and sys.argv[1] == "imparato":
         print(learned_html())
     elif len(sys.argv) > 1 and sys.argv[1] == "replay":
         d = Path(sys.argv[2]) if len(sys.argv) > 2 else max((LOGS / "partite").glob("*/"), default=None)

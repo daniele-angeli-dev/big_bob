@@ -134,6 +134,15 @@ class Api:
     def open_stats(self):
         self._c.open_stats()
 
+    def create_deck(self, goal="", games=10):
+        self._c.create_deck(goal, games)
+
+    def lab_apply(self):
+        self._c.lab_apply()
+
+    def open_lab(self):
+        self._c.open_lab()
+
     def open_learned(self):
         self._c.open_learned()
 
