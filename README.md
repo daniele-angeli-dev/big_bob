@@ -169,7 +169,7 @@ in `/patch`. La gestisci dalle attività programmate del tuo account Claude.
 ## Problemi comuni
 Per prima cosa lancia **`diagnostica.bat`** con il gioco aperto: controlla librerie, finestra del gioco, cattura, tasto F9 e Claude Code, e ti dice cosa sistemare. Gli errori dell'overlay sono scritti in `logs/bigbob.log`.
 
-- **I tasti F8/F9 non funzionano dentro il gioco**: alcuni giochi bloccano i tasti globali se girano come amministratore. Avvia `avvia_BIG-BOB.bat` con "Esegui come amministratore", oppure usa i pulsanti F8 e F9 della finestra.
+- **I tasti F8/F9 non funzionano dentro il gioco**: alcuni giochi bloccano i tasti globali se girano come amministratore. Sull'icona BIG-BOB: tasto destro → Proprietà → Avanzate → "Esegui come amministratore", oppure usa i pulsanti F8 e F9 della finestra.
 - **La finestra si apre in stile vecchio**: la grafica Arena non è partita. Rilancia `installa.bat` e guarda `logs/bigbob.log`; serve Microsoft Edge WebView2, già incluso in Windows 11.
 - **"Non trovo il comando claude"**: Claude Code non è nel PATH. Riapri il terminale dopo l'installazione o reinstallalo.
 - **Cattura nera**: gioco in schermo intero esclusivo. Imposta "finestra senza bordi" (borderless) nelle opzioni video.
