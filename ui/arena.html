@@ -25,7 +25,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .logo{width:34px;height:30px;background:var(--teal);transform:skewX(-12deg);display:flex;align-items:center;justify-content:center}
 .logo span{transform:skewX(12deg);font-family:var(--display);font-size:17px;color:var(--bg)}
 .title{font-family:var(--display);font-size:24px;letter-spacing:1px;font-style:italic}
-.wbtn{width:32px;height:32px;border-radius:8px;border:2px solid var(--line);background:transparent;color:var(--dim);font-size:16px;font-weight:700;line-height:1}
+.wbtn{width:30px;height:30px;border-radius:8px;border:2px solid var(--line);background:transparent;color:var(--dim);font-size:16px;font-weight:700;line-height:1}
 .wbtn:hover{border-color:var(--dim);color:#fff}
 .vbtn{display:flex;align-items:center;justify-content:center}
 .vbtn[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:var(--bg)}
@@ -134,6 +134,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <header class="head pywebview-drag-region">
     <div class="brand pywebview-drag-region"><div class="logo"><span>BB</span></div><div class="title">BIG-BOB</div></div>
     <div style="display:flex;gap:6px">
+      <button class="wbtn" id="btnTerm" aria-label="Apri Claude Code per i comandi" title="Apri Claude Code (/scansiona, /mazzo, /lezioni…)" style="font-family:var(--body);font-size:13px">&gt;_</button>
       <button class="wbtn vbtn" id="btnVoice" aria-pressed="false" aria-label="Voce: legge la mossa ad alta voce" title="Voce: legge la mossa ad alta voce"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"></path><path class="wave" d="M11 5.5c1 .8 1 4.2 0 5M12.8 3.8c2 1.8 2 6.6 0 8.4"></path></svg></button>
       <button class="wbtn" id="btnStats" aria-label="Statistiche" title="Statistiche">%</button>
       <button class="wbtn" id="btnHide" aria-label="Nascondi (F10 per riaprire)" title="Nascondi · F10 per riaprire">–</button>
@@ -378,6 +379,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   $('btnHide').onclick = function(){ call('toggle_visibility'); };
   $('btnQuit').onclick = function(){ call('quit'); };
   $('btnStats').onclick = function(){ call('open_stats'); };
+  $('btnTerm').onclick = function(){ call('open_terminal'); };
   $('form').onsubmit = function(e){ e.preventDefault(); var v = $('q').value.trim(); if (!v) return; $('q').value = ''; call('chat', v); };
 
   window.addEventListener('pywebviewready', function(){ call('ready'); });

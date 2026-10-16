@@ -28,7 +28,8 @@ DEFAULTS = {
     "cards": [], "locations": [], "decks": [], "meta": [], "patches": [], "match": {}, "matches": [], "rules": [], "lessons": [],
     "config": {"modalita": "allenamento", "modello_live": "sonnet", "hotkey_analisi": "f8",
                "hotkey_scan": "f9", "titolo_finestra": "Origins", "patch_corrente": "",
-               "max_thinking_live": 4000, "apprendimento_live": True, "voce": True},
+               "max_thinking_live": 4000, "apprendimento_live": True, "voce": True,
+               "apri_claude_code_all_avvio": True},
 }
 
 

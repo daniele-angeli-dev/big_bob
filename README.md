@@ -20,12 +20,24 @@ né caricati su GitHub** (cartelle `data`, `logs`, `captures` e `config.json` so
 Serve Git per Windows (git-scm.com/download/win); la prima volta GitHub ti chiede di accedere nel browser.
 
 ## Installazione
-1. Estrai la cartella dove vuoi (es. `C:\BIG-BOB`). Non spostarla dopo, o rilancia `installa.bat`.
-2. Doppio clic su **`installa.bat`**: installa le dipendenze, configura il collegamento con Claude Code e lancia i test (deve dire `TUTTI I TEST OK`).
-3. Doppio clic su **`apri_claude_code.bat`** una volta: accetta la richiesta di fiducia per la cartella e l'uso del server `origins`, poi chiudi. Senza questo passaggio l'overlay non ha i permessi.
+1. Metti la cartella dove vuoi (es. `C:\BIG-BOB`). Non spostarla dopo, o rilancia `installa.bat`.
+2. Doppio clic su **`installa.bat`**: installa le librerie, collega Claude Code, lancia i test e crea
+   **l'icona BIG-BOB sul desktop e nel menu Start**.
+3. La prima volta apri **Claude Code (BIG-BOB)** dal menu Start e accetta la fiducia per la cartella e il server `origins`.
+
+## Avvio: un'icona
+Clicca l'icona **BIG-BOB** (desktop, menu Start, o fissala sulla barra delle applicazioni: tasto destro → Aggiungi alla
+barra delle applicazioni). Si apre la finestra di BIG-BOB e, accanto, il terminale di **Claude Code** già nella cartella
+giusta per i comandi (`/scansiona`, `/mazzo`, `/lezioni`…). Il Claude Code che risponde a F8 è dentro la finestra e parte da
+solo: il terminale serve solo per i comandi. Non lo vuoi all'avvio? `apri_claude_code_all_avvio: false` in `config.json`;
+lo apri quando serve con il pulsante **>_** della finestra.
+Se clicchi l'icona con BIG-BOB già aperto, riporta in primo piano la finestra (anche se era nascosta con F10).
+
+Nel menu Start, cartella **BIG-BOB**: Aggiorna, Claude Code, Diagnostica, Statistiche, finestra classica, cartella dei
+dati e Disinstalla collegamenti (toglie solo le icone: file e dati restano).
 
 ## Primo utilizzo: insegnare il gioco a Claude
-1. Avvia **`avvia_BIG-BOB.bat`** (si apre l'overlay) e apri il gioco.
+1. Apri BIG-BOB dall'icona e apri il gioco.
 2. **Regole**: apri tutorial/regole/glossario delle parole chiave nel gioco e premi **F9** su ogni schermata.
 3. **Carte**: apri la collezione. Per ogni carta (o pagina, se il testo è leggibile) premi **F9**. Il dettaglio della singola carta è più affidabile della griglia.
 4. **Location**: se il gioco ha un elenco delle location, fai lo stesso.
@@ -90,6 +102,7 @@ di minaccia, pescata, mano avversaria e location; poi la chat.
 | **F9** | cattura per la scansione (la finestra lampeggia) |
 | **VOCE** | legge la mossa ad alta voce |
 | **%** | apre le statistiche |
+| **>_** | apre Claude Code per i comandi |
 | **F10** / **–** | nasconde/mostra la finestra · **×** chiude BIG-BOB |
 | **✕** | segnala che l'ultima risposta era sbagliata (finisce nel diario della partita) |
 

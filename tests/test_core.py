@@ -160,5 +160,16 @@ from origins.video import vtt_to_text  # noqa: E402
 vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nciao\n\n00:00:03.000 --> 00:00:05.000\nciao\nmondo\n"
 assert vtt_to_text(vtt) == "[00:01] ciao mondo", vtt_to_text(vtt)
 
+# --- collegamenti e aiuti Windows (su Windows creano icone; qui si controlla lo script) ---
+import collegamenti  # noqa: E402
+from origins import winutil  # noqa: E402
+
+ps = collegamenti.build_script()
+assert ps.count(".Save()") == len(collegamenti.shortcuts()) == 9
+assert "bigbob.ico,0" in ps and "app.py" in ps and "'BIG-BOB.lnk'" in ps
+assert "Remove-Item" in collegamenti.build_script(remove=True)
+assert collegamenti._ps_quote("C:\\Daniele's\\x") == "'C:\\Daniele''s\\x'"
+assert winutil.single_instance() is True  # fuori da Windows non blocca mai
+
 shutil.rmtree(tmp)
 print("TUTTI I TEST OK")

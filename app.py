@@ -26,7 +26,7 @@ if sys.stderr is None:  # pythonw non ha console
 if sys.stdout is None:
     sys.stdout = sys.stderr
 
-from origins import store  # noqa: E402
+from origins import store, winutil  # noqa: E402
 
 WIDTH, HEIGHT = 440, 760
 
@@ -133,6 +133,9 @@ class Api:
     def toggle_visibility(self):
         self._c.toggle_visibility()
 
+    def open_terminal(self):
+        self._c.say(winutil.open_claude_terminal(ROOT), "dim")
+
     def quit(self):
         log.info("chiusura richiesta dalla finestra")
         try:
@@ -182,6 +185,14 @@ def run_web() -> None:
     def on_start():
         ctrl.start()
         register_hotkeys(ctrl)
+        try:
+            window.events.shown.wait(10)
+            winutil.set_window_icon("BIG-BOB", ROOT / "ui" / "bigbob.ico")
+        except Exception:  # noqa: BLE001
+            log.exception("icona finestra")
+        if store.load("config").get("apri_claude_code_all_avvio", True):
+            ctrl.say(winutil.open_claude_terminal(ROOT) + " Lo usi per /scansiona, /mazzo, /lezioni… "
+                     "(si spegne con apri_claude_code_all_avvio: false in config.json)", "dim")
         # se l'evento pywebviewready non arriva (rarissimo), sblocca comunque gli eventi
         threading.Timer(4.0, lambda: (not ui._loaded.is_set()) and ui.on_ready()).start()
 
@@ -198,6 +209,10 @@ def run_classic(reason: str) -> None:
 
 
 if __name__ == "__main__":
+    if not winutil.single_instance():
+        # BIG-BOB è già aperto: lo riporta in primo piano invece di aprirne un secondo
+        winutil.focus_window("BIG-BOB")
+        sys.exit(0)
     if "--classica" in sys.argv:
         run_classic("richiesta dall'utente")
     else:

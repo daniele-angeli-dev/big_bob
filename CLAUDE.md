@@ -20,8 +20,9 @@ Rispondi sempre in **italiano**. I nomi di carte e location restano in inglese, 
   vuoto. I colpi sono simultanei e il danno resta sulle creature. Si risolve da sinistra a destra
   seguendo la freccia. **Defender** difende sempre e più volte; **Move** sposta in qualsiasi spazio libero.
 - **Timer del round: 90 secondi** (confermato da Daniele), ma a Daniele servono ~50 secondi per
-  leggere e giocare: la risposta live deve arrivare entro **40 secondi**. Nelle analisi live fai
-  UNA sola chiamata (`update_match`, che restituisce anche le probabilità) e poi rispondi.
+  leggere e giocare: la risposta live deve arrivare entro **40 secondi**. Nelle analisi live al massimo
+  2 chiamate: `update_match` (restituisce probabilità, previsione del combattimento, location e lezioni)
+  ed eventualmente `simulate_combat` se la mossa non è ovvia; poi rispondi.
 - Turni simultanei, partite da ~7 minuti, location a rotazione con regole proprie.
 - Una regola non "confermata" in `rules_get` è un'ipotesi: dillo quando conta.
 
