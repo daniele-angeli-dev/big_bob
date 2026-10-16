@@ -209,15 +209,18 @@ def run_web() -> None:
     from ui.render import page
     html = page()
 
-    x = y = None
+    # al centro dello schermo (x/y non indicati: pywebview centra la finestra tenendo conto del ridimensionamento
+    # di Windows); su schermi bassi la finestra si accorcia per starci tutta
+    height = HEIGHT
     try:
         scr = webview.screens[0]
-        x, y = max(0, scr.width - WIDTH - 20), 50
+        if scr.height and scr.height - 80 < HEIGHT:
+            height = max(560, scr.height - 80)
     except Exception:  # noqa: BLE001
         pass
 
     window = webview.create_window(
-        "BIG-BOB", html=html, js_api=api, width=WIDTH, height=HEIGHT, x=x, y=y,
+        "BIG-BOB", html=html, js_api=api, width=WIDTH, height=height,
         min_size=(380, 560), frameless=True, easy_drag=False, on_top=True, resizable=True,
         background_color="#24104F", text_select=True, focus=True)
     ui.attach(window)

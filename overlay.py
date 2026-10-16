@@ -82,8 +82,8 @@ class Overlay:
             self.root.attributes("-alpha", 0.93)
         except tk.TclError:
             pass
-        sw = self.root.winfo_screenwidth()
-        self.root.geometry(f"470x600+{sw - 490}+60")
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        self.root.geometry(f"470x600+{max(0, (sw - 470) // 2)}+{max(0, (sh - 600) // 2)}")  # al centro
         self.auto = tk.BooleanVar(value=False)
         self.root.report_callback_exception = self._on_tk_error
         self._build()
