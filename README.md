@@ -137,6 +137,9 @@ di minaccia, pescata, mano avversaria e location; poi la chat.
 La finestra si trascina dalla barra in alto e può stare sopra il gioco: a ogni cattura si nasconde per un istante.
 Se la grafica nuova non partisse, si apre da sola la **finestra classica** (o lanciala con `avvia_classico.bat`).
 
+Mentre pensa, al posto della mossa compare un riquadro di **caricamento** con quello che sta facendo (guardo lo schermo,
+calcolo le probabilità, simulo il combattimento…) e i secondi trascorsi sui 40 dell'obiettivo. Con **FINE** la vecchia
+mossa sparisce e si fermano anche **REGISTRA** e **AUTO**.
 La finestra mostra solo la **richiesta attuale**: a ogni F8 o domanda la risposta precedente sparisce, e mossa, chip e
 messaggi scorrono insieme con la rotellina. Le risposte passate restano nel diario e in **RIVEDI LA PARTITA**.
 

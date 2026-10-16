@@ -577,6 +577,10 @@ class Controller:
                   "problemi del mazzo.", label=f"Nuova partita · {deck}", attach=True)
 
     def _do_end_match(self, result: str) -> None:
+        # partita finita: si fermano l'analisi automatica e (dopo, così il messaggio resta visibile) la registrazione
+        if self.auto_on:
+            self.auto_on = False
+            self.emit_state()
         flags = ""
         if self.flags:
             flags = ("\nDurante la partita Daniele ha segnalato questi errori tuoi:\n" + "\n".join(f"- {f}" for f in self.flags)
@@ -587,7 +591,10 @@ class Controller:
                   "viste. Ripensa alla partita intera: registra con record_lesson le lezioni sul piano "
                   "dell'avversario e sui momenti decisivi che non avevi ancora registrato (niente doppioni: quelle "
                   f"simili vengono rafforzate).{flags} Poi dammi in 3 righe: il mio errore principale, cosa ha fatto "
-                  "bene l'avversario, un consiglio per il prossimo match.", label=f"Fine partita · {result}")
+                  "bene l'avversario, un consiglio per il prossimo match.", label=f"Fine partita · {result}",
+                  kind="fine")
+        if self.rec_on:
+            self._do_record(False)
         if self.journal_dir is not None:
             self.emit({"type": "action", "label": "RIVEDI LA PARTITA", "call": "open_replay"})
             self.emit({"type": "action", "label": "STATISTICHE", "call": "open_stats"})
@@ -678,7 +685,8 @@ class Controller:
         self._journal(f"## #{self.req_n} · {time.strftime('%H:%M:%S')} · {label or 'AUTO'}{img_note}")
         self.busy = True
         self.last_call = time.time()
-        self.emit({"type": "busy", "value": True})
+        what = {"live": "Penso alla mossa", "fine": "Analizzo la partita"}.get(kind, "Penso alla risposta")
+        self.emit({"type": "busy", "value": True, "what": what})
         content: list[dict] = []
         if attach and shot is not None:
             import base64
@@ -713,7 +721,7 @@ class Controller:
                     if ev.get("is_error"):
                         self.say(final or "Errore da Claude Code", "warn")
                     elif final not in ("—", "-", ""):
-                        parsed = parse_live(final)
+                        parsed = parse_live(final) if kind != "fine" else None  # il riepilogo finale è testo
                         self.emit({"type": "answer", "text": final, "parsed": parsed, "secs": round(dt, 1)})
                         if parsed and parsed.get("mossa") and store.load("config").get("voce", True):
                             self.voice.say(parsed["mossa"])

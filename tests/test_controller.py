@@ -136,8 +136,16 @@ c.toggle_mode()
 assert ui.of("state")[-1]["mode"] == "ranked"
 c.toggle_mode()
 
+c.set_auto(True)
+c.set_record(True)
+time.sleep(0.4)
+assert c.rec_on and c.auto_on
 wait(ui, c.end_match, "vittoria")
 assert "segnalazioni=si" in ui.of("answer")[-1]["text"], "a fine partita le segnalazioni ✕ diventano lezioni"
+assert not c.rec_on and not c.auto_on, "a fine partita si fermano registrazione e analisi automatica"
+assert ui.of("answer")[-1]["parsed"] is None, "il riepilogo finale è testo, non una mossa"
+assert any(e.get("what") == "Analizzo la partita" for e in ui.of("busy")), "caricamento con la scritta giusta"
+assert ui.of("clear"), "la vecchia mossa sparisce"
 
 # nuova partita = nuovo processo e nuova sessione
 wait(ui, c.new_match, "Test")

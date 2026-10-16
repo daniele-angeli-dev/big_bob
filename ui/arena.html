@@ -83,6 +83,21 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .hidden{display:none !important}
 
 /* chat */
+/* caricamento: mentre BIG-BOB pensa */
+.think{margin:10px 12px 0;padding:14px;background:var(--panel);border:2px solid var(--yellow);border-radius:10px;display:flex;align-items:center;gap:14px;flex-shrink:0}
+.tk-bars{display:flex;gap:5px;flex-shrink:0}
+.tk-bars i{display:block;width:13px;height:34px;background:var(--teal);transform:skewX(-15deg) scaleY(.45);animation:tk .9s ease-in-out infinite}
+.tk-bars i:nth-child(2){background:var(--orange);animation-delay:.15s}
+.tk-bars i:nth-child(3){background:var(--yellow);animation-delay:.3s}
+@keyframes tk{0%,100%{transform:skewX(-15deg) scaleY(.45);opacity:.55}50%{transform:skewX(-15deg) scaleY(1);opacity:1}}
+.tk-txt{min-width:0;flex-grow:1}
+.tk-k{font-family:var(--display);font-size:19px;line-height:1.1;font-style:italic;color:var(--yellow);text-transform:uppercase;letter-spacing:.5px}
+.tk-s{font-size:13px;font-weight:600;color:var(--dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-sec{font-family:var(--display);font-size:24px;color:#fff;flex-shrink:0;font-variant-numeric:tabular-nums}
+.tk-sec small{font-family:var(--body);font-size:11px;font-weight:700;color:var(--dim);display:block;text-align:right;margin-top:-2px}
+.tk-sec.slow{color:var(--orange)}.tk-sec.late{color:#FF4D6D}
+@media (prefers-reduced-motion: reduce){.tk-bars i{animation:none;transform:skewX(-15deg)}}
+
 /* risposta attuale (mossa + chip + messaggi): un'unica area che scorre */
 .feed{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;padding-bottom:6px}
 .feed::-webkit-scrollbar{width:6px}.feed::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
@@ -192,6 +207,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   </section>
 
   <div class="feed" id="feed">
+  <section class="think hidden" id="think" role="status" aria-live="polite">
+    <div class="tk-bars" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="tk-txt"><div class="tk-k" id="thinkK">Penso alla mossa</div><div class="tk-s" id="thinkS">Guardo lo schermo…</div></div>
+    <div class="tk-sec" id="thinkSec">0<small>/ 40 s</small></div>
+  </section>
   <section class="move hidden" id="move" aria-live="polite">
     <div class="k"><div id="moveK">LA MOSSA</div><span id="moveT"></span></div>
     <div class="m" id="moveM"></div>
@@ -359,15 +379,34 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   }
 
   /* ---------- timer ---------- */
-  function setBusy(on){
+  var STEPS = { get_screen: 'Guardo lo schermo…', update_match: 'Aggiorno la partita e calcolo le probabilità…',
+    simulate_combat: 'Simulo il combattimento…', mulligan_advice: 'Valuto il mulligan…', get_card: 'Leggo una carta…',
+    search_cards: 'Cerco una carta…', start_match: 'Preparo la partita…', end_match: 'Salvo la partita…',
+    record_lesson: 'Annoto una lezione…', opponent_hand_odds: 'Calcolo la mano avversaria…', my_draw_odds: 'Calcolo le pescate…',
+    upsert_cards: 'Salvo una carta nuova…', upsert_locations: 'Salvo una location nuova…', rules_upsert: 'Aggiorno il regolamento…',
+    community_decks: 'Guardo i mazzi della community…', community_stats: 'Guardo le statistiche…' };
+  function showThinking(on, what){
+    var t = $('think');
+    if (on){
+      $('thinkK').textContent = what || 'Penso alla mossa';
+      $('thinkS').textContent = 'Guardo lo schermo…';
+      $('thinkSec').firstChild.nodeValue = '0'; $('thinkSec').className = 'tk-sec';
+      $('thinkSec').lastChild.textContent = '/ ' + BUDGET + ' s';
+      t.classList.remove('hidden'); $('feed').scrollTop = 0;
+    } else t.classList.add('hidden');
+  }
+  function setBusy(on, what){
     $('btnF8').disabled = on; $('btnF8').textContent = on ? '…' : 'F8';
     clearInterval(busyTimer);
+    showThinking(on, what);
     if (on){
       busyT0 = Date.now();
       busyTimer = setInterval(function(){
         var s = (Date.now() - busyT0) / 1000;
         paintTimer(s);
         $('tlab').textContent = 'sto guardando… ' + Math.floor(s) + ' s · obiettivo ' + BUDGET + ' s';
+        $('thinkSec').firstChild.nodeValue = String(Math.floor(s));
+        $('thinkSec').className = 'tk-sec' + (s > BUDGET ? ' late' : (s > 30 ? ' slow' : ''));
       }, 250);
     }
   }
@@ -391,7 +430,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('btnRec').textContent = s.rec ? '● REC' : 'REGISTRA';
     $('btnVoice').setAttribute('aria-pressed', s.voice ? 'true' : 'false');
     $('btnVoice').classList.toggle('hidden', s.voice_available === false);
-    setBusy(!!s.busy);
+    if (!!s.busy !== $('btnF8').disabled) setBusy(!!s.busy);
   }
 
   /* ---------- eventi da Python ---------- */
@@ -399,9 +438,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     try {
       switch(ev.type){
         case 'say': addMsg(ev.role || 'bob', ev.text); break;
-        case 'status': $('status').textContent = ev.text; break;
-        case 'busy': setBusy(ev.value); if (ev.value) $('status').textContent = 'Sto guardando…'; break;
-        case 'answer': renderAnswer(ev); break;
+        case 'status': $('status').textContent = ev.text;
+          if (!$('think').classList.contains('hidden') && ev.text && ev.text.indexOf('⚙') === 0){
+            var tool = ev.text.replace('⚙', '').trim(); $('thinkS').textContent = STEPS[tool] || ('Uso ' + tool + '…');
+          } break;
+        case 'busy': setBusy(ev.value, ev.what); if (ev.value) $('status').textContent = 'Sto guardando…'; break;
+        case 'answer': showThinking(false); renderAnswer(ev); break;
         case 'timing': setTiming(ev.secs); $('status').textContent = ''; break;
         case 'state': renderState(ev); break;
         case 'hud': renderHud(ev.match); break;
