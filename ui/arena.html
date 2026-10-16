@@ -149,6 +149,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .updt{flex:1 1 200px;min-width:0;font-size:13px;font-weight:600;line-height:1.3}
 .updt b{display:block;font-family:var(--display);font-weight:400;font-size:15px;letter-spacing:1px}
 .updb{display:flex;gap:6px}
+/* modale aggiornamenti */
+.uload{display:flex;align-items:center;gap:14px;padding:6px 0;font-weight:600}
+.uload .tk-bars i{height:26px}
+.updlist{margin:0;padding-left:18px;font-size:14px;line-height:1.45;max-height:260px;overflow-y:auto}
+.updmsg{font-size:14px;line-height:1.4}
+.updmsg.err{color:#FFB3C1}
 .upd .ok{background:var(--bg);color:var(--teal);padding:7px 12px;font-size:14px}
 .upd .no{border-color:var(--bg);color:var(--bg);padding:5px 10px}
 .upd.err .no{border-color:var(--line);color:var(--dim)}
@@ -281,6 +287,15 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <input class="inp" id="gamesIn" type="number" min="3" max="40" value="10" style="width:110px;flex-grow:0">
     <div class="bbtns"><button type="button" class="no" data-close>ANNULLA</button><button class="ok" type="submit">CREA</button></div>
   </form>
+</div>
+<div class="modal hidden" id="mUpd" role="dialog" aria-modal="true" aria-labelledby="mUpdT">
+  <div class="box">
+    <h2 id="mUpdT">AGGIORNAMENTI</h2>
+    <div class="uload" id="updLoad" role="status"><div class="tk-bars" aria-hidden="true"><i></i><i></i><i></i></div><div id="updLoadTxt">Controllo se c'è una versione nuova…</div></div>
+    <div class="updmsg" id="updMsg"></div>
+    <ul class="updlist" id="updList"></ul>
+    <div class="bbtns" id="updBtns"></div>
+  </div>
 </div>
 <div class="modal hidden" id="mEnd" role="dialog" aria-modal="true" aria-labelledby="mEndT">
   <div class="box">
@@ -518,7 +533,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
             b.onclick = function(){ call(ev.call); }; var c = $('chat'); c.appendChild(b); $('feed').scrollTop = $('feed').scrollHeight; })(); break;
         case 'settings': fillSettings(ev); break;
         case 'claude_test': var tr = $('testRes'); tr.textContent = ev.msg; tr.className = 'testres ' + (ev.ok ? 'tr-ok' : 'tr-ko'); break;
-        case 'update': showUpdate(ev); break;
+        case 'update': onUpdate(ev); break;
+        case 'update_done': if (ev.ok) updModal('done', ev); else updModal('error', ev); break;
         case 'flash': var f = $('flash'); f.classList.add('on'); setTimeout(function(){ f.classList.remove('on'); }, 60); break;
       }
     } catch(e){ console.error(e); }
@@ -543,8 +559,58 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     } else { b.classList.add('hidden'); return; }
     b.classList.remove('hidden');
   }
-  $('btnUpd').onclick = function(){ $('btnUpd').disabled = true; $('btnUpd').textContent = 'AGGIORNO…'; call('apply_update'); };
+  $('btnUpd').onclick = function(){ startUpdate(); };
   $('btnUpdNo').onclick = function(){ $('upd').classList.add('hidden'); };
+
+  /* ---------- modale aggiornamenti: controllo → novità → aggiornamento → completato ---------- */
+  var updOpen = false, lastUpd = null;
+  function updBtn(label, cls, fn){ var b = el('button', cls, label); b.type = 'button'; b.onclick = fn; $('updBtns').appendChild(b); return b; }
+  function updModal(kind, ev){
+    ev = ev || {};
+    $('updLoad').classList.toggle('hidden', !(kind === 'checking' || kind === 'updating'));
+    $('updMsg').className = 'updmsg'; $('updMsg').textContent = ''; $('updList').innerHTML = ''; $('updBtns').innerHTML = '';
+    var list = function(items){ (items || []).forEach(function(n){ $('updList').appendChild(el('li', null, n)); }); };
+    if (kind === 'checking'){
+      $('mUpdT').textContent = 'AGGIORNAMENTI'; $('updLoadTxt').textContent = 'Controllo se c\'è una versione nuova…';
+    } else if (kind === 'available'){
+      var n = ev.novita || [];
+      $('mUpdT').textContent = 'AGGIORNAMENTO DISPONIBILE';
+      $('updMsg').textContent = 'Versione installata: ' + (ev.versione || '–') + ' · ' + n.length + (n.length === 1 ? ' novità:' : ' novità:')
+        + (ev.modifiche_locali && ev.modifiche_locali.length ? ' (le modifiche locali al codice verranno sostituite)' : '');
+      list(n);
+      updBtn('DOPO', 'no', function(){ hide(); showUpdate(ev); });
+      updBtn('AGGIORNA ORA', 'ok', startUpdate).focus();
+    } else if (kind === 'updating'){
+      $('mUpdT').textContent = 'AGGIORNAMENTO IN CORSO';
+      $('updLoadTxt').textContent = 'Scarico e installo la nuova versione…';
+      $('updMsg').textContent = 'BIG-BOB si chiude e si riapre da solo: quando torna ti dice che l\'aggiornamento è completato. I tuoi dati non vengono toccati.';
+    } else if (kind === 'uptodate'){
+      $('mUpdT').textContent = 'TUTTO AGGIORNATO';
+      $('updMsg').textContent = 'BIG-BOB è già all\'ultima versione (' + (ev.versione || '–') + ').';
+      updBtn('OK', 'ok', hide).focus();
+    } else if (kind === 'done'){
+      $('mUpdT').textContent = 'AGGIORNAMENTO COMPLETATO';
+      $('updMsg').textContent = 'BIG-BOB è passato da ' + (ev.da || '–') + ' a ' + (ev.a || '–') + '.' + ((ev.novita || []).length ? ' Novità:' : '');
+      list(ev.novita);
+      updBtn('OK', 'ok', hide).focus();
+    } else if (kind === 'error'){
+      $('mUpdT').textContent = 'AGGIORNAMENTO NON RIUSCITO';
+      $('updMsg').className = 'updmsg err'; $('updMsg').textContent = ev.errore || 'Errore sconosciuto';
+      updBtn('CHIUDI', 'no', hide).focus();
+    }
+    if (!updOpen || open !== $('mUpd')){ if (open) hide(); show('mUpd'); }
+    updOpen = true;
+  }
+  function startUpdate(){ $('upd').classList.add('hidden'); updModal('updating'); call('apply_update'); }
+  function onUpdate(ev){
+    lastUpd = ev;
+    var modalOpen = open === $('mUpd');
+    if (ev.manual || modalOpen){
+      if (ev.errore && !ev.disponibile) updModal('error', ev);
+      else if (ev.disponibile) updModal('available', ev);
+      else updModal('uptodate', ev);
+    } else showUpdate(ev);
+  }
 
   /* ---------- impostazioni ---------- */
   function connValue(){ var r = document.querySelector('input[name="conn"]:checked'); return r ? r.value : 'abbonamento'; }
@@ -564,7 +630,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   $('btnSet').onclick = function(){ $('testRes').textContent = ''; call('get_settings'); show('mSet', 'modello'); };
   $('btnLogin').onclick = function(){ call('claude_login'); };
   $('btnTest').onclick = function(){ $('testRes').className = 'testres'; $('testRes').textContent = 'Provo il collegamento…'; call('claude_test'); };
-  $('btnCheck').onclick = function(){ call('check_updates'); };
+  $('btnCheck').onclick = function(){ hide(); updModal('checking'); call('check_updates'); };
   $('btnMeta').onclick = function(){ hide(); call('sync_meta'); };
   $('fSet').onsubmit = function(e){
     e.preventDefault();
@@ -578,7 +644,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   /* ---------- modali ---------- */
   var open = null, lastFocus = null;
   function show(id, focusId){ lastFocus = document.activeElement; open = $(id); open.classList.remove('hidden'); if (focusId) setTimeout(function(){ $(focusId).focus(); }, 30); }
-  function hide(){ if (open){ open.classList.add('hidden'); open = null; if (lastFocus) lastFocus.focus(); } }
+  function hide(){ if (open){ if (open.id === 'mUpd') updOpen = false; open.classList.add('hidden'); open = null; if (lastFocus) lastFocus.focus(); } }
   Array.prototype.forEach.call(document.querySelectorAll('[data-close]'), function(b){ b.addEventListener('click', hide); });
   Array.prototype.forEach.call(document.querySelectorAll('.modal'), function(m){ m.addEventListener('click', function(e){ if (e.target === m) hide(); }); });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && open) hide(); });

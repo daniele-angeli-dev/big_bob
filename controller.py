@@ -411,13 +411,12 @@ class Controller:
     def _startup_updates(self) -> None:
         from origins import updates
         res = updates.last_result()
-        if res:
+        if res:  # appena riaperto dopo un aggiornamento: finestra "aggiornamento completato" (o l'errore)
+            if not res.get("ok"):
+                res["errore"] = f"{res.get('errore')}. BIG-BOB è rimasto alla versione di prima."
+            self.emit({"type": "update_done", **res})
             if res.get("ok"):
-                nov = "; ".join(res.get("novita") or []) or "nessun dettaglio"
-                self.say(f"BIG-BOB aggiornato ({res.get('da')} → {res.get('a')}). Novità: {nov}", "lesson")
-            else:
-                self.say(f"Aggiornamento non riuscito: {res.get('errore')}. BIG-BOB è rimasto alla versione di prima.",
-                         "warn")
+                self.say(f"BIG-BOB aggiornato ({res.get('da')} → {res.get('a')}).", "dim")
         if store.load("config").get("controlla_aggiornamenti", True):
             time.sleep(3)  # lascia partire prima la finestra e Claude Code
             self._check_updates(manual=False)
@@ -432,14 +431,15 @@ class Controller:
         res = updates.check()
         log.info("controllo aggiornamenti: %s", res)
         if res["disponibile"] or manual or (res.get("errore") and "GitHub" in res["errore"]):
-            self.emit({"type": "update", **res})
-        if manual and not res["disponibile"] and not res.get("errore"):
-            self.status(f"BIG-BOB è aggiornato (versione {res['versione']})")
+            self.emit({"type": "update", **res, "manual": manual})
+        if manual:
+            self.status("")
 
     def apply_update(self) -> None:
         from origins import updates
         if self.busy:
-            self.status("Aspetta la fine della risposta, poi aggiorna")
+            self.emit({"type": "update", "manual": True, "disponibile": False,
+                       "errore": "BIG-BOB sta rispondendo: aspetta la fine della risposta, poi riprova ad aggiornare."})
             return
         self.say("Aggiorno BIG-BOB: si chiude e si riapre da solo tra poco.", "dim")
         updates.launch_updater(os.getpid())
