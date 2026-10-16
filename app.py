@@ -218,9 +218,16 @@ def run_web() -> None:
             winutil.set_window_icon("BIG-BOB", ROOT / "ui" / "bigbob.ico")
         except Exception:  # noqa: BLE001
             log.exception("icona finestra")
-        if store.load("config").get("apri_claude_code_all_avvio", True):
+        cfg = store.load("config")
+        if not cfg.get("terminale_v2"):  # da ottobre 2026 il terminale non si apre più da solo
+            cfg["apri_claude_code_all_avvio"] = False
+            cfg["terminale_v2"] = True
+            store.save("config", cfg)
+            ctrl.say("Il terminale di Claude Code non si apre più all'avvio: le risposte live non ne hanno bisogno. "
+                     "Per /mazzo, /scansiona, /lezioni… premi >_ (o riattivalo in ⚙).", "dim")
+        if cfg.get("apri_claude_code_all_avvio", False):
             ctrl.say(winutil.open_claude_terminal(ROOT) + " Lo usi per /scansiona, /mazzo, /lezioni… "
-                     "(si spegne con apri_claude_code_all_avvio: false in config.json)", "dim")
+                     "(si spegne in ⚙ Impostazioni)", "dim")
         # se l'evento pywebviewready non arriva (rarissimo), sblocca comunque gli eventi
         threading.Timer(4.0, lambda: (not ui._loaded.is_set()) and ui.on_ready()).start()
 

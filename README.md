@@ -55,10 +55,10 @@ Le regole confermate nell'intervista vengono con BIG-BOB: anche un'installazione
 
 ## Avvio: un'icona
 Clicca l'icona **BIG-BOB** (desktop, menu Start, o fissala sulla barra delle applicazioni: tasto destro → Aggiungi alla
-barra delle applicazioni). Si apre la finestra di BIG-BOB e, accanto, il terminale di **Claude Code** già nella cartella
-giusta per i comandi (`/scansiona`, `/mazzo`, `/lezioni`…). Il Claude Code che risponde a F8 è dentro la finestra e parte da
-solo: il terminale serve solo per i comandi. Non lo vuoi all'avvio? `apri_claude_code_all_avvio: false` in `config.json`;
-lo apri quando serve con il pulsante **>_** della finestra.
+barra delle applicazioni). Si apre la finestra di BIG-BOB. Il Claude Code che risponde a F8 è dentro la finestra e parte da
+solo, invisibile. Il terminale di **Claude Code** serve solo per i comandi (`/scansiona`, `/mazzo`, `/lezioni`…): lo apri
+quando serve con il pulsante **>_** della finestra (o dal menu Start → Claude Code (BIG-BOB)), e puoi chiuderlo quando vuoi.
+Se lo vuoi sempre all'avvio: ⚙ → *Apri anche il terminale di Claude Code all'avvio*.
 Se clicchi l'icona con BIG-BOB già aperto, riporta in primo piano la finestra (anche se era nascosta con F10).
 
 Nel menu Start, cartella **BIG-BOB**: Aggiorna, Claude Code, Diagnostica, Statistiche, finestra classica, cartella dei
