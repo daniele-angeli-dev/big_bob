@@ -89,12 +89,14 @@ Var RbDisinst
 
 ; ---------------------------------------------------------------- funzioni
 !macro ChiudiBigBob
-  attesa_chiusura_${__LINE__}:
-  System::Call 'user32::FindWindowW(p 0, w "BIG-BOB") p .r9'
-  ${If} $9 != 0
-    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "BIG-BOB è aperto. Chiudilo (pulsante × in alto a destra nella sua finestra) e premi Riprova." IDRETRY attesa_chiusura_${__LINE__}
+  ${Do}
+    System::Call 'user32::FindWindowW(p 0, w "BIG-BOB") p .r9'
+    ${If} $9 == 0
+      ${Break}
+    ${EndIf}
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "BIG-BOB è aperto. Chiudilo (pulsante × in alto a destra nella sua finestra) e premi Riprova." IDRETRY +2
     Abort
-  ${EndIf}
+  ${Loop}
 !macroend
 
 Function .onInit
