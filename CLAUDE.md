@@ -166,7 +166,7 @@ con NUOVA vengono contate per la versione attuale (le statistiche le calcola `de
 ## Meta
 Tre fonti, da tenere distinte quando parli di diffusione:
 1. **Partite di Daniele**: `end_match` registra il mazzo avversario (`meta_report` → `avversari_di_daniele`).
-2. **OriginsMeta** (originsmeta.com, sito della community): BIG-BOB lo scarica da solo ogni 12 ore.
+2. **OriginsMeta** (originsmeta.com, sito della community): BIG-BOB lo scarica da solo al primo avvio di ogni giorno.
    - `community_decks` (filtri leggendaria/archetipo/versione, ordina per winrate/partite/rating/recenti) e
      `community_deck(nome)` per la guida completa (piano, mulligan, matchup).
    - `community_stats`: winrate e quota per leggendaria (con intervallo al 95% e "prudente"), archetipi, carte

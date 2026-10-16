@@ -52,7 +52,8 @@ Con poche partite il winrate oscilla molto (±30 punti con 10 partite): per ques
 e lezioni prima di cambiare il mazzo. Il comando `/mazzo` in Claude Code può creare un progetto allo stesso modo.
 
 ## Carte, location e meta da OriginsMeta (automatico)
-BIG-BOB legge da solo [originsmeta.com](https://originsmeta.com) ogni 12 ore (subito, se il database delle carte è vuoto):
+BIG-BOB legge da solo [originsmeta.com](https://originsmeta.com) al **primo avvio di ogni giorno** (gli avvii successivi
+non scaricano niente; se il sito non risponde riprova all'avvio dopo; subito, se il database delle carte è vuoto):
 - **carte e location**: aggiunge quelle che mancano; i cambiamenti di costo/attacco/vita diventano una patch
   "<versione> (OriginsMeta)" con lo storico. Un testo corretto da te (o letto dalle schermate) non viene più sovrascritto;
 - **mazzi** pubblicati e da torneo, con winrate, partite, valutazione, versione e guida: pesano nelle probabilità

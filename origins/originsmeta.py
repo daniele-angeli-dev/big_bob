@@ -8,7 +8,7 @@ Gira sul PC di Daniele (dentro BIG-BOB), senza Claude e senza consumare il suo a
   i campi (winrate, partite, versione, archetipo…) dal testo vicino, e legge le tabelle delle statistiche così
   come sono.
 
-python -m origins.originsmeta            sincronizza (se l'ultima è di più di 12 ore fa)
+python -m origins.originsmeta            sincronizza (se oggi non l'ha ancora fatto)
 python -m origins.originsmeta --forza    sincronizza adesso
 python -m origins.originsmeta --salva-pagine   salva anche l'HTML in logs/originsmeta/ (per correggere il parser)
 """
@@ -36,7 +36,7 @@ LANG = "en"
 USER_AGENT = "BIG-BOB/1.0 (assistente personale per Origins TCG; uso privato, 1 richiesta al secondo)"
 DELAY = 1.1               # secondi tra una richiesta e l'altra
 REFETCH_DAYS = 3          # un mazzo invariato si riscarica comunque dopo 3 giorni
-SYNC_EVERY_HOURS = 12
+SYNC_EVERY_HOURS = 24      # per la pulizia dei mazzi spariti; la sincronizzazione è una volta al giorno
 FONTE = "originsmeta"
 
 PAGES = {
@@ -708,10 +708,12 @@ def load_state() -> dict:
     return st
 
 
-def due(state: dict | None = None, hours: float = SYNC_EVERY_HOURS) -> bool:
+def due(state: dict | None = None) -> bool:
+    """Una volta al giorno: vero se oggi (giorno di calendario del PC) non c'è ancora stata una sincronizzazione
+    riuscita. Al primo avvio della giornata scarica, agli avvii successivi no; se non riesce, riprova al prossimo."""
     state = state or load_state()
     last = state.get("ultimo_sync_ts") or 0
-    return time.time() - last > hours * 3600
+    return time.strftime("%Y-%m-%d", time.localtime(last)) != time.strftime("%Y-%m-%d") if last else True
 
 
 def sync(force: bool = False, fetcher: Fetcher | None = None, progress=lambda s: None,
@@ -720,7 +722,7 @@ def sync(force: bool = False, fetcher: Fetcher | None = None, progress=lambda s:
     force: anche se l'ultima sincronizzazione è recente. everything: riscarica anche i mazzi invariati."""
     state = load_state()
     if not force and not due(state):
-        return {"ok": True, "saltato": True, "motivo": "sincronizzato da meno di 12 ore",
+        return {"ok": True, "saltato": True, "motivo": "già sincronizzato oggi",
                 "ultimo_sync": state.get("ultimo_sync")}
     f = fetcher or Fetcher(save_dir=(store.ROOT / "logs" / "originsmeta") if save_pages else None)
     report = {"ok": True, "nuovi": [], "aggiornati": [], "incompleti": [], "rimossi": [], "errori": [],

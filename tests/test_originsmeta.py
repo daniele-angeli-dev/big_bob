@@ -255,6 +255,13 @@ st_bad["ultimo_sync_ts"] = 0
 store.save("originsmeta", st_bad)
 om.sync(force=True, fetcher=om.Fetcher(delay=0, opener=lambda u: (_ for _ in ()).throw(OSError("offline"))))
 assert om.due(), "dopo un errore di rete si riprova al prossimo avvio"
+# una volta al giorno: ieri sera -> sì, stamattina -> no (anche se sono passate molte ore)
+import time as _t
+lt = _t.localtime()
+midnight = _t.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+assert om.due({"ultimo_sync_ts": midnight - 60}), "sincronizzato ieri alle 23:59: oggi va rifatto"
+assert not om.due({"ultimo_sync_ts": midnight + 60}), "sincronizzato oggi a mezzanotte e un minuto: basta così"
+assert om.due({}), "mai sincronizzato"
 
 # ---- sito completo (60+ carte): il database si aggiorna da solo, con lo storico della patch
 store.upsert("cards", [{"nome": "Glinda", "costo": 4, "attacco": 2, "vita": 3, "tipo": "creatura",
