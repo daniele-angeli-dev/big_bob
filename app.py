@@ -75,6 +75,13 @@ class WebUI:
     def is_visible(self) -> bool:
         return self._visible
 
+    def quit(self) -> None:
+        try:
+            if self.window is not None:
+                self.window.destroy()
+        finally:
+            os._exit(0)
+
     def rect(self):
         try:
             w = self.window
@@ -132,6 +139,24 @@ class Api:
 
     def toggle_visibility(self):
         self._c.toggle_visibility()
+
+    def get_settings(self):
+        self._c.get_settings()
+
+    def save_settings(self, vals):
+        self._c.save_settings(vals or {})
+
+    def claude_login(self):
+        self._c.claude_login()
+
+    def claude_test(self):
+        self._c.claude_test()
+
+    def check_updates(self):
+        self._c.check_updates()
+
+    def apply_update(self):
+        self._c.apply_update()
 
     def open_terminal(self):
         self._c.say(winutil.open_claude_terminal(ROOT), "dim")

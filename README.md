@@ -13,17 +13,32 @@ BIG-BOB è il tuo coach personale per Origins TCG, gira sul tuo PC con Claude Co
 - **Claude Code** installato e collegato al tuo account Max (guida ufficiale: https://docs.claude.com/en/docs/claude-code/setup).
   Verifica: apri un terminale e scrivi `claude`; se si apre e sei loggato, sei a posto.
 
-## Aggiornare BIG-BOB (un clic)
-BIG-BOB vive nel repository privato `daniele-angeli-dev/big_bob`. Per prendere l'ultima versione fai doppio clic su
-**`aggiorna.bat`**: scarica il codice nuovo, aggiorna le librerie e lancia i test. **I tuoi dati non vengono mai toccati
-né caricati su GitHub** (cartelle `data`, `logs`, `captures` e `config.json` sono esclusi).
-Serve Git per Windows (git-scm.com/download/win); la prima volta GitHub ti chiede di accedere nel browser.
+## Installazione: BIG-BOB-Setup.exe
+Doppio clic su **BIG-BOB-Setup.exe** e segui le schermate:
+1. **Benvenuto** e scelta della cartella (se BIG-BOB c'è già, propone la stessa: il codice si aggiorna, i dati restano).
+2. Se è già installato puoi scegliere **Aggiorna/ripara** oppure **Disinstalla**.
+3. Controlla **Python, Claude Code e Git** e installa con winget quello che manca (Git serve per gli aggiornamenti).
+4. Copia BIG-BOB, installa le librerie, fa i collaudi e crea **l'icona sul desktop e nel menu Start**.
+5. **Collega Claude**: abbonamento (consigliato) o chiave API, modello (Sonnet/Opus/Haiku), pulsanti
+   *Accedi a Claude* e *Prova collegamento*.
+6. Fine, con la casella **Avvia BIG-BOB**.
 
-## Installazione
-1. Metti la cartella dove vuoi (es. `C:\BIG-BOB`). Non spostarla dopo, o rilancia `installa.bat`.
-2. Doppio clic su **`installa.bat`**: installa le librerie, collega Claude Code, lancia i test e crea
-   **l'icona BIG-BOB sul desktop e nel menu Start**.
-3. La prima volta apri **Claude Code (BIG-BOB)** dal menu Start e accetta la fiducia per la cartella e il server `origins`.
+Windows può mostrare "PC protetto da Windows" perché l'installer non è firmato: *Ulteriori informazioni → Esegui
+comunque*. BIG-BOB compare in **Impostazioni → App installate**, da dove si disinstalla (ti chiede se tenere i dati).
+
+## Aggiornamenti: te lo dice lui
+A ogni avvio BIG-BOB controlla se c'è una versione nuova. Se c'è, compare un banner con le novità e il pulsante
+**AGGIORNA ORA**: scarica solo le differenze, aggiorna le librerie se sono cambiate, si chiude e si riapre da solo
+(i tuoi dati non vengono toccati). Puoi controllare anche a mano da ⚙ Impostazioni → Controlla aggiornamenti, o dal menu
+Start → BIG-BOB → Aggiorna BIG-BOB. La prima volta GitHub chiede di accedere: fallo una volta da "Aggiorna BIG-BOB".
+
+## Impostazioni (icona a ingranaggio)
+- **Collegamento a Claude**: abbonamento Claude (Claude Code con il tuo account, consigliato) oppure chiave API Anthropic
+  (a consumo; la chiave resta solo nel tuo `config.json`). Con l'abbonamento BIG-BOB ignora eventuali chiavi API
+  rimaste nel sistema, così non paghi a consumo per errore. *Accedi a Claude* apre Claude Code per il login,
+  *Prova collegamento* verifica che risponda.
+- **Modello per le risposte live**: Sonnet (veloce, consigliato), Opus (più preciso ma rischia i 40 s), Haiku (velocissimo).
+- Voce, apprendimento tra i round, Claude Code all'avvio, controllo aggiornamenti, tetto di ragionamento.
 
 ## Avvio: un'icona
 Clicca l'icona **BIG-BOB** (desktop, menu Start, o fissala sulla barra delle applicazioni: tasto destro → Aggiungi alla

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import queue
 import re
 import shutil
@@ -89,7 +90,9 @@ class ClaudeSession:
     def _env(self) -> dict:
         import os
         cfg = store.load("config")
-        env = dict(os.environ)
+        import configura
+        # abbonamento: una chiave API rimasta nel sistema farebbe pagare a consumo senza accorgersene
+        env = configura.claude_env(cfg)
         env["ENABLE_TOOL_SEARCH"] = "false"  # strumenti di BIG-BOB caricati subito: niente passaggio ToolSearch
         # cintura di sicurezza: i round normali usano ~2.500-3.000 token, il tetto ferma solo i casi
         # patologici così la risposta resta sotto i 40 secondi (≈7,5 ms per token + ~6 s fissi)
@@ -251,6 +254,7 @@ class Controller:
             threading.Thread(target=self._prewarm, daemon=True).start()
         if store.load("config").get("voce", True):
             self.voice.warm()
+        threading.Thread(target=self._startup_updates, daemon=True).start()
         if not self.claude:
             self.say("Non trovo il comando 'claude'. Installa Claude Code e fai il login (vedi README).", "warn")
         else:
@@ -320,6 +324,105 @@ class Controller:
         cfg["modalita"] = "allenamento" if cfg.get("modalita") == "ranked" else "ranked"
         store.save("config", cfg)
         self.emit_state()
+
+    # ------------------------------------------------ aggiornamenti
+    def _startup_updates(self) -> None:
+        from origins import updates
+        res = updates.last_result()
+        if res:
+            if res.get("ok"):
+                nov = "; ".join(res.get("novita") or []) or "nessun dettaglio"
+                self.say(f"BIG-BOB aggiornato ({res.get('da')} → {res.get('a')}). Novità: {nov}", "lesson")
+            else:
+                self.say(f"Aggiornamento non riuscito: {res.get('errore')}. BIG-BOB è rimasto alla versione di prima.",
+                         "warn")
+        if store.load("config").get("controlla_aggiornamenti", True):
+            time.sleep(3)  # lascia partire prima la finestra e Claude Code
+            self._check_updates(manual=False)
+
+    def check_updates(self) -> None:
+        threading.Thread(target=self._check_updates, kwargs={"manual": True}, daemon=True).start()
+
+    def _check_updates(self, manual: bool) -> None:
+        from origins import updates
+        if manual:
+            self.status("Controllo aggiornamenti…")
+        res = updates.check()
+        log.info("controllo aggiornamenti: %s", res)
+        if res["disponibile"] or manual or (res.get("errore") and "GitHub" in res["errore"]):
+            self.emit({"type": "update", **res})
+        if manual and not res["disponibile"] and not res.get("errore"):
+            self.status(f"BIG-BOB è aggiornato (versione {res['versione']})")
+
+    def apply_update(self) -> None:
+        from origins import updates
+        if self.busy:
+            self.status("Aspetta la fine della risposta, poi aggiorna")
+            return
+        self.say("Aggiorno BIG-BOB: si chiude e si riapre da solo tra poco.", "dim")
+        updates.launch_updater(os.getpid())
+        time.sleep(0.8)
+        if self.session:
+            self.session.close()
+        quit_ = getattr(self.ui, "quit", None)
+        if quit_:
+            quit_()
+
+    # ------------------------------------------------ impostazioni e collegamento a Claude
+    SETTINGS_KEYS = ("modello_live", "connessione", "voce", "apprendimento_live", "apri_claude_code_all_avvio",
+                     "controlla_aggiornamenti", "max_thinking_live", "modalita")
+
+    def get_settings(self) -> None:
+        from origins import updates
+        cfg = store.load("config")
+        vals = {k: cfg.get(k) for k in self.SETTINGS_KEYS}
+        vals.setdefault("connessione", "abbonamento")
+        vals["connessione"] = vals["connessione"] or "abbonamento"
+        vals["api_key_impostata"] = bool(cfg.get("api_key"))
+        self.emit({"type": "settings", "valori": vals, "versione": updates.installed_version(),
+                   "claude_trovato": bool(self.claude)})
+
+    def save_settings(self, vals: dict) -> None:
+        import configura
+        cfg_before = store.load("config")
+        extra = {k: vals[k] for k in ("voce", "apprendimento_live", "apri_claude_code_all_avvio",
+                                      "controlla_aggiornamenti") if k in vals}
+        if "max_thinking_live" in vals:
+            try:
+                extra["max_thinking_live"] = max(0, int(vals["max_thinking_live"]))
+            except (TypeError, ValueError):
+                pass
+        key = (vals.get("api_key") or "").strip()
+        try:
+            cfg = configura.apply(vals.get("modello_live"), vals.get("connessione"), key or None, **extra)
+        except ValueError as e:
+            self.say(f"Impostazioni non salvate: {e}", "warn")
+            return
+        if cfg.get("connessione") == "api" and not cfg.get("api_key"):
+            self.say("Hai scelto la chiave API ma non l'hai inserita: finché manca uso l'abbonamento.", "warn")
+        changed = any(cfg_before.get(k) != cfg.get(k) for k in ("modello_live", "connessione", "api_key",
+                                                                  "max_thinking_live"))
+        if changed and self.session and not self.busy:
+            self.session.reset()  # la prossima risposta usa subito il nuovo modello/collegamento
+            threading.Thread(target=self._prewarm, daemon=True).start()
+        self.emit_state()
+        self.status("Impostazioni salvate")
+
+    def claude_login(self) -> None:
+        from origins import winutil
+        msg = winutil.open_claude_terminal(ROOT)
+        self.say(msg + " Se non ti chiede di accedere, scrivi /login nel terminale e scegli il tuo account Claude "
+                       "(abbonamento) o la chiave API.", "dim")
+
+    def claude_test(self) -> None:
+        threading.Thread(target=self._claude_test, daemon=True).start()
+
+    def _claude_test(self) -> None:
+        import configura
+        ok, msg = configura.test_claude()
+        if ok and not self.claude:
+            self.claude = configura.find_claude()
+        self.emit({"type": "claude_test", "ok": ok, "msg": msg})
 
     # ------------------------------------------------ pagine locali
     @staticmethod
