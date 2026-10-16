@@ -154,13 +154,17 @@ class Overlay:
     def _refresh_mode(self) -> None:
         mode = self.cfg.get("modalita", "allenamento")
         if mode == "ranked":
-            self.mode_btn.configure(text="RANKED · tracker", bg=WARN, fg="#111")
+            self.mode_btn.configure(text="RANKED", bg=WARN, fg="#111")
+        elif mode == "creazione":
+            self.mode_btn.configure(text="CREAZIONE", bg="#1FD6C4", fg="#111")
         else:
             self.mode_btn.configure(text="ALLENAMENTO", bg="#3d8f6a", fg="#111")
 
     def _toggle_mode(self) -> None:
         self.cfg = store.load("config")
-        self.cfg["modalita"] = "allenamento" if self.cfg.get("modalita") == "ranked" else "ranked"
+        modes = ("allenamento", "ranked", "creazione")
+        cur = self.cfg.get("modalita") if self.cfg.get("modalita") in modes else "allenamento"
+        self.cfg["modalita"] = modes[(modes.index(cur) + 1) % len(modes)]
         store.save("config", self.cfg)
         self._refresh_mode()
 

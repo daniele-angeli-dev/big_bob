@@ -398,7 +398,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       $('moveM').textContent = p.mossa; $('moveW').textContent = p.perche || '';
     } else {
       mv.classList.remove('hidden'); mv.classList.add('tracker');
-      $('moveK').textContent = ranked ? 'TRACKER · RANKED' : 'SITUAZIONE';
+      $('moveK').textContent = ranked ? 'RANKED' : 'SITUAZIONE';
       $('moveM').textContent = ''; $('moveW').textContent = '';
     }
     $('moveT').textContent = ev.secs != null ? ev.secs + ' s' : '';
@@ -487,8 +487,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     state = Object.assign(state, s); ROUND = s.round_seconds || ROUND; BUDGET = s.budget_seconds || BUDGET;
     SCALE = Math.round(BUDGET / 0.75);
     var b = $('btnMode'); var r = s.mode === 'ranked', c = s.mode === 'creazione';
-    b.textContent = r ? 'RANKED · TRACKER' : (c ? 'CREAZIONE' : 'ALLENAMENTO'); b.classList.toggle('ranked', r); b.classList.toggle('lab', c);
-    b.title = 'Modalità: allenamento → ranked (solo tracker) → creazione mazzo';
+    b.textContent = r ? 'RANKED' : (c ? 'CREAZIONE' : 'ALLENAMENTO'); b.classList.toggle('ranked', r); b.classList.toggle('lab', c);
+    b.title = 'Modalità: allenamento → ranked (solo numeri, nessun consiglio) → creazione mazzo';
     renderLab(c, s.lab);
     $('btnAuto').setAttribute('aria-pressed', s.auto ? 'true' : 'false');
     $('btnRec').setAttribute('aria-pressed', s.rec ? 'true' : 'false');
