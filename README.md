@@ -137,6 +137,9 @@ di minaccia, pescata, mano avversaria e location; poi la chat.
 La finestra si trascina dalla barra in alto e può stare sopra il gioco: a ogni cattura si nasconde per un istante.
 Se la grafica nuova non partisse, si apre da sola la **finestra classica** (o lanciala con `avvia_classico.bat`).
 
+La finestra mostra solo la **richiesta attuale**: a ogni F8 o domanda la risposta precedente sparisce, e mossa, chip e
+messaggi scorrono insieme con la rotellina. Le risposte passate restano nel diario e in **RIVEDI LA PARTITA**.
+
 Ogni partita ha un **diario** in `logs/partite/<data>/diario.md`: per ogni richiesta salva la schermata, gli strumenti
 usati con i tempi, i token generati, la risposta e le tue segnalazioni ✕.
 

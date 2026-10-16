@@ -656,7 +656,9 @@ class Controller:
         if not self._session_free.is_set():  # sta ancora imparando dal round prima: di solito pochi secondi
             self.status("Finisco di imparare dal round precedente…")
             self._session_free.wait(45)
-        if label:
+        # nella finestra resta solo la richiesta attuale e la sua risposta (lo storico è nel diario / RIVEDI)
+        self.emit({"type": "clear"})
+        if label and kind != "live":  # per F8 basta la mossa: la scritta "Analisi round" sarebbe solo rumore
             self.say(label, "me")
         shot = None
         try:

@@ -83,8 +83,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .hidden{display:none !important}
 
 /* chat */
-.chat{flex-grow:1;margin:10px 12px 0;display:flex;flex-direction:column;gap:6px;overflow-y:auto;min-height:60px;padding-right:2px;user-select:text}
-.chat::-webkit-scrollbar{width:6px}.chat::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+/* risposta attuale (mossa + chip + messaggi): un'unica area che scorre */
+.feed{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;padding-bottom:6px}
+.feed::-webkit-scrollbar{width:6px}.feed::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.chat{margin:10px 12px 0;display:flex;flex-direction:column;gap:6px;padding-right:2px;user-select:text}
 .msg{max-width:88%;padding:6px 10px;border-radius:8px;font-size:14px;line-height:1.35;white-space:pre-wrap;word-wrap:break-word}
 .msg.me{align-self:flex-end;background:var(--panel2);font-weight:600}
 .msg.bob{align-self:flex-start;background:var(--panel)}
@@ -189,6 +191,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     </div>
   </section>
 
+  <div class="feed" id="feed">
   <section class="move hidden" id="move" aria-live="polite">
     <div class="k"><div id="moveK">LA MOSSA</div><span id="moveT"></span></div>
     <div class="m" id="moveM"></div>
@@ -197,6 +200,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   <div class="chips hidden" id="chips"></div>
 
   <div class="chat" id="chat" aria-live="polite"></div>
+  </div>
 
   <footer class="foot">
     <form class="row" id="form" autocomplete="off">
@@ -290,8 +294,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   function el(tag, cls, text){ var e = document.createElement(tag); if(cls) e.className = cls; if(text != null) e.textContent = text; return e; }
   function addMsg(role, text){
     var c = $('chat'); var m = el('div', 'msg ' + role, text); c.appendChild(m);
-    while (c.children.length > 60) c.removeChild(c.firstChild);
-    c.scrollTop = c.scrollHeight;
+    while (c.children.length > 40) c.removeChild(c.firstChild);
+    // scorre in fondo solo se non c'è una mossa da leggere in cima (le lezioni che arrivano dopo non la spostano)
+    var f = $('feed'); if (role === 'me' || $('move').classList.contains('hidden')) f.scrollTop = f.scrollHeight;
   }
 
   /* ---------- HUD ---------- */
@@ -350,6 +355,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     cs.classList.toggle('hidden', items.length === 0);
     (p.altro||[]).forEach(function(t){ addMsg('bob', t); });
     addMsg('dim', 'Analisi aggiornata' + (ev.secs != null ? ' · ' + ev.secs + ' s' : ''));
+    $('feed').scrollTop = 0;  // la mossa in cima, subito leggibile
   }
 
   /* ---------- timer ---------- */
@@ -402,7 +408,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         case 'clear': $('chat').innerHTML = ''; $('move').classList.add('hidden'); $('chips').classList.add('hidden'); break;
         case 'learning': if (!$('btnF8').disabled) $('status').textContent = ev.value ? 'Imparo da questo round…' : ''; break;
         case 'action': (function(){ var b = el('button','pill act-link', ev.label); b.type='button';
-            b.onclick = function(){ call(ev.call); }; var c = $('chat'); c.appendChild(b); c.scrollTop = c.scrollHeight; })(); break;
+            b.onclick = function(){ call(ev.call); }; var c = $('chat'); c.appendChild(b); $('feed').scrollTop = $('feed').scrollHeight; })(); break;
         case 'settings': fillSettings(ev); break;
         case 'claude_test': var tr = $('testRes'); tr.textContent = ev.msg; tr.className = 'testres ' + (ev.ok ? 'tr-ok' : 'tr-ko'); break;
         case 'update': showUpdate(ev); break;
