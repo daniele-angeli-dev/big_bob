@@ -89,8 +89,8 @@ class ClaudeSession:
     Evita a ogni F8 l'avvio di Claude Code, del server MCP e il ricaricamento della sessione.
     Se il processo muore, al turno dopo ne parte un altro che riprende la stessa sessione."""
 
-    def __init__(self, exe: str, cwd: Path) -> None:
-        self.exe, self.cwd = exe, cwd
+    def __init__(self, exe: str, cwd: Path, live: bool = True) -> None:
+        self.exe, self.cwd, self.live = exe, cwd, live
         self.proc: subprocess.Popen | None = None
         self.session_id: str | None = None
         self._q: queue.Queue = queue.Queue()
@@ -116,8 +116,10 @@ class ClaudeSession:
         # cintura di sicurezza: i round normali usano ~2.500-3.000 token, il tetto ferma solo i casi
         # patologici così la risposta resta sotto i 40 secondi (≈7,5 ms per token + ~6 s fissi)
         mt = cfg.get("max_thinking_live", 4000)
-        if mt:
+        if mt and self.live:  # il tetto vale solo per le risposte in partita, non per creare mazzi
             env["MAX_THINKING_TOKENS"] = str(mt)
+        else:
+            env.pop("MAX_THINKING_TOKENS", None)
         return env
 
     def alive(self) -> bool:
@@ -286,6 +288,8 @@ class Controller:
         self.voice.stop()
         if self.session:
             self.session.close()
+        if getattr(self, "lab_session", None):
+            self.lab_session.close()
 
     def _prewarm(self) -> None:
         try:
@@ -390,7 +394,7 @@ class Controller:
             self.say("Nessun mazzo in creazione: premi CREA MAZZO.", "dim")
             return
         try:
-            self._open(report.lab_html(p["nome"]))
+            self._open(report.lab_html(p["nome"]), f"BIG-BOB · {p['nome']}")
         except Exception as e:  # noqa: BLE001
             log.exception("pagina laboratorio")
             self.say(f"Pagina non generata: {e}", "warn")
@@ -554,8 +558,19 @@ class Controller:
         self.emit({"type": "claude_test", "ok": ok, "msg": msg})
 
     # ------------------------------------------------ pagine locali
+    def _open(self, path: Path, title: str = "BIG-BOB") -> None:
+        """Dentro l'app (finestra di BIG-BOB) se la finestra lo permette; altrimenti nel browser (finestra classica)."""
+        opener = getattr(self.ui, "open_page", None)
+        if opener is not None:
+            try:
+                if opener(path, title):
+                    return
+            except Exception:  # noqa: BLE001
+                log.exception("pagina interna non aperta: uso il browser")
+        self._open_external(path)
+
     @staticmethod
-    def _open(path: Path) -> None:
+    def _open_external(path: Path) -> None:
         import os
         import webbrowser
         try:
@@ -566,7 +581,7 @@ class Controller:
     def open_stats(self) -> None:
         from origins import report
         try:
-            self._open(report.stats_html())
+            self._open(report.stats_html(), "BIG-BOB · Statistiche")
         except Exception as e:  # noqa: BLE001
             log.exception("statistiche")
             self.say(f"Statistiche non generate: {e}", "warn")
@@ -574,7 +589,7 @@ class Controller:
     def open_learned(self) -> None:
         from origins import report
         try:
-            self._open(report.learned_html())
+            self._open(report.learned_html(), "BIG-BOB · Cosa ho imparato")
         except Exception as e:  # noqa: BLE001
             log.exception("pagina cosa ho imparato")
             self.say(f"Pagina non generata: {e}", "warn")
@@ -586,7 +601,7 @@ class Controller:
             self.say("Nessuna partita da rivedere.", "dim")
             return
         try:
-            self._open(report.replay_html(Path(d)))
+            self._open(report.replay_html(Path(d)), "BIG-BOB · Rivedi la partita")
         except Exception as e:  # noqa: BLE001
             log.exception("replay")
             self.say(f"Replay non generato: {e}", "warn")
@@ -762,7 +777,8 @@ class Controller:
             self.say(label, "me")
         shot = None
         try:
-            shot = self.hidden_capture()  # get_screen userà questa cattura (finestra esclusa)
+            if kind != "crea":  # creare un mazzo non riguarda lo schermo
+                shot = self.hidden_capture()  # get_screen userà questa cattura (finestra esclusa)
         except Exception:  # noqa: BLE001
             log.exception("pre-cattura fallita: Claude catturerà da solo")
         self.req_n += 1
@@ -780,7 +796,9 @@ class Controller:
         self.last_call = time.time()
         what = {"live": "Penso alla mossa", "fine": "Analizzo la partita",
                 "crea": "Creo il mazzo"}.get(kind, "Penso alla risposta")
-        self.emit({"type": "busy", "value": True, "what": what})
+        # il limite dei 40 secondi vale solo in partita (F8/AUTO): creare un mazzo o analizzare la partita finita
+        # può richiedere il tempo che serve
+        self.emit({"type": "busy", "value": True, "what": what, "budget": BUDGET_SECONDS if kind == "live" else 0})
         content: list[dict] = []
         if attach and shot is not None:
             import base64
@@ -795,8 +813,11 @@ class Controller:
         t0 = time.time()
         steps: list[str] = []
         texts: list[str] = []
+        sess = self.session
+        if kind == "crea":  # sessione a parte: niente tetto al ragionamento e la partita in corso non si sporca
+            sess = self.lab_session = getattr(self, "lab_session", None) or ClaudeSession(self.claude, ROOT, live=False)
         try:
-            for ev in self.session.ask(content):
+            for ev in sess.ask(content, timeout=120 if kind == "live" else 900):
                 if ev.get("type") == "assistant":
                     for block in ev.get("message", {}).get("content", []):
                         if block.get("type") == "text" and block.get("text", "").strip():
@@ -822,7 +843,7 @@ class Controller:
                         if kind == "live":
                             self.live_n += 1
                             learn = self.live_n >= 2 and store.load("config").get("apprendimento_live", True)
-                    self.emit({"type": "timing", "secs": round(dt, 1)})
+                    self.emit({"type": "timing", "secs": round(dt, 1), "budget": BUDGET_SECONDS if kind == "live" else 0})
         except Exception as e:  # noqa: BLE001
             log.exception("chiamata a Claude fallita")
             self.say(f"Errore: {e}", "warn")

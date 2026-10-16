@@ -75,6 +75,40 @@ class WebUI:
     def is_visible(self) -> bool:
         return self._visible
 
+    def open_page(self, path, title: str = "BIG-BOB") -> bool:
+        """Apre una pagina di BIG-BOB (statistiche, cosa ho imparato, laboratorio, replay) in una sua finestra
+        dentro l'app, non nel browser. La finestra si riusa: aprire un'altra pagina la sostituisce."""
+        import webview
+        uri = Path(path).resolve().as_uri()
+        w = getattr(self, "_page_window", None)
+        if w is not None:
+            try:
+                w.load_url(uri)
+                w.set_title(title)
+                w.show()
+                w.restore()
+                return True
+            except Exception:  # noqa: BLE001  (finestra chiusa nel frattempo)
+                self._page_window = None
+        width, height = 1060, 860
+        try:
+            scr = webview.screens[0]
+            width, height = min(width, scr.width - 60), min(height, scr.height - 80)
+        except Exception:  # noqa: BLE001
+            pass
+        w = webview.create_window(title, url=uri, width=width, height=height, min_size=(420, 480),
+                                  on_top=True, resizable=True, background_color="#24104F", text_select=True,
+                                  focus=True)
+
+        def closed():
+            self._page_window = None
+        try:
+            w.events.closed += closed
+        except Exception:  # noqa: BLE001
+            pass
+        self._page_window = w
+        return True
+
     def quit(self) -> None:
         try:
             if self.window is not None:

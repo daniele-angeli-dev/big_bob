@@ -151,6 +151,18 @@ c._lab_after("fine")
 assert [e["label"] for e in ui.ev if e["type"] == "action"] == ["APPLICA MIGLIORIA", "STATISTICHE DEL MAZZO"]
 c.lab_apply()
 assert any(e["type"] == "say" and "Versione 5" in e["text"] and "Carta 15 ×2" in e["text"] for e in ui.ev)
+
+# le pagine si aprono dentro l'app (finestra di BIG-BOB), non nel browser
+opened = []
+ui.open_page = lambda path, title: opened.append((Path(path).name, title)) or True
+c.open_lab()
+c.open_learned()
+assert opened == [("laboratorio.html", "BIG-BOB · Sniper Lab"), ("imparato.html", "BIG-BOB · Cosa ho imparato")], opened
+# creare un mazzo: sessione a parte senza tetto al ragionamento; il limite dei 40 s solo in partita
+lab_s = controller.ClaudeSession("claude", ROOT, live=False)
+live_s = controller.ClaudeSession("claude", ROOT)
+cfg = store.load("config"); cfg["max_thinking_live"] = 4000; store.save("config", cfg)
+assert "MAX_THINKING_TOKENS" not in lab_s._env() and live_s._env()["MAX_THINKING_TOKENS"] == "4000"
 c.stop()
 
 shutil.rmtree(tmp, ignore_errors=True)

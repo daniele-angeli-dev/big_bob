@@ -469,33 +469,39 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       $('thinkK').textContent = what || 'Penso alla mossa';
       $('thinkS').textContent = 'Guardo lo schermo…';
       $('thinkSec').firstChild.nodeValue = '0'; $('thinkSec').className = 'tk-sec';
-      $('thinkSec').lastChild.textContent = '/ ' + BUDGET + ' s';
       t.classList.remove('hidden'); $('feed').scrollTop = 0;
     } else t.classList.add('hidden');
   }
-  function setBusy(on, what){
+  var curBudget = 40;  // 0 = nessun limite (creazione mazzo, fine partita): il limite vale solo in partita
+  function setBusy(on, what, budget){
     $('btnF8').disabled = on; $('btnF8').textContent = on ? '…' : 'F8';
     clearInterval(busyTimer);
+    if (on) curBudget = (budget === undefined || budget === null) ? BUDGET : budget;
     showThinking(on, what);
     if (on){
+      $('thinkSec').lastChild.textContent = curBudget ? ('/ ' + curBudget + ' s') : 'secondi';
       busyT0 = Date.now();
       busyTimer = setInterval(function(){
         var s = (Date.now() - busyT0) / 1000;
-        paintTimer(s);
-        $('tlab').textContent = 'sto guardando… ' + Math.floor(s) + ' s · obiettivo ' + BUDGET + ' s';
+        paintTimer(s, curBudget);
+        $('tlab').textContent = curBudget ? ('sto guardando… ' + Math.floor(s) + ' s · obiettivo ' + curBudget + ' s')
+                                          : ('sto lavorando… ' + Math.floor(s) + ' s');
         $('thinkSec').firstChild.nodeValue = String(Math.floor(s));
-        $('thinkSec').className = 'tk-sec' + (s > BUDGET ? ' late' : (s > 30 ? ' slow' : ''));
+        $('thinkSec').className = 'tk-sec' + (curBudget ? (s > curBudget ? ' late' : (s > curBudget * 0.75 ? ' slow' : '')) : '');
       }, 250);
     }
   }
-  function paintTimer(s){
-    $('tfill').style.width = Math.min(100, s / SCALE * 100) + '%';
-    $('tbar').classList.toggle('slow', s > 30 && s <= BUDGET);
-    $('tbar').classList.toggle('late', s > BUDGET);
+  function paintTimer(s, budget){
+    var b = budget === undefined ? BUDGET : budget;
+    var scale = b ? Math.round(b / 0.75) : 180;
+    $('tfill').style.width = Math.min(100, s / scale * 100) + '%';
+    $('tbar').classList.toggle('slow', !!b && s > b * 0.75 && s <= b);
+    $('tbar').classList.toggle('late', !!b && s > b);
   }
-  function setTiming(secs){
-    paintTimer(secs);
-    $('tlab').textContent = 'risposta in ' + Math.round(secs) + ' s · obiettivo ' + BUDGET + ' s';
+  function setTiming(secs, budget){
+    var b = budget === undefined ? BUDGET : budget;
+    paintTimer(secs, b);
+    $('tlab').textContent = b ? ('risposta in ' + Math.round(secs) + ' s · obiettivo ' + b + ' s') : ('fatto in ' + Math.round(secs) + ' s');
   }
 
   function renderState(s){
@@ -522,9 +528,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
           if (!$('think').classList.contains('hidden') && ev.text && ev.text.indexOf('⚙') === 0){
             var tool = ev.text.replace('⚙', '').trim(); $('thinkS').textContent = STEPS[tool] || ('Uso ' + tool + '…');
           } break;
-        case 'busy': setBusy(ev.value, ev.what); if (ev.value) $('status').textContent = 'Sto guardando…'; break;
+        case 'busy': setBusy(ev.value, ev.what, ev.budget); if (ev.value) $('status').textContent = ev.budget === 0 ? 'Sto lavorando…' : 'Sto guardando…'; break;
         case 'answer': showThinking(false); renderAnswer(ev); break;
-        case 'timing': setTiming(ev.secs); $('status').textContent = ''; break;
+        case 'timing': setTiming(ev.secs, ev.budget); $('status').textContent = ''; break;
         case 'state': renderState(ev); break;
         case 'hud': renderHud(ev.match); break;
         case 'clear': $('chat').innerHTML = ''; $('move').classList.add('hidden'); $('chips').classList.add('hidden'); break;

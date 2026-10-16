@@ -163,7 +163,7 @@ mossa sparisce e si fermano anche **REGISTRA** e **AUTO**.
 La finestra mostra solo la **richiesta attuale**: a ogni F8 o domanda la risposta precedente sparisce, e mossa, chip e
 messaggi scorrono insieme con la rotellina. Le risposte passate restano nel diario e in **RIVEDI LA PARTITA**.
 
-**Cosa ho imparato** (pulsante a forma di libro nella finestra, pulsante a fine partita, o menu Start → *Cosa ha imparato
+**Cosa ho imparato** (si apre in una finestra di BIG-BOB, non nel browser: pulsante a forma di libro nella finestra, pulsante a fine partita, o menu Start → *Cosa ha imparato
 BIG-BOB*): per ogni partita e registrazione dice **se** BIG-BOB ha imparato qualcosa e **cosa** — lezioni nuove, rafforzate,
 confermate o smentite, regole nuove o cambiate (con il prima/dopo), carte e location lette dallo schermo — più gli
 aggiornamenti dal sito, il riepilogo di tutte le lezioni in uso e le regole ancora da scoprire. Le registrazioni non ancora
