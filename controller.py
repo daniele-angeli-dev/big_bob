@@ -255,6 +255,7 @@ class Controller:
         if store.load("config").get("voce", True):
             self.voice.warm()
         threading.Thread(target=self._startup_updates, daemon=True).start()
+        threading.Thread(target=self._startup_meta, daemon=True, name="bb-originsmeta").start()
         if not self.claude:
             self.say("Non trovo il comando 'claude'. Installa Claude Code e fai il login (vedi README).", "warn")
         else:
@@ -368,9 +369,56 @@ class Controller:
         if quit_:
             quit_()
 
+    # ------------------------------------------------ meta, carte e location da OriginsMeta
+    def _startup_meta(self) -> None:
+        from origins import originsmeta
+        if os.environ.get("BIGBOB_NO_SYNC"):  # test automatici: niente rete
+            return
+        cfg = store.load("config")
+        empty = len(store.load("cards")) < 50
+        if not cfg.get("meta_originsmeta", True) and not empty:
+            return
+        if not empty and not originsmeta.due():
+            return
+        time.sleep(1 if empty else 8)  # con il database vuoto serve subito; altrimenti lascio partire il resto
+        if empty:
+            self.say("Database delle carte vuoto: scarico carte, location e meta da OriginsMeta (circa un minuto)…",
+                     "dim")
+        self._sync_meta(force=empty, manual=empty)
+
+    def sync_meta(self) -> None:
+        threading.Thread(target=self._sync_meta, kwargs={"force": True, "manual": True}, daemon=True).start()
+
+    def _sync_meta(self, force: bool, manual: bool) -> None:
+        from origins import originsmeta
+        if getattr(self, "_meta_running", False):
+            return
+        self._meta_running = True
+        try:
+            if manual:
+                self.status("Scarico il meta da OriginsMeta…")
+            rep = originsmeta.sync(force=force, progress=(self.status if manual else (lambda s: None)))
+            log.info("originsmeta: %s", {k: rep.get(k) for k in ("ok", "totale_mazzi", "completi", "errori",
+                                                                  "carte_aggiunte", "carte_cambiate", "secondi")})
+            if rep.get("saltato") and not manual:
+                return
+            line = originsmeta.summary_line(rep)
+            important = rep.get("carte_cambiate") or rep.get("nuovi") or rep.get("carte_aggiunte") or not rep.get("ok")
+            if manual or important:
+                self.say(line, "warn" if not rep.get("ok") or rep.get("carte_cambiate") else "lesson")
+            if manual:
+                self.status("Meta aggiornato" if rep.get("ok") else "Meta non aggiornato")
+            self.emit_state()
+        except Exception as e:  # noqa: BLE001
+            log.exception("sincronizzazione OriginsMeta fallita")
+            if manual:
+                self.say(f"OriginsMeta non raggiungibile: {e}", "warn")
+        finally:
+            self._meta_running = False
+
     # ------------------------------------------------ impostazioni e collegamento a Claude
     SETTINGS_KEYS = ("modello_live", "connessione", "voce", "apprendimento_live", "apri_claude_code_all_avvio",
-                     "controlla_aggiornamenti", "max_thinking_live", "modalita")
+                     "controlla_aggiornamenti", "max_thinking_live", "modalita", "meta_originsmeta")
 
     def get_settings(self) -> None:
         from origins import updates
@@ -386,7 +434,7 @@ class Controller:
         import configura
         cfg_before = store.load("config")
         extra = {k: vals[k] for k in ("voce", "apprendimento_live", "apri_claude_code_all_avvio",
-                                      "controlla_aggiornamenti") if k in vals}
+                                      "controlla_aggiornamenti", "meta_originsmeta") if k in vals}
         if "max_thinking_live" in vals:
             try:
                 extra["max_thinking_live"] = max(0, int(vals["max_thinking_live"]))

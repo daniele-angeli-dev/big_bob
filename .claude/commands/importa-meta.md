@@ -6,6 +6,8 @@ Materiale della community da importare:
 
 $ARGUMENTS
 
+0. I mazzi e le statistiche di originsmeta.com arrivano da soli (`community_decks`, `community_stats`; per
+   riscaricarli subito `originsmeta_sync`): questo comando serve per le altre fonti.
 1. Se non c'è materiale, chiedi a Daniele di incollare il testo (liste dal Discord, top 8 di un torneo come la
    Crimson Cup, risultati) oppure di catturare con F9 le schermate dei mazzi e poi leggile con `list_scan_images`.
 2. Per ogni mazzo riconosci: nome dell'archetipo (quello usato dalla community), leggendaria, carte (riconduci

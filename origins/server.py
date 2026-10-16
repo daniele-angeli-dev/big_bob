@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP, Image  # noqa: E402
 
-from origins import combat, lab, lessons, odds, rules, store  # noqa: E402
+from origins import combat, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
 from origins.store import canonical, load, now, save  # noqa: E402
 
 mcp = FastMCP("origins")
@@ -494,8 +494,52 @@ def record_opponent_deck(legendary: str, cards_seen: list[str], result: str = ""
 
 @mcp.tool()
 def meta_report() -> str:
-    """Archetipi avversari incontrati: diffusione, carte note, mio winrate contro ciascuno."""
-    return _j(store.meta_summary())
+    """Archetipi avversari incontrati da Daniele (diffusione, carte note, suo winrate contro ciascuno) e un
+    riassunto delle liste di OriginsMeta per leggendaria (i dettagli con community_decks / community_stats)."""
+    om = [a for a in load("meta") if a.get("fonte") == originsmeta.FONTE]
+    by_leg: dict[str, int] = {}
+    for a in om:
+        by_leg[a["leggendaria"]] = by_leg.get(a["leggendaria"], 0) + 1
+    st = originsmeta.load_state()
+    return _j({"avversari_di_daniele": store.meta_summary(),
+               "originsmeta": {"ultimo_sync": st.get("ultimo_sync"), "liste_per_leggendaria": by_leg,
+                               "nota": "pesano nelle probabilità della mano avversaria; dettagli con community_decks"}})
+
+
+# ======================= ORIGINSMETA (meta della community) =======================
+
+@mcp.tool()
+def community_decks(leggendaria: str = "", archetipo: str = "", versione: str = "", ordina: str = "winrate",
+                    limit: int = 15, min_partite: int = 0) -> str:
+    """Mazzi pubblicati su OriginsMeta (community e tornei) con winrate e partite del loro tracker, valutazione,
+    versione del gioco, autore, carte e descrizione breve. ordina: winrate | partite | rating | recenti.
+    Per la guida completa di un mazzo usa community_deck."""
+    return _j(originsmeta.decks(leggendaria, archetipo, versione, ordina, limit, min_partite))
+
+
+@mcp.tool()
+def community_deck(nome: str) -> str:
+    """Un mazzo di OriginsMeta per nome o url, con la guida completa (piano di gioco, mulligan, matchup)."""
+    d = originsmeta.deck(nome)
+    return _j(d) if d else f"Mazzo '{nome}' non trovato tra quelli di OriginsMeta (prova community_decks)."
+
+
+@mcp.tool()
+def community_stats(sezione: str = "") -> str:
+    """Statistiche delle partite registrate su OriginsMeta (solo patch attuale): sezione = leggendarie
+    (winrate, intervallo, partite, quota), archetipi, carte (winrate nel mazzo / quando giocata, effetto, round
+    medio), matchup (griglia leggendaria contro leggendaria), mazzi. Vuoto = tutto."""
+    return _j(originsmeta.stats(sezione))
+
+
+@mcp.tool()
+def originsmeta_sync(forza: bool = True) -> str:
+    """Scarica adesso da OriginsMeta mazzi, statistiche, carte e location (un minuto circa la prima volta).
+    Aggiunge le carte e le location mancanti e applica come patch i cambiamenti di costo/attacco/vita."""
+    rep = originsmeta.sync(force=forza)
+    return originsmeta.summary_line(rep) + "\n" + _j({k: rep.get(k) for k in (
+        "nuovi", "incompleti", "carte_aggiunte", "carte_cambiate", "location_aggiunte", "differenze_carte",
+        "errori", "richieste", "secondi")})
 
 
 @mcp.tool()

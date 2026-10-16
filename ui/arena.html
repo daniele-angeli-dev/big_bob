@@ -265,9 +265,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <label class="opt"><input type="checkbox" id="oImpara"> Impara dalle sorprese tra i round</label>
     <label class="opt"><input type="checkbox" id="oTerm"> Apri Claude Code all'avvio</label>
     <label class="opt"><input type="checkbox" id="oUpd"> Controlla gli aggiornamenti all'avvio</label>
+    <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (ogni 12 ore)</label>
     <label class="opt" for="oThink">Tetto ragionamento live (token) <input class="inp" id="oThink" type="number" min="0" step="500" style="width:90px;height:34px;flex-grow:0"></label>
     <div class="sec">VERSIONE</div>
     <div class="btnrow" style="align-items:center"><span class="hint" id="verTxt">–</span><button type="button" class="btn2" id="btnCheck">CONTROLLA AGGIORNAMENTI</button></div>
+    <div class="btnrow" style="align-items:center"><span class="hint">Mazzi, statistiche e carte da originsmeta.com</span><button type="button" class="btn2" id="btnMeta">AGGIORNA META ORA</button></div>
     <div class="bbtns"><button type="button" class="no" data-close>ANNULLA</button><button class="ok" type="submit">SALVA</button></div>
   </form>
 </div>
@@ -441,7 +443,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('apiKey').value = ''; $('apiKey').placeholder = v.api_key_impostata ? 'chiave salvata · scrivi per cambiarla' : 'sk-ant-…';
     $('modello').value = v.modello_live || 'sonnet';
     $('oVoce').checked = v.voce !== false; $('oImpara').checked = v.apprendimento_live !== false;
-    $('oTerm').checked = v.apri_claude_code_all_avvio !== false; $('oUpd').checked = v.controlla_aggiornamenti !== false;
+    $('oTerm').checked = v.apri_claude_code_all_avvio !== false; $('oUpd').checked = v.controlla_aggiornamenti !== false; $('oMeta').checked = v.meta_originsmeta !== false;
     $('oThink').value = v.max_thinking_live != null ? v.max_thinking_live : 4000;
     $('verTxt').textContent = 'Versione ' + (ev.versione || '–') + (ev.claude_trovato ? '' : ' · Claude Code non trovato');
     syncApi();
@@ -450,11 +452,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   $('btnLogin').onclick = function(){ call('claude_login'); };
   $('btnTest').onclick = function(){ $('testRes').className = 'testres'; $('testRes').textContent = 'Provo il collegamento…'; call('claude_test'); };
   $('btnCheck').onclick = function(){ call('check_updates'); };
+  $('btnMeta').onclick = function(){ hide(); call('sync_meta'); };
   $('fSet').onsubmit = function(e){
     e.preventDefault();
     var vals = { connessione: connValue(), modello_live: $('modello').value, voce: $('oVoce').checked,
       apprendimento_live: $('oImpara').checked, apri_claude_code_all_avvio: $('oTerm').checked,
-      controlla_aggiornamenti: $('oUpd').checked, max_thinking_live: parseInt($('oThink').value || '0', 10) };
+      controlla_aggiornamenti: $('oUpd').checked, meta_originsmeta: $('oMeta').checked, max_thinking_live: parseInt($('oThink').value || '0', 10) };
     var k = $('apiKey').value.trim(); if (k) vals.api_key = k;
     hide(); call('save_settings', vals);
   };

@@ -21,16 +21,17 @@ FILES = {
     "matches": DATA / "matches_log.json",
     "rules": DATA / "rules.json",
     "lessons": DATA / "lessons.json",
+    "originsmeta": DATA / "originsmeta.json",
     "config": ROOT / "config.json",
 }
 
 DEFAULTS = {
-    "cards": [], "locations": [], "decks": [], "meta": [], "patches": [], "match": {}, "matches": [], "rules": [], "lessons": [],
+    "cards": [], "locations": [], "decks": [], "meta": [], "patches": [], "match": {}, "matches": [], "rules": [], "lessons": [], "originsmeta": {},
     "config": {"modalita": "allenamento", "modello_live": "sonnet", "hotkey_analisi": "f8",
                "hotkey_scan": "f9", "titolo_finestra": "Origins", "patch_corrente": "",
                "max_thinking_live": 4000, "apprendimento_live": True, "voce": True,
                "apri_claude_code_all_avvio": True, "connessione": "abbonamento",
-               "controlla_aggiornamenti": True},
+               "controlla_aggiornamenti": True, "meta_originsmeta": True},
 }
 
 
@@ -83,6 +84,10 @@ def upsert(kind: str, items: list[dict], patch: str | None = None) -> dict:
             by_id[it["id"]] = it
             added.append(it["nome"])
             continue
+        # un testo corretto a mano (da Daniele o da Claude) su una carta presa da OriginsMeta diventa "verificata":
+        # le sincronizzazioni successive non lo sovrascrivono più
+        if it.get("testo") and not it.get("fonte") and old.get("fonte") == "originsmeta" and it["testo"] != old.get("testo"):
+            it["fonte"] = "verificata"
         diffs = []
         for k in TRACKED_FIELDS:
             # riempire un campo vuoto è completare i dati, non una modifica di bilanciamento
@@ -223,8 +228,9 @@ def record_opponent(legendary: str, cards_seen: list[str], result: str = "", arc
     return target
 
 
-def meta_summary() -> list[dict]:
-    meta = load("meta")
+def meta_summary(include_originsmeta: bool = False) -> list[dict]:
+    """Archetipi avversari. Le liste importate da OriginsMeta sono escluse (si leggono con community_decks)."""
+    meta = [a for a in load("meta") if include_originsmeta or a.get("fonte") != "originsmeta"]
     tot = sum(a["volte_visto"] for a in meta) or 1
     out = []
     for a in sorted(meta, key=lambda a: -a["volte_visto"]):

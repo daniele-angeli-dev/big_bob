@@ -32,6 +32,19 @@ A ogni avvio BIG-BOB controlla se c'è una versione nuova. Se c'è, compare un b
 (i tuoi dati non vengono toccati). Puoi controllare anche a mano da ⚙ Impostazioni → Controlla aggiornamenti, o dal menu
 Start → BIG-BOB → Aggiorna BIG-BOB. La prima volta GitHub chiede di accedere: fallo una volta da "Aggiorna BIG-BOB".
 
+## Carte, location e meta da OriginsMeta (automatico)
+BIG-BOB legge da solo [originsmeta.com](https://originsmeta.com) ogni 12 ore (subito, se il database delle carte è vuoto):
+- **carte e location**: aggiunge quelle che mancano; i cambiamenti di costo/attacco/vita diventano una patch
+  "<versione> (OriginsMeta)" con lo storico. Un testo corretto da te (o letto dalle schermate) non viene più sovrascritto;
+- **mazzi** pubblicati e da torneo, con winrate, partite, valutazione, versione e guida: pesano nelle probabilità
+  sulla mano avversaria e Claude Code li usa in `/mazzo` e `/meta`;
+- **statistiche** delle partite registrate: winrate e diffusione per leggendaria, archetipo e carta, griglia dei matchup.
+
+Scarica solo pagine pubbliche, una al secondo, e riscarica un mazzo solo se è nuovo o cambiato. A mano:
+⚙ → *Aggiorna meta ora*, oppure `python -m origins.originsmeta --forza`. Se qualcosa non viene letto bene,
+`python -m origins.originsmeta --forza --salva-pagine` salva le pagine in `logs/originsmeta/` da mandarmi.
+Le regole confermate nell'intervista vengono con BIG-BOB: anche un'installazione nuova parte con il regolamento.
+
 ## Impostazioni (icona a ingranaggio)
 - **Collegamento a Claude**: abbonamento Claude (Claude Code con il tuo account, consigliato) oppure chiave API Anthropic
   (a consumo; la chiave resta solo nel tuo `config.json`). Con l'abbonamento BIG-BOB ignora eventuali chiavi API

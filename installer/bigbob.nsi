@@ -398,6 +398,12 @@ Section "BIG-BOB" SecMain
   ${If} $2 != 0
     StrCpy $TESTFAIL "$TESTFAIL simulatore"
   ${EndIf}
+  StrCpy $0 "Collaudo: meta da OriginsMeta"
+  StrCpy $1 '"$PY" "$INSTDIR\tests\test_originsmeta.py"'
+  Call Esegui
+  ${If} $2 != 0
+    StrCpy $TESTFAIL "$TESTFAIL originsmeta"
+  ${EndIf}
   ${If} $TESTFAIL != ""
     MessageBox MB_OK|MB_ICONEXCLAMATION "Alcuni collaudi non sono passati:$TESTFAIL.$\r$\nBIG-BOB è installato lo stesso: mandami l'elenco dei dettagli (tasto destro › Copia i dettagli negli appunti)."
   ${EndIf}

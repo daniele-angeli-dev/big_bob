@@ -5,6 +5,8 @@ import os
 import shutil
 import subprocess
 import sys
+import os as _os
+_os.environ["BIGBOB_NO_SYNC"] = "1"
 import tempfile
 from pathlib import Path
 

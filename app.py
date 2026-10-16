@@ -155,6 +155,9 @@ class Api:
     def check_updates(self):
         self._c.check_updates()
 
+    def sync_meta(self):
+        self._c.sync_meta()
+
     def apply_update(self):
         self._c.apply_update()
 

@@ -7,6 +7,7 @@ python setup_mcp.py
 python tests\test_core.py
 python tests\test_controller.py
 python tests\test_sim.py
+python tests\test_originsmeta.py
 python collegamenti.py installa
 echo.
 echo Fatto. Da ora avvii BIG-BOB dall'icona sul desktop o dal menu Start.

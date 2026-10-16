@@ -107,8 +107,10 @@ assert any(k.startswith("p_almeno_una_giocabile") for k in c), c
 from origins import rules  # noqa: E402
 
 st = json.loads(call("rules_get", stato="domanda"))
-assert len(st) >= 10
-qid = next(r["id"] for r in st if "mano iniziale" in r["testo"].lower())
+assert len(st) >= 3 and any("slot" in r["testo"] for r in st)
+conf = json.loads(call("rules_get", stato="confermata"))
+assert len(conf) >= 20 and any("barrier da 20" in r["testo"] for r in conf), "le regole dell'intervista vengono con BIG-BOB"
+qid = next(r["id"] for r in st if "slot" in r["testo"].lower())
 r = json.loads(call("rules_upsert", id=qid, testo="Mano iniziale: 4 carte, nessun mulligan",
                     stato="confermata", fonte="Daniele", prova="risposta all'intervista"))
 assert r["azione"] == "aggiornata" and r["regola"]["stato"] == "confermata" and r["regola"]["storico"]

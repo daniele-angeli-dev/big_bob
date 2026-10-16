@@ -1,6 +1,8 @@
 """Test del controller (logica della finestra) con un Claude Code finto: python tests/test_controller.py"""
 import shutil
 import sys
+import os as _os
+_os.environ["BIGBOB_NO_SYNC"] = "1"
 import tempfile
 import threading
 import time

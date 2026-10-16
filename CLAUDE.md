@@ -132,7 +132,8 @@ leggibili in `data/lezioni.md`) vengono rilette a ogni partita.
 - Se la sorpresa rivela una regola del gioco, aggiorna anche il regolamento (`rules_upsert`).
 
 ## Deckbuilding (`/mazzo`)
-1. `card_pool_compact` + `meta_report` + `patch_changes` (patch corrente) + `rules_get` + `data/strategia.md`
+1. `card_pool_compact` + `meta_report` + `community_stats` + `community_decks` (le liste migliori delle
+   leggendarie in gioco) + `patch_changes` (patch corrente) + `rules_get` + `data/strategia.md`
    + `lessons_get` (le lezioni ✅ su mosse avversarie e interazioni sono oro per i matchup).
 2. Proponi 2-3 liste (leggendaria + 12), ognuna con: piano di gioco, curva (`deck_curve`),
    sinergie chiave, matchup contro gli archetipi più diffusi, carte flessibili da cambiare.
@@ -140,10 +141,19 @@ leggibili in `data/lezioni.md`) vengono rilette a ogni partita.
 4. Ricorda il vincolo: ogni carta normale occupa due slot, quindi carte situazionali costano doppio.
 
 ## Meta
-Il meta non è pubblicato: lo costruiamo dalle partite (`end_match` registra il mazzo avversario) e dalle
-liste della community importate con `/importa-meta` (fonte "community": pesano come informazione, non come
-partite di Daniele).
-Quando gli archetipi hanno poche partite, dillo: "campione piccolo (N partite)".
+Tre fonti, da tenere distinte quando parli di diffusione:
+1. **Partite di Daniele**: `end_match` registra il mazzo avversario (`meta_report` → `avversari_di_daniele`).
+2. **OriginsMeta** (originsmeta.com, sito della community): BIG-BOB lo scarica da solo ogni 12 ore.
+   - `community_decks` (filtri leggendaria/archetipo/versione, ordina per winrate/partite/rating/recenti) e
+     `community_deck(nome)` per la guida completa (piano, mulligan, matchup).
+   - `community_stats`: winrate e quota per leggendaria (con intervallo al 95% e "prudente"), archetipi, carte
+     (winrate nel mazzo e quando giocata, effetto della giocata, round medio), griglia dei matchup.
+   - Sono partite del tracker di OriginsMeta, solo patch attuale. Chi registra vince in media più del 50%:
+     confronta mazzi, archetipi e carte tra loro, non con il 50%. Leggendarie e matchup contano entrambi i giocatori.
+   - I mazzi completi pesano già nelle probabilità sulla mano avversaria (più peso a quelli della versione attuale
+     e con più partite registrate). `originsmeta_sync` li riscarica subito.
+3. **Liste incollate a mano** con `/importa-meta` (fonte "community").
+Quando un numero si basa su poche partite, dillo: "campione piccolo (N partite)".
 
 ## Patch
 Usa `record_patch`/`upsert_cards(patch=...)` **solo per cambiamenti verso la versione attuale**.
@@ -152,6 +162,10 @@ annotali nel campo `note` della carta, es. "nella demo (09/2026) costava 1".
 Quando esce una patch: `record_patch`, poi aggiorna le carte cambiate con `upsert_cards(patch=...)`.
 Lo storico resta salvato; `patch_changes` mostra cosa è cambiato. Dopo ogni patch rivaluta i mazzi
 salvati di Daniele e gli archetipi del meta.
+BIG-BOB allinea da solo il database a OriginsMeta: aggiunge carte e location mancanti e registra come patch
+"<versione> (OriginsMeta)" i cambiamenti di costo/attacco/vita (con lo storico). Le carte prese dal sito hanno
+`fonte: "originsmeta"`: il testo è letto dal sito, quindi se lo schermo mostra un testo diverso correggilo con
+`upsert_cards` (la carta diventa "verificata" e il sito non la sovrascrive più).
 
 ## Scansione (`/scansiona`)
 Le immagini catturate con F9 sono in `captures/scan/`. Leggile, estrai carte/location/regole,
