@@ -37,6 +37,8 @@ def shortcuts() -> list[dict]:
          "desc": "Controlla che tutto funzioni"},
         {"where": "start", "name": "Statistiche BIG-BOB", "target": str(ROOT / "statistiche.bat"), "args": "",
          "desc": "Le tue statistiche di Origins TCG"},
+        {"where": "start", "name": "Cosa ha imparato BIG-BOB", "target": str(ROOT / "imparato.bat"), "args": "",
+         "desc": "Lezioni e regole nuove, partita per partita"},
         {"where": "start", "name": "BIG-BOB (finestra classica)", "target": str(ROOT / "avvia_classico.bat"), "args": "",
          "desc": "Da usare se la finestra nuova non parte"},
         {"where": "start", "name": "Cartella di BIG-BOB", "target": str(ROOT), "args": "",

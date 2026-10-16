@@ -11,7 +11,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from origins import lessons, store
+from origins import lessons, rules, store
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGS = ROOT / "logs"
@@ -42,6 +42,23 @@ th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line)}th{co
 .meta{color:var(--dim);font-size:13px;margin-bottom:6px}
 .learn{white-space:pre-wrap;border-left:4px solid var(--teal);padding:6px 10px;background:#14405A;border-radius:6px;margin-top:8px;font-size:14px}
 .flag{white-space:pre-wrap;border-left:4px solid var(--orange);padding:6px 10px;background:#5A1630;border-radius:6px;margin-top:8px;font-size:14px}
+.sess{background:var(--panel);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.sess.first{border:2px solid var(--yellow)}
+.sess h3{margin:0;font-size:17px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+.sess h3 small{color:var(--dim);font-weight:400;font-size:13px}
+.sess .sum{color:var(--dim);font-size:13px;margin:4px 0 10px}
+.sess .none{color:var(--dim);font-style:italic;font-size:14px}
+.sess ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.sess li{display:grid;grid-template-columns:104px 1fr;gap:10px;align-items:start;font-size:14px;line-height:1.4}
+.sess li .why{color:var(--dim);font-size:13px;margin-top:2px}
+.sess li .cards{color:var(--yellow);font-size:12px;margin-top:2px}
+.bd{display:inline-block;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:.8px;text-align:center}
+.bd.new{background:var(--teal);color:var(--bg)}.bd.up{background:#14405A;color:#7DEDE2}
+.bd.ok{background:var(--yellow);color:var(--bg)}.bd.ko{background:#5A1630;color:#FFB3C1}
+.bd.rule{background:var(--orange);color:var(--bg)}.bd.card{background:#4B2A93;color:#fff}
+.note{background:#14405A;border-radius:6px;padding:8px 10px;font-size:14px;margin-bottom:10px;white-space:pre-wrap}
+td.st{white-space:nowrap}
+@media (max-width:720px){.sess li{grid-template-columns:1fr}}
 @media (max-width:720px){.round{grid-template-columns:1fr}.bar{grid-template-columns:110px 1fr 90px}}
 """
 
@@ -154,8 +171,240 @@ def replay_html(journal_dir: Path) -> Path:
     return out
 
 
+# ---------------------------------------------------------------- cosa ho imparato
+
+def _ts(x) -> float | None:
+    import datetime as _dt
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y%m%d-%H%M%S", "%Y-%m-%d"):
+        try:
+            return _dt.datetime.strptime(str(x).strip()[:19], fmt).timestamp()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def _learn_events() -> list[dict]:
+    """Tutto ciò che BIG-BOB ha imparato, come eventi con data: lezioni, regole, carte e location nuove o cambiate."""
+    ev: list[dict] = []
+    for L in lessons.load():
+        prove = L.get("prove") or []
+        first_is_birth = len(prove) >= (L.get("volte") or 0)
+        for i, p in enumerate(prove):
+            if i == 0 and first_is_birth:
+                az, cls = "NUOVA LEZIONE", "new"
+            elif L.get("stato") == "confermata" and i == 1 and first_is_birth:
+                az, cls = "CONFERMATA", "ok"
+            else:
+                az, cls = "RAFFORZATA", "up"
+            why = " · ".join(x for x in (p.get("accaduto"), p.get("perche")) if x)
+            ev.append({"t": _ts(p.get("data")), "data": p.get("data"), "badge": az, "cls": cls,
+                       "testo": f"{L['lezione']} ({L['id']} {lessons.STATI.get(L.get('stato'), '')})",
+                       "why": why, "carte": L.get("carte") or [], "fonte": p.get("fonte") or ""})
+        if L.get("stato") == "smentita":
+            ev.append({"t": _ts(L.get("ultima")), "data": L.get("ultima"), "badge": "SMENTITA", "cls": "ko",
+                       "testo": f"{L['lezione']} ({L['id']})", "why": "una partita ha dimostrato che era sbagliata",
+                       "carte": L.get("carte") or [], "fonte": ""})
+    for r in rules.load():
+        if r.get("creata") and not any(h for h in r.get("storico") or []):
+            ev.append({"t": _ts(r["creata"]), "data": r["creata"], "badge": "REGOLA NUOVA", "cls": "rule",
+                       "testo": f"{r['testo']} ({r['id']} {rules.STATI.get(r.get('stato'), '')})", "why": "",
+                       "carte": [], "fonte": ", ".join(r.get("fonti") or [])})
+        hist = r.get("storico") or []
+        for i, h in enumerate(hist):
+            after = hist[i + 1] if i + 1 < len(hist) else {"testo": r.get("testo"), "stato": r.get("stato")}
+            change = []
+            if h.get("stato") != after.get("stato"):
+                change.append(f"{h.get('stato')} → {after.get('stato')}")
+            if h.get("testo") != after.get("testo"):
+                change.append(f"prima: «{h.get('testo')}»")
+            ev.append({"t": _ts(h.get("data")), "data": h.get("data"),
+                       "badge": "REGOLA SMENTITA" if after.get("stato") == "smentita" else "REGOLA AGGIORNATA",
+                       "cls": "ko" if after.get("stato") == "smentita" else "rule",
+                       "testo": f"{after.get('testo')} ({r['id']} {rules.STATI.get(after.get('stato'), '')})",
+                       "why": " · ".join(change), "carte": [], "fonte": ", ".join(r.get("fonti") or [])})
+        for p in r.get("prove") or []:
+            if p.get("data") == r.get("creata") and not hist:
+                continue  # è la prova con cui la regola è nata: già mostrata come REGOLA NUOVA
+            if not hist or not any(h.get("data") == p.get("data") for h in hist):
+                ev.append({"t": _ts(p.get("data")), "data": p.get("data"), "badge": "PROVA REGOLA", "cls": "up",
+                           "testo": f"{r['testo']} ({r['id']})", "why": p.get("nota") or "", "carte": [],
+                           "fonte": p.get("fonte") or ""})
+    for kind, label in (("cards", "CARTA"), ("locations", "LOCATION")):
+        site: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        for c in store.load(kind):
+            if c.get("aggiunta"):
+                if c.get("fonte") == "originsmeta":
+                    site[str(c["aggiunta"])[:10]].append((c["nome"], str(c["aggiunta"])))
+                else:
+                    ev.append({"t": _ts(c["aggiunta"]), "data": c["aggiunta"], "badge": f"{label} NUOVA",
+                               "cls": "card", "testo": c["nome"] + (f" — {c['testo']}" if c.get("testo") else ""),
+                               "why": "letta dallo schermo e salvata", "carte": [], "fonte": c.get("fonte") or ""})
+            for h in c.get("storico") or []:
+                mods = ", ".join(f"{m['campo']} {m['prima']}→{m['dopo']}" for m in h.get("modifiche") or [])
+                ev.append({"t": _ts(h.get("data")), "data": h.get("data"), "badge": f"{label} CAMBIATA",
+                           "cls": "card", "testo": f"{c['nome']}: {mods}", "why": f"patch {h.get('patch')}",
+                           "carte": [], "fonte": "patch", "db": True})
+        for day, items in site.items():
+            names = [n for n, _ in items]
+            ev.append({"t": max(_ts(t) or 0 for _, t in items), "data": day, "badge": f"{label} DAL SITO", "cls": "card",
+                       "testo": f"{len(names)} {'carte' if kind == 'cards' else 'location'} importate da OriginsMeta",
+                       "why": ", ".join(names[:12]) + ("…" if len(names) > 12 else ""), "carte": [],
+                       "fonte": "originsmeta", "db": True})
+    return [e for e in ev if e["t"] is not None]
+
+
+def _sessions() -> list[dict]:
+    """Partite (dal registro e quella in corso) e registrazioni elaborate, con la finestra di tempo di ciascuna."""
+    ss: list[dict] = []
+    log = store.load("matches")
+    cur = store.load("match") if store.FILES["match"].exists() else {}
+    matches = [m for m in log if m.get("inizio")] + ([dict(cur, in_corso=True)] if cur.get("inizio") else [])
+    starts = sorted(_ts(m["inizio"]) for m in matches if _ts(m["inizio"]))
+    for m in matches:
+        t0 = _ts(m["inizio"])
+        if t0 is None:
+            continue
+        nxt = next((s for s in starts if s > t0), None)
+        end = _ts(m.get("fine")) if m.get("fine") else None
+        t1 = (end + 20 * 60) if end else (nxt or 1e12)  # le lezioni di fine partita arrivano subito dopo
+        if nxt:
+            t1 = min(t1, nxt)
+        opp = m.get("archetipo_avversario") or m.get("avv_leggendaria") or "avversario sconosciuto"
+        res = m.get("risultato") or ("in corso" if m.get("in_corso") else "")
+        ss.append({"kind": "partita", "t0": t0, "t1": t1, "titolo": f"Partita · {m.get('mio_mazzo') or '?'} contro {opp}",
+                   "quando": str(m["inizio"]), "esito": res, "nota": m.get("note_finali") or ""})
+    try:
+        from origins import screen
+        recs = screen.list_recordings() if screen.RECORDINGS.exists() else []
+    except Exception:  # noqa: BLE001
+        recs = []
+    for r in recs:
+        done = Path(r["cartella"]) / "ELABORATA"
+        if not done.exists():
+            t = _ts(r["nome"]) or 0
+            import datetime as _dt
+            ss.append({"kind": "registrazione", "t0": t, "t1": t,
+                       "titolo": f"Registrazione {r['nome']}",
+                       "quando": _dt.datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M") if t else "",
+                       "esito": f"{r['fotogrammi']} fotogrammi · da studiare: in Claude Code scrivi /impara-regole",
+                       "nota": "", "nome": r["nome"], "pending": True})
+            continue
+        first, _, summary = done.read_text(encoding="utf-8").partition("\n")
+        t = _ts(first) or done.stat().st_mtime
+        ss.append({"kind": "registrazione", "t0": t - 3 * 3600, "t1": t + 120, "titolo": f"Registrazione {r['nome']}",
+                   "quando": f"studiata il {first.strip()}", "esito": f"{r['fotogrammi']} fotogrammi",
+                   "nota": summary.strip(), "nome": r["nome"]})
+    return ss
+
+
+def learned_html() -> Path:
+    events = sorted(_learn_events(), key=lambda e: e["t"], reverse=True)
+    sessions = _sessions()
+    groups: dict[int, list[dict]] = defaultdict(list)
+    loose: dict[str, list[dict]] = defaultdict(list)
+    for e in events:
+        target = None
+        if not e.get("db"):
+            for i, s in enumerate(sessions):  # prima la registrazione citata nella fonte, poi le finestre di tempo
+                if s["kind"] == "registrazione" and s.get("nome") and s["nome"] in (e.get("fonte") or ""):
+                    target = i
+                    break
+            if target is None:
+                for kind in ("partita", "registrazione"):
+                    target = next((i for i, s in enumerate(sessions) if s["kind"] == kind and not s.get("pending")
+                                   and s["t0"] <= e["t"] <= s["t1"]), None)
+                    if target is not None:
+                        break
+        if target is None:
+            loose[str(e["data"])[:10]].append(e)
+        else:
+            groups[target].append(e)
+
+    blocks = []
+    for i, s in enumerate(sessions):
+        blocks.append((s["t0"] if s["kind"] == "partita" else s["t1"], s, groups.get(i, [])))
+    for day, evs in loose.items():
+        blocks.append((max(e["t"] for e in evs), {"kind": "altro", "titolo": "Studio e aggiornamenti",
+                                                  "quando": day, "esito": "Claude Code, interviste, video, sito",
+                                                  "nota": ""}, evs))
+    blocks.sort(key=lambda b: b[0], reverse=True)
+
+    def item(e: dict) -> str:
+        cards = f"<div class='cards'>{html.escape(', '.join(e['carte']))}</div>" if e.get("carte") else ""
+        why = f"<div class='why'>{html.escape(e['why'])}</div>" if e.get("why") else ""
+        return (f"<li><span class='bd {e['cls']}'>{html.escape(e['badge'])}</span><div>{html.escape(e['testo'])}"
+                f"{why}{cards}</div></li>")
+
+    out_blocks = []
+    for n, (_, s, evs) in enumerate(blocks[:40]):
+        cat = {"new": 0, "up": 0, "ko": 0, "rule": 0, "card": 0}
+        for e in evs:
+            b = e["badge"]
+            key = ("rule" if ("REGOLA" in b and "SMENTITA" not in b) else "ko" if "SMENTITA" in b
+                   else "new" if b == "NUOVA LEZIONE" else "up" if b in ("RAFFORZATA", "CONFERMATA") else "card")
+            cat[key] += 1
+        bits = []
+        if cat["new"]:
+            bits.append("1 lezione nuova" if cat["new"] == 1 else f"{cat['new']} lezioni nuove")
+        if cat["up"]:
+            bits.append(f"{cat['up']} rafforzat{'a' if cat['up'] == 1 else 'e'} o confermat{'a' if cat['up'] == 1 else 'e'}")
+        if cat["ko"]:
+            bits.append(f"{cat['ko']} smentit{'a' if cat['ko'] == 1 else 'e'}")
+        if cat["rule"]:
+            bits.append(f"{cat['rule']} sul regolamento")
+        if cat["card"]:
+            bits.append(f"{cat['card']} su carte e location")
+        head = (f"<h3>{html.escape(s['titolo'])}<small>{html.escape(str(s['quando']))}"
+                + (f" · {html.escape(str(s['esito']))}" if s.get("esito") else "") + "</small></h3>")
+        if evs:
+            summ = f"<div class='sum'>Ha imparato: {html.escape(' · '.join(bits))}</div>"
+            body = "<ul>" + "".join(item(e) for e in sorted(evs, key=lambda e: e["t"])) + "</ul>"
+        elif s.get("pending"):
+            summ, body = "", "<div class='none'>Non ancora studiata.</div>"
+        else:
+            summ = ""
+            body = ("<div class='none'>Niente di nuovo: nessuna sorpresa da annotare in questa "
+                    + ("partita" if s["kind"] == "partita" else "registrazione") + ".</div>")
+        note = f"<div class='note'>{html.escape(s['nota'])}</div>" if s.get("nota") else ""
+        out_blocks.append(f"<section class='sess{' first' if n == 0 else ''}'>{head}{summ}{note}{body}</section>")
+
+    ls = lessons.load()
+    rs = rules.load()
+    cnt = lambda xs, st: sum(1 for x in xs if x.get("stato") == st)  # noqa: E731
+    tiles = [(str(len(ls)), "LEZIONI"), (str(cnt(ls, "confermata")), "CONFERMATE ✅"), (str(cnt(ls, "ipotesi")), "DA VERIFICARE ❓"),
+             (str(cnt(ls, "smentita")), "SMENTITE ❌"), (f"{cnt(rs, 'confermata')}/{len(rs)}", "REGOLE CONFERMATE"),
+             (str(cnt(rs, "domanda")), "DOMANDE APERTE"), (str(len(store.load("cards"))), "CARTE NEL DATABASE")]
+    body = ["<h1>COSA HO IMPARATO</h1>",
+            f"<p class='sub'>Le novità di BIG-BOB partita per partita e registrazione per registrazione · aggiornato {store.now()}</p>",
+            "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles) + "</div>",
+            "<h2>Partita per partita</h2>",
+            "".join(out_blocks) or "<div class='empty'>Ancora niente: gioca una partita (o studia una registrazione con "
+                                   "/impara-regole) e qui vedrai cosa ha imparato.</div>"]
+    live = [x for x in ls if x.get("stato") != "smentita"]
+    if live:
+        order = {"confermata": 0, "ipotesi": 1}
+        rows = "".join(
+            f"<tr><td class='st'>{lessons.STATI.get(x.get('stato'), '')} {html.escape(x['id'])}</td>"
+            f"<td>{html.escape(x['lezione'])}</td><td>{html.escape(', '.join(x.get('carte') or []))}</td>"
+            f"<td>{html.escape(lessons.TIPI.get(x.get('tipo'), x.get('tipo', '')))}</td><td>{x.get('volte', 0)}</td></tr>"
+            for x in sorted(live, key=lambda x: (order.get(x.get("stato"), 2), -(x.get("volte") or 0))))
+        body.append("<h2>Tutte le lezioni in uso</h2><table><thead><tr><th>Stato</th><th>Lezione</th><th>Carte</th>"
+                    f"<th>Tipo</th><th>Viste</th></tr></thead><tbody>{rows}</tbody></table>")
+    qs = [r for r in rs if r.get("stato") in ("domanda", "ipotesi")]
+    if qs:
+        body.append("<h2>Ancora da scoprire</h2><table><tbody>" + "".join(
+            f"<tr><td class='st'>{rules.STATI.get(r['stato'], '')} {html.escape(r['id'])}</td><td>{html.escape(r['testo'])}</td></tr>"
+            for r in qs) + "</tbody></table>")
+    out = LOGS / "imparato.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_page("BIG-BOB · cosa ho imparato", "".join(body)), encoding="utf-8")
+    return out
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "replay":
+    if len(sys.argv) > 1 and sys.argv[1] == "imparato":
+        print(learned_html())
+    elif len(sys.argv) > 1 and sys.argv[1] == "replay":
         d = Path(sys.argv[2]) if len(sys.argv) > 2 else max((LOGS / "partite").glob("*/"), default=None)
         print(replay_html(Path(d)))
     else:

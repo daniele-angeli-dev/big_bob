@@ -23,3 +23,7 @@ Studia una registrazione di partita e aggiorna il regolamento.
 6. `mark_recording_done` con un riassunto di 3 righe.
 7. Rispondi con: regole nuove, regole confermate, contraddizioni trovate, dubbi rimasti e
    1-2 esperimenti da fare contro il bot per chiarirli.
+
+Alla fine ricorda a Daniele che trova tutto ciò che hai imparato da questa registrazione nella pagina
+"Cosa ho imparato" (pulsante a forma di libro nella finestra di BIG-BOB): per questo chiama sempre
+`mark_recording_done` con un riassunto, e nelle fonti di lezioni e regole scrivi il nome della registrazione.

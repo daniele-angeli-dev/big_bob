@@ -115,7 +115,7 @@ def upsert(testo: str = "", categoria: str = "", stato: str = "", fonte: str = "
             raise ValueError("Per una regola nuova serve il testo")
         num = max((int(x["id"][1:]) for x in rules if x["id"][1:].isdigit()), default=0) + 1
         r = {"id": f"R{num:03d}", "categoria": categoria or "altro", "testo": testo,
-             "stato": stato or "ipotesi", "fonti": [], "prove": []}
+             "stato": stato or "ipotesi", "fonti": [], "prove": [], "creata": store.now()}
         rules.append(r)
         azione = "creata"
     else:

@@ -490,6 +490,14 @@ class Controller:
             log.exception("statistiche")
             self.say(f"Statistiche non generate: {e}", "warn")
 
+    def open_learned(self) -> None:
+        from origins import report
+        try:
+            self._open(report.learned_html())
+        except Exception as e:  # noqa: BLE001
+            log.exception("pagina cosa ho imparato")
+            self.say(f"Pagina non generata: {e}", "warn")
+
     def open_replay(self) -> None:
         from origins import report
         d = self.journal_dir or max((ROOT / "logs" / "partite").glob("*/"), default=None)
@@ -598,6 +606,7 @@ class Controller:
         if self.journal_dir is not None:
             self.emit({"type": "action", "label": "RIVEDI LA PARTITA", "call": "open_replay"})
             self.emit({"type": "action", "label": "STATISTICHE", "call": "open_stats"})
+        self.emit({"type": "action", "label": "COSA HO IMPARATO", "call": "open_learned"})
 
     def _do_flag(self, note: str) -> None:
         self._journal(f"### ❌ SEGNALAZIONE dopo richiesta #{self.req_n} ({time.strftime('%H:%M:%S')})\n{note}")

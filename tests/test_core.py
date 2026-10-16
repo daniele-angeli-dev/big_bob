@@ -167,7 +167,7 @@ import collegamenti  # noqa: E402
 from origins import winutil  # noqa: E402
 
 ps = collegamenti.build_script()
-assert ps.count(".Save()") == len(collegamenti.shortcuts()) == 9
+assert ps.count(".Save()") == len(collegamenti.shortcuts()) == 10
 assert "bigbob.ico,0" in ps and "app.py" in ps and "'BIG-BOB.lnk'" in ps
 assert "Remove-Item" in collegamenti.build_script(remove=True)
 assert collegamenti._ps_quote("C:\\Daniele's\\x") == "'C:\\Daniele''s\\x'"

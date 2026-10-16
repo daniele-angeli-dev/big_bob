@@ -134,6 +134,9 @@ class Api:
     def open_stats(self):
         self._c.open_stats()
 
+    def open_learned(self):
+        self._c.open_learned()
+
     def open_replay(self):
         self._c.open_replay()
 
