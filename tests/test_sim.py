@@ -106,4 +106,14 @@ w = odds.opponent_hand_odds(store.load("meta"), "Dracula", {}, 4)
 assert w["archetipi_compatibili"][0]["nome"] == "Dracula Wall", w
 
 shutil.rmtree(tmp)
+
+# gli slot si contano da 1 (come li vede Daniele); 0 viene trattato come 1
+L = combat.normalize_board({"centro": {"mie": [None, "Marian 3/1"], "avv": []}})
+assert combat.place(L, "mie", "Wall 0/2", "centro", 1) == "" and L[1]["mie"][0]["nome"] == "Wall"
+assert "slot 2" in combat.place(L, "mie", "Wall 0/2", "centro", 2)
+combat.place(L, "avv", "Wall 0/2", "sinistra", 3)
+assert len(L[0]["avv"]) == 3 and L[0]["avv"][2]["nome"] == "Wall"
+lines = combat.board_lines(L)
+assert any("slot 1 Wall" in x and "slot 2 Wall" in x for x in lines) and not any("slot 0" in x for x in lines), lines
+
 print("SIMULAZIONI OK")

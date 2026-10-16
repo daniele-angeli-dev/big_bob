@@ -300,7 +300,8 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
     my_reinforced / opp_reinforced: quali delle 3 barrier sono rinforzate (max 40), es. [false, false, true].
     board: le creature IN CAMPO per corsia e slot, con le statistiche ATTUALI lette dallo schermo (il danno resta):
       {"sinistra": {"mie": ["Friar Tuck 4/5", null], "avv": [null, "Brides of Dracula 3/3"]}, "centro": {...},
-       "destra": {...}}  — stesso ordine di slot da entrambe le parti (slot 0 di fronte a slot 0), null = vuoto.
+       "destra": {...}}  — stesso ordine di slot da entrambe le parti: il primo elemento è lo slot 1, di fronte
+      allo slot 1 avversario; null = vuoto. Con Daniele gli slot si chiamano sempre 1, 2, 3 (mai 0).
       Con board la risposta include la PREVISIONE DEL COMBATTIMENTO se nessuno gioca altro.
     reveals_first: "io" o "avversario" (chi rivela per primo in questo round).
     my_deck_left: carte rimaste nel mio mazzo se il gioco lo mostra (serve a controllare il conteggio)."""
@@ -362,7 +363,9 @@ def _combat_summary(m: dict) -> str:
     lanes = combat.normalize_board(m["campo"])
     res = combat.simulate(lanes, m.get("barrier_mie"), m.get("barrier_avv"), m.get("distrutte_da_me") or 0,
                           m.get("distrutte_a_me") or 0)
-    return "\n\nPREVISIONE COMBATTIMENTO (se nessuno gioca altro; effetti On Reveal esclusi):\n" + combat.summary(res)
+    board = combat.board_lines(lanes)
+    return ("\n\nCAMPO (slot numerati da 1):\n" + "\n".join(board) if board else "") + \
+        "\n\nPREVISIONE COMBATTIMENTO (se nessuno gioca altro; effetti On Reveal esclusi):\n" + combat.summary(res)
 
 
 def _lessons_summary(m: dict) -> str:
@@ -623,6 +626,7 @@ def legacy_rules_file() -> str:
 def simulate_combat(scenari: list[dict]) -> str:
     """Simula il combattimento di fine round per 1-4 scenari, partendo dal campo salvato con update_match(board).
     Ogni scenario: {"nome": "A", "mie": [{"carta": "Marian", "corsia": "centro", "slot": 1}],
+    (slot contati da 1 come nel CAMPO di update_match: 1, 2, 3; senza slot = primo libero),
     "avv": [{"carta": "Brides of Dracula", "corsia": "centro"}],
     "danni_diretti": [{"corsia": "centro", "bersaglio": "mia", "danno": 4, "nota": "Brides On Reveal"}]}.
     Usalo per confrontare 2-3 giocate candidate e la risposta peggiore dell'avversario, invece di fare i conti a mente.

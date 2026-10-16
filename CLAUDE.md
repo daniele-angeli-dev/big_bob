@@ -82,6 +82,8 @@ Ranked (solo tracker: **nessuna riga ▶ né perché**):
 Simboli: ▶ giocata · perché: motivo della giocata · ⚠ minaccia · 🎴 pescata · 👁 mano avversaria ·
 📍 location. Una nota fuori schema (es. "regola R016 smentita") va su una riga senza simbolo.
 Con `update_match` passa sempre anche `my_reinforced` / `opp_reinforced` se una barrier è rinforzata.
+Quando indichi dove giocare una carta, gli slot si contano **da 1** (slot 1, 2, 3, come nel CAMPO di
+`update_match`), mai da 0: es. `▶ Marian al centro, slot 2`.
 
 **Conti di combattimento: non farli a mente.** Passa sempre `board` a `update_match` (creature in campo
 per corsia e slot, con le statistiche attuali): ti restituisce la PREVISIONE DEL COMBATTIMENTO se nessuno

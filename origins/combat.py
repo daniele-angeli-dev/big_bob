@@ -72,22 +72,37 @@ def normalize_board(board) -> list[dict]:
 
 
 def place(lanes: list[dict], side: str, card, lane, slot=None) -> str:
-    """Mette una carta in una corsia (slot libero se non indicato). Ritorna una nota se qualcosa non va."""
+    """Mette una carta in una corsia. slot si conta da 1 come lo vede Daniele (slot 1, 2, 3); se manca, il primo
+    libero. Ritorna una nota se qualcosa non va."""
     i = lane_index(lane)
     unit = make_unit(card)
     row = lanes[i][side]
     if slot is None:
-        slot = next((k for k, u in enumerate(row) if u is None), len(row))
-    slot = int(slot)
+        k = next((k for k, u in enumerate(row) if u is None), len(row))
+    else:
+        k = max(int(slot), 1) - 1
     other = "avv" if side == "mie" else "mie"
-    while len(row) <= slot:
+    while len(row) <= k:
         row.append(None)
         lanes[i][other].append(None)
     note = ""
-    if row[slot] is not None:
-        note = f"slot {slot} di {LANES[i]} era occupato da {row[slot]['nome']}: sostituito nella simulazione"
-    row[slot] = unit
+    if row[k] is not None:
+        note = f"slot {k + 1} di {LANES[i]} era occupato da {row[k]['nome']}: sostituito nella simulazione"
+    row[k] = unit
     return note
+
+
+def board_lines(lanes: list[dict]) -> list[str]:
+    """Il campo con gli slot numerati da 1 (slot 1 di fronte a slot 1)."""
+    out = []
+    for i, lane in enumerate(lanes):
+        if not any(lane["mie"]) and not any(lane["avv"]):
+            continue
+        def side(row):
+            return ", ".join(f"slot {k + 1} {u['nome']} {u['atk']}/{u['hp']}" if u else f"slot {k + 1} vuoto"
+                             for k, u in enumerate(row)) or "vuoto"
+        out.append(f"- {LANES[i]}: tu [{side(lane['mie'])}] · avv [{side(lane['avv'])}]")
+    return out
 
 
 def _hit_target(defenders: list[dict], front: dict | None):
