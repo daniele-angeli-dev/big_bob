@@ -1,0 +1,10 @@
+# Dati personali di Daniele: restano solo sul PC, mai nel repository
+data/
+config.json
+captures/
+logs/
+.mcp.json
+# File generati
+__pycache__/
+*.pyc
+*.tmp

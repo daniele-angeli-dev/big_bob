@@ -1,0 +1,8 @@
+mcp>=1.9,<2
+mss>=9
+pillow>=10
+pygetwindow>=0.0.9; sys_platform == "win32"
+keyboard>=0.13; sys_platform == "win32"
+pywebview>=6.2; sys_platform == "win32"
+yt-dlp>=2025.1
+imageio-ffmpeg>=0.5

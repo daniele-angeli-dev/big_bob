@@ -1,0 +1,10 @@
+{
+  "enableAllProjectMcpServers": true,
+  "permissions": {
+    "allow": [
+      "mcp__origins",
+      "Bash(python origins/video.py:*)",
+      "Bash(python origins\\video.py:*)"
+    ]
+  }
+}
