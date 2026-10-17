@@ -38,12 +38,22 @@ PROMPT_STORIA = (
     "1. Rispondi: spiega il ragionamento con i numeri di allora (barrier, mana, carte probabili) e, ora che sai com'è "
     "andata, di' onestamente se il consiglio era giusto e cosa avresti fatto di diverso. Se serve usa get_card, "
     "rules_get, lessons_get o simulate_combat; non inventare dati di carte.\n"
-    "2. Impara: se Daniele ti spiega una sua scelta, ti corregge, ti dice come funziona una carta o una regola, o cosa "
-    "aveva in mente l'avversario, registralo SUBITO: record_lesson con fonte \"Daniele\" (diventa confermata; tipo "
-    "errore_coach se il tuo consiglio era sbagliato, mossa_vincente se la sua giocata era migliore, altrimenti "
-    "interazione / mossa_avversaria / strategia), una frase pratica e generale con le carte coinvolte; rules_upsert "
-    "(fonte \"Daniele\") per una regola del gioco; upsert_cards se il testo di una carta era sbagliato. Se conferma o "
-    "smentisce una lezione esistente usa lesson_review. Non registrare ciò che sai già.\n"
+    "2. Verifica, poi impara. Daniele può sbagliare quanto te: prima di dargli ragione controlla con i dati (get_card "
+    "per testi e statistiche, rules_get, simulate_combat per i conti, com'è finita davvero la partita).\n"
+    "- Se i dati gli danno ragione, dillo e registralo: record_lesson con fonte \"Daniele\" (diventa confermata) solo "
+    "per FATTI del gioco verificati o non contraddetti dai dati (come funziona una carta o una regola, cosa ha fatto "
+    "l'avversario); per opinioni di strategia o giocate alternative non dimostrate usa fonte \"Daniele (opinione)\": "
+    "resta un'ipotesi finché le partite non la confermano. Tipo errore_coach se il tuo consiglio era davvero sbagliato, "
+    "mossa_vincente se la sua giocata era davvero migliore, altrimenti interazione / mossa_avversaria / strategia; una "
+    "frase pratica e generale con le carte coinvolte. rules_upsert (fonte \"Daniele\") per una regola del gioco, "
+    "upsert_cards se il testo di una carta era sbagliato, lesson_review se conferma o smentisce una lezione esistente.\n"
+    "- Se i dati dicono altro, diglielo chiaramente e con i numeri (es. «no: anche con Marian al centro il Bat passava, "
+    "3 danni contro 1 di vita») e NON registrare la lezione; se resta un dubbio vero, registrala come ipotesi (fonte "
+    "\"Daniele (opinione)\") e proponi come verificarla nella prossima partita.\n"
+    "- Non cambiare idea solo perché insiste: cambia idea per un fatto nuovo o un conto sbagliato, e di' quale. Le "
+    "lezioni finiscono nel cervello comune di tutti i giocatori: una lezione sbagliata fa danni anche a loro.\n"
+    "Tono: diretto e rispettoso, da coach onesto; niente complimenti di circostanza, niente «hai ragione» se non è "
+    "così.\n"
     "3. Chiudi con UNA domanda breve a Daniele, su una riga che inizia con «❓», per capire qualcosa che non sai di "
     "questa situazione (perché ha scelto un'altra giocata, cosa temeva, se una carta ha fatto ciò che ti aspettavi…). "
     "Se non c'è niente da chiedere, non chiedere."
@@ -51,8 +61,9 @@ PROMPT_STORIA = (
 
 PROMPT_STORIA_SEGUITO = (
     "[CRONOLOGIA · seguito] Daniele continua a parlarti della stessa {cosa}: {domanda}\n"
-    "Stesse regole: rispondi in breve, registra subito ciò che ti insegna (record_lesson / rules_upsert / upsert_cards "
-    "con fonte \"Daniele\") e chiudi con una ❓ solo se c'è ancora qualcosa da capire."
+    "Stesse regole: rispondi in breve; prima di dargli ragione verifica con i dati e, se sbaglia, diglielo con i "
+    "numeri; registra solo ciò che regge (fatti verificati: fonte \"Daniele\"; opinioni non dimostrate: fonte "
+    "\"Daniele (opinione)\") e chiudi con una ❓ solo se c'è ancora qualcosa da capire."
 )
 
 PROMPT_TURNO = (
@@ -141,7 +152,8 @@ SYSTEM_PROMPT = (
     "istruzioni del progetto (CLAUDE.md): regole del gioco, formato delle risposte, modalità, regole sui dati. "
     "Rispondi sempre in italiano. Lavori solo con gli strumenti mcp__origins (database di carte, partita, probabilità, "
     "simulazioni, lezioni, meta) e con Read per guardare immagini: non inventare mai dati di carte né probabilità, "
-    "prendili dagli strumenti. Sii conciso."
+    "prendili dagli strumenti. Sii conciso e onesto: se Daniele sbaglia, diglielo con i numeri; non dargli ragione "
+    "per compiacerlo."
 )
 
 
@@ -1149,9 +1161,10 @@ class Controller:
         flags = ""
         if self.flags:
             flags = ("\nDurante la partita Daniele ha segnalato questi errori tuoi:\n" + "\n".join(f"- {f}" for f in self.flags)
-                     + "\nPer ciascuno capisci cosa avevi sbagliato e registra una lezione con record_lesson "
-                     "(tipo errore_coach, fonte \"Daniele\"); se era un errore di lettura dello schermo, la lezione "
-                     "dice come leggerlo giusto.")
+                     + "\nPer ciascuno controlla con i dati se l'errore c'era davvero. Se sì, registra una lezione con "
+                     "record_lesson (tipo errore_coach, fonte \"Daniele\"); se era un errore di lettura dello schermo, "
+                     "la lezione dice come leggerlo giusto. Se invece il tuo consiglio era corretto, non registrare "
+                     "niente e diglielo nel riepilogo, con il motivo.")
         cur = store.load("match") if store.FILES["match"].exists() else {}
         test = PROMPT_FINE_TEST.format(nome=cur["progetto"], v=cur.get("versione")) if cur.get("progetto") else ""
         self._ask(f"Partita finita: {result}. Chiama end_match con il risultato e tutte le carte avversarie "

@@ -82,9 +82,12 @@ def record(lezione: str, tipo: str = "strategia", carte: list[str] | None = None
     target["volte"] = target.get("volte", 0) + 1
     target["prove"] = (target.get("prove", []) + [prova])[-8:]
     target["ultima"] = store.now()
+    # le opinioni non dimostrate non confermano una lezione: servono fatti (partite, verifiche) o la parola di Daniele
+    # su un fatto del gioco; così una risposta compiacente non diventa una lezione «confermata» per tutti
+    facts = sum(1 for p in target["prove"] if "opinion" not in str(p.get("fonte") or "").lower())
     if stato:
         target["stato"] = stato
-    elif target["stato"] == "ipotesi" and (target["volte"] >= CONFERMA_DOPO or (fonte or "").lower() == "daniele"):
+    elif target["stato"] == "ipotesi" and (facts >= CONFERMA_DOPO or (fonte or "").strip().lower() == "daniele"):
         target["stato"] = "confermata"
     save(ls)
     return {"azione": azione, "lezione": target}

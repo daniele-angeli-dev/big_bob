@@ -181,6 +181,15 @@ assert r["azione"] == "rafforzata" and r["lezione"]["id"] == lid and r["lezione"
 r = json.loads(call("record_lesson", lezione="Carta 2 non si attiva se la corsia è piena", tipo="interazione",
                     carte=["Carta 2"], fonte="Daniele"))
 assert r["lezione"]["stato"] == "confermata"  # insegnata da Daniele: subito confermata
+for _ in range(3):  # un'opinione ripetuta (anche in modo compiacente) non diventa mai «confermata» da sola
+    r = json.loads(call("record_lesson", lezione="Conviene sempre tenere Carta 4 per il round 6", tipo="strategia",
+                        carte=["Carta 4"], fonte="Daniele (opinione)"))
+assert r["lezione"]["stato"] == "ipotesi" and r["lezione"]["volte"] == 3, r
+r = json.loads(call("record_lesson", lezione="Conviene sempre tenere Carta 4 per il round 6", tipo="strategia",
+                    carte=["Carta 4"], fonte="partita R6"))
+r = json.loads(call("record_lesson", lezione="Conviene sempre tenere Carta 4 per il round 6", tipo="strategia",
+                    carte=["Carta 4"], fonte="partita R7"))
+assert r["lezione"]["stato"] == "confermata", "la confermano due partite"
 assert call("record_lesson", lezione="x", tipo="boh").startswith("Errore")
 call("start_match", my_deck="Test", opponent_legendary="Robin Hood")
 out = call("update_match", turn=1, my_hand=["Carta 1"], opp_played=["Carta 13"], opp_hand_size=3)

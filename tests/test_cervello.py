@@ -105,7 +105,9 @@ store.save("matches", [{"inizio": "2026-10-16 20:00", "fine": "2026-10-16 20:07"
 rules.upsert(testo="Shield blocca il primo danno subito", categoria="parole chiave", stato="confermata",
              fonte="cervello comune")
 lessons.record("Contro Dracula tieni Garlic per il round 5", "mossa_avversaria", ["Garlic"], fonte="cervello comune")
+lessons.record("Conviene tenere sempre Garlic in mano", "strategia", ["Garlic"], fonte="Daniele (opinione)")
 p = cervello.pending()
+check(not any("tenere sempre Garlic" in x["testo"] for x in p["lezioni"]), "le opinioni non confermate restano locali")
 check(len(p["regole"]) == 2, f"2 regole nuove o cambiate, non quella presa dal cervello ({len(p['regole'])})")
 check(len(p["lezioni"]) == 1, "la lezione presa dal cervello comune non torna indietro come voto")
 r = next(x for x in p["regole"] if "slot" in x["testo"])

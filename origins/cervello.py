@@ -183,6 +183,9 @@ def _lessons_payload() -> list[dict]:
     for x in lessons.load():
         if not x.get("lezione") or _only_from_brain(None, x.get("prove")):
             continue
+        prove = x.get("prove") or []
+        if prove and all("opinion" in str(p.get("fonte") or "").lower() for p in prove) and x.get("stato") != "confermata":
+            continue  # solo opinioni non ancora confermate da una partita: restano qui, non vanno a tutti
         volte = sum(1 for p in x.get("prove") or [] if "cervello" not in str(p.get("fonte") or "").lower())
         out.append({"cid": x["id"], "tipo": x.get("tipo") or "strategia", "testo": anonymize(x.get("lezione", "")),
                     "stato": x.get("stato") or "ipotesi", "carte": list(x.get("carte") or [])[:12],

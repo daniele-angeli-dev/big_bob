@@ -13,6 +13,11 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Coach onesto, non accondiscendente**: prima di darti ragione BIG-BOB verifica con i dati (testi delle carte,
+  regole, conti di combattimento, com'è finita la partita) e, se sbagli, te lo dice con i numeri; non cambia idea solo
+  perché insisti. Solo i fatti verificati diventano lezioni confermate; le opinioni di strategia restano ipotesi
+  («Daniele (opinione)») finché le partite non le confermano e non vanno al cervello comune. Anche le segnalazioni ✕
+  vengono controllate: se il consiglio era giusto, te lo spiega invece di registrare un falso errore.
 - **Contatori dei mazzi corretti**: le carte giocate si sommano round dopo round invece di sparire quando non sono più
   sul campo; il numero letto sullo schermo non resta fermo nei round dopo (scala di una pescata a round); il conto non
   scende mai sotto le regole (4 iniziali + 1 a round) e la carta del potere leggendario non conta come pescata. BIG-BOB
