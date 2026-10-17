@@ -115,7 +115,7 @@ copia di una carta giocata dopo che la prima è morta conta (nello stesso round 
 serve ripetere quelle dei round prima; `update_match` mostra le GIOCATE REGISTRATE: se ne manca una aggiungila, se hai
 letto male una carta usa `correct_lists=true` con le liste giuste. Passa `opp_hand_size` (e `my_hand_size` se non leggi
 tutti i nomi) quando lo schermo mostra le carte in mano: altrimenti BIG-BOB le stima dall'ultimo numero letto. Senza numeri sullo schermo BIG-BOB stima il mazzo dall'ultimo numero letto meno una pescata a round, e non
-scende mai sotto le regole (4 carte iniziali + 1 a round): appena il gioco mostra i mazzi, passali sempre.
+scende mai sotto le regole (4 carte iniziali + 1 a round, anche al round 1): appena il gioco mostra i mazzi, passali sempre.
 
 **Mazzo avversario.** `update_match` restituisce anche MAZZO AVVERSARIO: le liste del meta (OriginsMeta, partite di
 Daniele, cervello comune) più simili alle carte che l'avversario ha giocato, con probabilità, e il tipo di mazzo

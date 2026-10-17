@@ -13,6 +13,14 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Mazzi con una carta in più, corretto**: la stima delle carte rimaste non contava la pescata del round 1, quindi
+  entrambi i mazzi risultavano sempre con una carta in più del valore vero. Ora conta 4 carte iniziali + 1 a round dal
+  round 1; le correzioni imparate con il vecchio conto ripartono da zero.
+- **"Consigli seguiti" corretto nella cronologia**: se in un round arrivavano due consigli (F8 e AUTO, o due F8), il
+  primo veniva confrontato con un momento in cui non avevi ancora giocato e risultava "giocata diversa"; anche il
+  consiglio di mulligan ("Tieni… cambia…") veniva giudicato come una giocata. Ora le carte giocate si confrontano round
+  per round, conta l'ultimo consiglio del round (gli altri sono segnati "sostituito dal consiglio dopo"), il mulligan
+  non si conta e un nome corto non scatta dentro uno più lungo (Robin / Robin Hood).
 - **Osservatore che non perde momenti**: prima ogni F8 riceveva al massimo 10 fotogrammi e gli altri salvati
   (anche 30-40 in un round movimentato) venivano scartati, e tra un controllo e l'altro passavano 0,6-1 s per il
   lavoro di ridimensionare e salvare. Ora lo schermo si guarda a ritmo costante ogni 0,3 s (la cattura è ~10 volte più

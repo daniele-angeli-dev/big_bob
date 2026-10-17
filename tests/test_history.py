@@ -101,6 +101,25 @@ check(r2["giocate"] == ["Little John", "Marian"] and r2["avv_giocate"] == ["Bat"
 check(r2["seguito"] == "sì", "consiglio seguito")
 check(r3["giocate"] == ["Marian"] and r3["seguito"] == "no", f"ultima richiesta confrontata con la fine: {r3['giocate']}")
 
+print("2b. due consigli nello stesso round, mulligan e carte fuori tracciamento")
+mm = {"carte_mie": ["Little John", "Marian", "Robin"], "leggendaria_mia": "Robin Hood", "turno": 3,
+      "miei_giocati": ["Marian", "Robin Hood"],
+      "storico": [{"ora": "10:00:05", "turno": 0, "miei_giocati": []},
+                  {"ora": "10:01:05", "turno": 1, "miei_giocati": []},
+                  {"ora": "10:01:40", "turno": 1, "miei_giocati": []},
+                  {"ora": "10:02:30", "turno": 2, "miei_giocati": ["Marian"]},
+                  {"ora": "10:03:30", "turno": 3, "miei_giocati": ["Marian", "Robin Hood"]}]}
+jj = {"richieste": [{"ora": "10:00:00", "risposta": "▶ Tieni Marian, Little John · cambia Robin"},
+                    {"ora": "10:01:00", "risposta": "▶ Little John al centro"},
+                    {"ora": "10:01:35", "risposta": "▶ Marian al centro\nperché: meglio"},
+                    {"ora": "10:02:25", "risposta": "▶ Robin Hood a destra"}]}
+rr = history.rounds(mm, jj)
+check(rr[0]["seguito"] is None, "il mulligan non è un consiglio di giocata")
+check(rr[1]["seguito"] is None and rr[1].get("superato") and rr[2]["seguito"] == "sì",
+      f"due consigli nello stesso round: conta l'ultimo ({[r['seguito'] for r in rr]})")
+check(rr[3]["seguito"] == "sì", "Robin Hood non fa scattare anche Robin")
+check([r for r in rr if r["seguito"] and r.get("conta")] == [rr[2], rr[3]], "nel conto: un consiglio per round")
+
 print("3. pagina")
 path = report.library_html("partite", match="20261017-201500")
 page = path.read_text(encoding="utf-8")

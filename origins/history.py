@@ -160,8 +160,30 @@ def suggestion(answer: str) -> dict:
     return {"mossa": mossa, "perche": perche}
 
 
+def _wanted(mossa: str, my_cards: dict) -> set[str]:
+    """Le mie carte nominate nella mossa: prima i nomi più lunghi, così "Robin" non scatta dentro "Robin Hood"."""
+    low = mossa.lower()
+    out = set()
+    for sid, name in sorted(my_cards.items(), key=lambda x: -len(x[1])):
+        n = name.lower()
+        if n and n in low:
+            out.add(sid)
+            low = low.replace(n, " ")
+    return out
+
+
+def _is_mulligan(mossa: str) -> bool:
+    low = mossa.lower()
+    return low.startswith(("tieni", "mulligan", "cambia")) or " · cambia " in low
+
+
 def rounds(m: dict | None, j: dict | None) -> list[dict]:
-    """Per ogni richiesta del diario: suggerimento, carte giocate dopo (tu e avversario), barrier."""
+    """Per ogni richiesta del diario: suggerimento, carte giocate in quel round (tu e avversario), barrier.
+
+    Le carte giocate in un round le registra di solito l'update_match del round DOPO (al momento dell'F8 non hai ancora
+    giocato): per questo le giocate di un round sono la differenza tra il primo stato di quel round e il primo stato di
+    un round successivo, e tutte le richieste dello stesso round (F8 + AUTO, due F8) guardano le stesse giocate.
+    Se nello stesso round ci sono più consigli, conta l'ultimo: è quello che avevi davanti quando hai giocato."""
     reqs = (j or {}).get("richieste") or []
     snaps = [s for s in (m or {}).get("storico") or [] if s.get("ora")]
     final = None
@@ -173,30 +195,46 @@ def rounds(m: dict | None, j: dict | None) -> list[dict]:
         t0 = _secs(r["ora"])
         t1 = _secs(reqs[i + 1]["ora"]) if i + 1 < len(reqs) else 10 ** 9
         mine = [s for s in snaps if t0 <= _secs(s["ora"]) < t1]
-        states.append(mine[-1] if mine else None)
+        states.append(mine[0] if mine else None)  # lo stato registrato dalla richiesta stessa (il suo round)
+
+    def first_of(cond):
+        return next((s for s in snaps if isinstance(s.get("turno"), int) and cond(s["turno"])), None)
+
     my_cards = {store.slug(c): c for c in ((m or {}).get("carte_mie") or []) + [(m or {}).get("leggendaria_mia") or ""] if c}
+    last_in_round: dict = {}
     out = []
     for i, r in enumerate(reqs):
         sug = suggestion(r["risposta"])
         st = states[i]
-        nxt = next((s for s in states[i + 1:] if s), None) or final
-        row = {**r, **sug, "turno": (st or {}).get("turno"), "giocate": None, "avv_giocate": None, "seguito": None,
-               "barrier": None}
-        if st and nxt:
-            row["giocate"] = _diff(nxt.get("miei_giocati"), st.get("miei_giocati")) + \
-                _diff(nxt.get("miei_scartati"), st.get("miei_scartati"))
+        turn = (st or {}).get("turno")
+        if isinstance(turn, int):
+            base = first_of(lambda t, T=turn: t == turn) or st
+            nxt = first_of(lambda t, T=turn: t > T) or final
+        else:
+            base = st
+            nxt = next((s for s in states[i + 1:] if s), None) or final
+        row = {**r, **sug, "turno": turn, "giocate": None, "avv_giocate": None, "seguito": None, "barrier": None,
+               "conta": False}
+        if base and nxt:
+            row["giocate"] = _diff(nxt.get("miei_giocati"), base.get("miei_giocati")) + \
+                _diff(nxt.get("miei_scartati"), base.get("miei_scartati"))
             row["avv_giocate"] = _diff((nxt.get("avv_giocati") or []) + (nxt.get("avv_scartati") or []),
-                                       (st.get("avv_giocati") or []) + (st.get("avv_scartati") or []))
+                                       (base.get("avv_giocati") or []) + (base.get("avv_scartati") or []))
             row["barrier"] = {"mie": nxt.get("barrier_mie"), "avv": nxt.get("barrier_avv"),
                               "da_me": nxt.get("distrutte_da_me"), "a_me": nxt.get("distrutte_a_me")}
-        if sug["mossa"] and row["giocate"] is not None:
-            low = sug["mossa"].lower()
-            wanted = {sid for sid, name in my_cards.items() if name.lower() in low}
+        if sug["mossa"] and row["giocate"] is not None and not _is_mulligan(sug["mossa"]):
+            wanted = _wanted(sug["mossa"], my_cards)
             played = {store.slug(c) for c in row["giocate"]}
             if wanted:
                 hit = len(wanted & played)
                 row["seguito"] = "sì" if hit == len(wanted) else ("in parte" if hit else "no")
+                last_in_round[turn if isinstance(turn, int) else f"r{i}"] = len(out)
         out.append(row)
+    for idx in last_in_round.values():
+        out[idx]["conta"] = True
+    for row in out:  # un consiglio superato da uno successivo nello stesso round non si giudica
+        if row["seguito"] and not row["conta"]:
+            row["seguito"], row["superato"] = None, True
     return out
 
 
@@ -233,7 +271,7 @@ def body(selected: str = "") -> str:
         typ = (m or {}).get("tipo_avversario")
         rs = rounds(m, j)
         n_live = sum(1 for r in rs if r["mossa"])
-        follow = [r["seguito"] for r in rs if r["seguito"]]
+        follow = [r["seguito"] for r in rs if r["seguito"] and r.get("conta")]
         fol = f" · consigli seguiti {sum(1 for x in follow if x == 'sì')}/{len(follow)}" if follow else ""
         tiles.append(
             f"<button type='button' class='mtile r{short}' data-mid='{e(pid)}' "
@@ -296,6 +334,8 @@ def _detail(pid, m, j, rs, when, deck, opp, typ, long) -> str:
             badge = {"sì": "<span class='bd ok'>CONSIGLIO SEGUITO</span>",
                      "in parte": "<span class='bd up'>SEGUITO IN PARTE</span>",
                      "no": "<span class='bd ko'>GIOCATA DIVERSA</span>"}.get(r["seguito"] or "", "")
+            if r.get("superato"):
+                badge = "<span class='bd'>SOSTITUITO DAL CONSIGLIO DOPO</span>"
             info.append(f"<div class='play'><span class='k'>GIOCATA</span>{_cards(r['giocate'])} {badge}</div>")
             info.append(f"<div class='play opp'><span class='k'>AVVERSARIO</span>{_cards(r['avv_giocate'])}</div>")
             b = r.get("barrier") or {}

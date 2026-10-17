@@ -41,19 +41,24 @@ def seen_opp(m: dict) -> Counter:
 MANO_INIZIALE = 4
 
 
+OFFSET_KEY = "contatori_offset_r1"  # nuova chiave: le correzioni imparate con la vecchia base (senza la pescata del
+# round 1) si sommerebbero alla base nuova
+
+
 def draw_offset(side: str) -> int:
-    """Correzione imparata dai contatori letti sullo schermo (es. se si pesca anche al round 1): 0 se non si sa."""
+    """Correzione imparata dai contatori letti sullo schermo (es. pescate extra fisse): 0 se non si sa."""
     try:
-        v = int((store.load("config").get("contatori_offset") or {}).get(side, 0))
+        v = int((store.load("config").get(OFFSET_KEY) or {}).get(side, 0))
         return max(-2, min(3, v))
     except (TypeError, ValueError):
         return 0
 
 
 def _out_by_rules(turn, side: str) -> int:
-    """Carte uscite dal mazzo come minimo secondo le regole: mano iniziale + una pescata a round."""
+    """Carte uscite dal mazzo come minimo secondo le regole: mano iniziale + una pescata a round, ANCHE al round 1
+    (Daniele: senza la pescata del round 1 i mazzi risultavano sempre con una carta in più del valore vero)."""
     t = turn if isinstance(turn, int) and turn > 0 else 1
-    return MANO_INIZIALE + (t - 1) + draw_offset(side)
+    return MANO_INIZIALE + t + draw_offset(side)
 
 
 def _deck_estimate(m: dict, side: str, out_tracked: int | None) -> tuple[int | None, bool, str]:
@@ -66,7 +71,7 @@ def _deck_estimate(m: dict, side: str, out_tracked: int | None) -> tuple[int | N
     vis = (m.get("mazzi_visti") or {}).get(side)
     if vis and vis.get("turno") == turn and isinstance(vis.get("carte"), int):
         return vis["carte"], False, "letto sullo schermo"
-    outs = [(_out_by_rules(turn, side), "regole (mano iniziale + 1 a round)")]
+    outs = [(_out_by_rules(turn, side), "regole (4 iniziali + 1 a round, dal round 1)")]
     if out_tracked is not None:
         outs.append((out_tracked, "carte viste uscire"))
     if vis and isinstance(vis.get("carte"), int) and isinstance(vis.get("turno"), int) and isinstance(turn, int):
@@ -122,18 +127,18 @@ def learn_offset(m: dict, side: str, visible: int) -> None:
     turn = m.get("turno")
     if not isinstance(turn, int) or turn < 1 or turn > 4 or not isinstance(visible, int):
         return
-    obs = (DECK_SIZE - visible) - (MANO_INIZIALE + turn - 1)
+    obs = (DECK_SIZE - visible) - (MANO_INIZIALE + turn)
     if not -2 <= obs <= 3:
         return
     cfg = store.load("config")
-    offs = dict(cfg.get("contatori_offset") or {})
-    seen = dict(cfg.get("contatori_offset_visti") or {})
+    offs = dict(cfg.get(OFFSET_KEY) or {})
+    seen = dict(cfg.get(OFFSET_KEY + "_visti") or {})
     prev = seen.get(side)
     seen[side] = obs if prev is None else min(prev, obs)
     if offs.get(side) != seen[side]:
         offs[side] = seen[side]
-        cfg["contatori_offset"] = offs
-    cfg["contatori_offset_visti"] = seen
+        cfg[OFFSET_KEY] = offs
+    cfg[OFFSET_KEY + "_visti"] = seen
     store.save("config", cfg)
 
 

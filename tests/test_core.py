@@ -105,15 +105,19 @@ assert any(k.startswith("p_almeno_una_giocabile") for k in c), c
 
 # --- contatori di mazzo e mano, carte create, stima di chi vince ---
 from origins import evaluate  # noqa: E402
+_cfg = store.load("config")  # le correzioni imparate dai numeri di prova qui sopra non valgono per questa partita
+_cfg.pop(evaluate.OFFSET_KEY, None)
+_cfg.pop(evaluate.OFFSET_KEY + "_visti", None)
+store.save("config", _cfg)
 call("start_match", my_deck="Test", opponent_legendary="Robin Hood")
 call("update_match", turn=3, my_hand=["Carta 1", "Carta 2", "Carta 5"], my_played=["Carta 3", "Carta 4"],
      my_created=["Carta 5"], opp_played=["Carta 6", "Carta 7", "Carta 8"], opp_created=["Carta 8"], opp_hand_size=4,
      my_barriers=[20, 20, 20], opp_barriers=[20, 5, 20], my_destroyed=0, opp_destroyed=1)
 m = store.load("match")
 c_ = evaluate.counters(m)
-# round 3: almeno 4 (mano iniziale) + 2 pescate fuori dal mazzo, anche se se ne vedono solo 4 (Carta 5 è creata)
-assert c_["mio_mazzo"] == 25 - 6 and c_["mio_mazzo_stimato"] and "regole" in c_["mio_mazzo_come"], c_
-assert c_["avv_mazzo"] == 25 - 6 and c_["avv_mano"] == 4, c_  # 2 giocate (Carta 8 creata) + 4 in mano
+# round 3: almeno 4 (mano iniziale) + 3 pescate (anche al round 1), anche se se ne vedono uscire solo 4
+assert c_["mio_mazzo"] == 25 - 7 and c_["mio_mazzo_stimato"] and "regole" in c_["mio_mazzo_come"], c_
+assert c_["avv_mazzo"] == 25 - 7 and c_["avv_mano"] == 4, c_  # 2 giocate (Carta 8 creata) + 4 in mano: sotto le regole
 out = call("update_match", turn=3, my_deck_left=19, opp_deck_left=18)
 assert "CONTATORI: tu mazzo 19 · mano 3 | avversario mazzo 18 · mano 4" in out and "STIMA RAPIDA" in out, out
 # round 5 senza numeri sullo schermo: parte dall'ultimo letto e toglie una pescata a round (non resta fermo a 19)
