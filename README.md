@@ -13,6 +13,8 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- Finestra più alta (fino a 1000 punti, adattata allo schermo senza coprire la barra delle applicazioni): la chat ha
+  spazio anche con il pannello della partita e del laboratorio aperti.
 - Claude Code si installa da solo (installer e primo avvio di BIG-BOB) e, se è installato ma fuori dal PATH, BIG-BOB lo
   trova e aggiunge la cartella al PATH: a un nuovo giocatore resta solo l'accesso con il proprio account Claude.
 - **Cervello comune**: tutti i BIG-BOB mettono in comune, in forma anonima, regole, lezioni, testi delle carte e partite;

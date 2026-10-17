@@ -28,7 +28,7 @@ if sys.stdout is None:
 
 from origins import store, winutil  # noqa: E402
 
-WIDTH, HEIGHT = 440, 760
+WIDTH, HEIGHT = 440, 1000  # alta: la chat deve avere spazio sotto il pannello della partita
 
 
 class WebUI:
@@ -259,6 +259,26 @@ def register_hotkeys(ctrl) -> bool:
         return False
 
 
+def _available_height(webview) -> int:
+    """Altezza utile dello schermo (senza la barra delle applicazioni), nelle unità della finestra."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        rect = wintypes.RECT()
+        if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):  # SPI_GETWORKAREA
+            try:
+                scale = (ctypes.windll.user32.GetDpiForSystem() or 96) / 96
+            except Exception:  # noqa: BLE001
+                scale = 1
+            return int((rect.bottom - rect.top) / scale)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        return int(webview.screens[0].height) - 60
+    except Exception:  # noqa: BLE001
+        return HEIGHT
+
+
 def run_web() -> None:
     import webview
 
@@ -273,13 +293,7 @@ def run_web() -> None:
 
     # al centro dello schermo (x/y non indicati: pywebview centra la finestra tenendo conto del ridimensionamento
     # di Windows); su schermi bassi la finestra si accorcia per starci tutta
-    height = HEIGHT
-    try:
-        scr = webview.screens[0]
-        if scr.height and scr.height - 80 < HEIGHT:
-            height = max(560, scr.height - 80)
-    except Exception:  # noqa: BLE001
-        pass
+    height = min(HEIGHT, max(560, _available_height(webview) - 24))
 
     window = webview.create_window(
         "BIG-BOB", html=html, js_api=api, width=WIDTH, height=height,
