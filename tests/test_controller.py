@@ -137,6 +137,26 @@ c.toggle_mode()
 assert ui.of("state")[-1]["mode"] == "ranked"
 c.toggle_mode()
 
+# AUTO spento: le analisi automatiche ancora in coda non partono (niente catture né finestra che lampeggia)
+hides0, req0 = ui.hides, c.req_n
+c.set_auto(True)
+c._q.put(("analyze", True)); c._q.put(("analyze", True))
+c.set_auto(False)
+time.sleep(0.8)
+assert c.req_n == req0 and ui.hides == hides0, "dopo AUTO spento nessuna cattura"
+c.auto_on = False
+c._do_analyze(True)
+assert c.req_n == req0 and ui.hides == hides0, "anche un'analisi automatica già estratta dalla coda si ferma"
+
+# REGISTRA con la finestra visibile: fotogrammi senza nascondere BIG-BOB
+screen.grab_masked = lambda title, mask=None, max_width=1024: Image.new("RGB", (320, 180), (20, 90, 20))
+c.rec_dir, c.rec_on, c.rec_count = screen.new_recording(), True, 0
+ui.vis = True
+h0 = ui.hides
+c._do_record_frame()
+assert ui.hides == h0 and len(list(c.rec_dir.glob("0001_*.png"))) == 1, "registrazione senza lampeggio"
+c.rec_on = False
+
 c.set_auto(True)
 c.set_record(True)
 time.sleep(0.4)

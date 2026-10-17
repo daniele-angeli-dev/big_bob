@@ -1052,7 +1052,24 @@ class Controller:
 
     def set_auto(self, on: bool) -> None:
         self.auto_on = bool(on)
+        if not self.auto_on:  # toglie dalla coda le analisi automatiche non ancora partite
+            self._drop_queued("analyze", True)
         self.emit_state()
+
+    def _drop_queued(self, kind: str, arg=None) -> int:
+        kept, dropped = [], 0
+        while True:
+            try:
+                item = self._q.get_nowait()
+            except queue.Empty:
+                break
+            if item[0] == kind and (arg is None or item[1] == arg):
+                dropped += 1
+            else:
+                kept.append(item)
+        for item in kept:
+            self._q.put(item)
+        return dropped
 
     def set_record(self, on: bool) -> None:
         self._q.put(("record", bool(on)))
@@ -1080,6 +1097,8 @@ class Controller:
         return store.load("config").get("modalita", "allenamento")
 
     def _do_analyze(self, auto: bool) -> None:
+        if auto and not self.auto_on:
+            return  # AUTO spento mentre questa analisi era in coda: niente cattura, niente finestra che lampeggia
         prompt = (PROMPT_AUTO if auto else PROMPT_TURNO).format(mode=self._mode())
         frames = self._take_obs_frames()
         if frames:
@@ -1176,8 +1195,16 @@ class Controller:
         if not self.rec_on or self.rec_dir is None:
             return
         self.rec_count += 1
-        p = self.hidden_capture(self.rec_dir)
-        p.rename(p.with_name(f"{self.rec_count:04d}_{p.name}"))
+        name = f"{self.rec_count:04d}_{time.strftime('%H%M%S')}.png"
+        if self.ui.is_visible():
+            # senza nascondere BIG-BOB (niente lampeggio a ogni fotogramma): la zona della finestra diventa nera
+            img = screen.grab_masked(store.load("config").get("titolo_finestra", "Origins"), self.ui.rect(),
+                                     max_width=1920)
+            img.save(self.rec_dir / name)
+            self.last_capture = time.time()
+        else:
+            p = self.hidden_capture(self.rec_dir)
+            p.rename(p.with_name(name))
         self.status(f"Registrazione: {self.rec_count} fotogrammi")
 
     # ------------------------------------------------ osservatore: la partita tra un F8 e l'altro

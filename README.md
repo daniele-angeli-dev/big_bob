@@ -13,6 +13,9 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- AUTO spento si spegne davvero: le analisi automatiche ancora in coda vengono scartate, quindi niente più catture e
+  finestra che sparisce e ricompare dopo averlo disattivato. REGISTRA non fa più lampeggiare la finestra: i fotogrammi
+  si prendono senza nasconderla (la zona di BIG-BOB resta nera, come per l'osservatore).
 - **Previsione delle carte avversarie**: dal mazzo stimato BIG-BOB calcola cosa ha probabilmente in mano l'avversario,
   cosa può giocare in questo round con il suo mana (tenendo conto del round in cui di solito si giocano le carte e del
   tipo di mazzo), la minaccia principale, il suo piano tipico e la tua corsia più esposta. Nella finestra c'è la riga
