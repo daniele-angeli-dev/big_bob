@@ -752,8 +752,16 @@ class Controller:
         """Dentro l'app (finestra di BIG-BOB) se la finestra lo permette; altrimenti nel browser (finestra classica)."""
         shower = getattr(self.ui, "show_html", None)
         if shower is not None:
+            def fallback():  # la finestra interna è rimasta vuota: apro la stessa pagina nel browser
+                self.say("La pagina non si è caricata nella finestra di BIG-BOB: l'ho aperta nel browser. Se succede "
+                         "sempre, manda il file logs\\bigbob.log a chi ti ha dato BIG-BOB.", "warn")
+                self._open_external(path)
             try:
-                if shower(self._inline_page(Path(path)), title):
+                try:
+                    shown = shower(self._inline_page(Path(path)), title, fallback=fallback)
+                except TypeError:  # finestre senza controllo del caricamento (test, finestra classica)
+                    shown = shower(self._inline_page(Path(path)), title)
+                if shown:
                     return
             except Exception:  # noqa: BLE001
                 log.exception("pagina interna non aperta: uso il browser")

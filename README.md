@@ -13,6 +13,8 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- Libro, Origin e statistiche: se la pagina non si carica entro 12 secondi nella finestra di BIG-BOB, BIG-BOB la chiude
+  e la apre nel browser (prima poteva restare a caricare a vuoto); il tempo di caricamento finisce in `logs/bigbob.log`.
 - Finestra più alta (fino a 1000 punti, adattata allo schermo senza coprire la barra delle applicazioni): la chat ha
   spazio anche con il pannello della partita e del laboratorio aperti.
 - Claude Code si installa da solo (installer e primo avvio di BIG-BOB) e, se è installato ma fuori dal PATH, BIG-BOB lo

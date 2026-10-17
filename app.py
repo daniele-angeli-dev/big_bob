@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 logging.basicConfig(filename=ROOT / "logs" / "bigbob.log", level=logging.INFO, encoding="utf-8",
                     format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("bigbob")
+PAGE_LOAD_WAIT = 60
 if sys.stderr is None:  # pythonw non ha console
     sys.stderr = open(ROOT / "logs" / "stderr.log", "a", encoding="utf-8")  # noqa: SIM115
 if sys.stdout is None:
@@ -75,45 +76,80 @@ class WebUI:
     def is_visible(self) -> bool:
         return self._visible
 
-    def show_html(self, html: str, title: str = "BIG-BOB") -> bool:
-        """Mostra una pagina di BIG-BOB (mazzi, cosa ho imparato, statistiche, replay) in una sua finestra dentro
-        l'app: i dati arrivano direttamente alla finestra, senza file e senza browser. La finestra si riusa."""
-        import webview
-        url = None
-        if len(html.encode("utf-8")) > 1_800_000:  # Windows accetta pagine dirette fino a ~2 MB: oltre passo da un file
-            f = ROOT / "logs" / "pagina.html"
-            f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(html, encoding="utf-8")
-            url = f.resolve().as_uri()
-        w = getattr(self, "_page_window", None)
-        if w is not None:
-            try:
-                w.load_url(url) if url else w.load_html(html)
-                w.set_title(title)
-                w.show()
-                w.restore()
-                return True
-            except Exception:  # noqa: BLE001  (finestra chiusa nel frattempo)
-                self._page_window = None
-        width, height = 1060, 860
-        try:
-            scr = webview.screens[0]
-            width, height = min(width, scr.width - 60), min(height, scr.height - 80)
-        except Exception:  # noqa: BLE001
-            pass
-        w = webview.create_window(title, **({"url": url} if url else {"html": html}), width=width, height=height,
-                                  js_api=getattr(self, "api", None), min_size=(420, 480),
-                                  on_top=True, resizable=True, background_color="#24104F", text_select=True,
-                                  focus=True)
+    PAGE_TIMEOUT = 12  # secondi: se la finestra delle pagine non si carica entro questo tempo apro il browser
 
-        def closed():
-            self._page_window = None
-        try:
-            w.events.closed += closed
-        except Exception:  # noqa: BLE001
-            pass
-        self._page_window = w
+    def show_html(self, html: str, title: str = "BIG-BOB", fallback=None) -> bool:
+        """Mostra una pagina di BIG-BOB (mazzi, studio, statistiche, replay) in una sua finestra dentro l'app: i dati
+        arrivano direttamente alla finestra, senza file e senza browser. La finestra si riusa.
+        Se entro PAGE_TIMEOUT secondi la pagina non risulta caricata (finestra bloccata o rimasta vuota), la chiudo e
+        chiamo fallback (che apre la stessa pagina nel browser)."""
+        import time
+        t0, loaded = time.time(), threading.Event()
+        threading.Thread(target=self._show_page, args=(html, title, loaded), daemon=True, name="bb-pagina").start()
+
+        def watchdog():
+            ok = loaded.wait(self.PAGE_TIMEOUT)
+            log.info("pagina «%s» %s in %.1f s", title, "caricata" if ok else "NON caricata", time.time() - t0)
+            if ok or fallback is None:
+                return
+            w, self._page_window = getattr(self, "_page_window", None), None
+            if w is not None:
+                try:
+                    w.destroy()
+                except Exception:  # noqa: BLE001
+                    pass
+            try:
+                fallback()
+            except Exception:  # noqa: BLE001
+                log.exception("apertura della pagina nel browser")
+        threading.Thread(target=watchdog, daemon=True, name="bb-pagina-controllo").start()
         return True
+
+    def _show_page(self, html: str, title: str, loaded: threading.Event) -> None:
+        try:
+            import webview
+            url = None
+            if len(html.encode("utf-8")) > 1_800_000:  # Windows accetta pagine dirette fino a ~2 MB: oltre uso un file
+                f = ROOT / "logs" / "pagina.html"
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(html, encoding="utf-8")
+                url = f.resolve().as_uri()
+            w = getattr(self, "_page_window", None)
+            if w is not None:
+                try:
+                    w.load_url(url) if url else w.load_html(html)
+                    w.set_title(title)
+                    w.show()
+                    w.restore()
+                    if w.events.loaded.wait(PAGE_LOAD_WAIT):
+                        loaded.set()
+                    return
+                except Exception:  # noqa: BLE001  (finestra chiusa nel frattempo)
+                    log.exception("finestra delle pagine non riutilizzabile")
+                    self._page_window = None
+            width, height = 1060, 860
+            try:
+                scr = webview.screens[0]
+                width, height = min(width, scr.width - 60), min(height, scr.height - 80)
+            except Exception:  # noqa: BLE001
+                pass
+            w = webview.create_window(title, **({"url": url} if url else {"html": html}), width=width, height=height,
+                                      js_api=getattr(self, "api", None), min_size=(420, 480),
+                                      on_top=True, resizable=True, background_color="#24104F", text_select=True,
+                                      focus=True)
+
+            def closed():
+                if self._page_window is w:
+                    self._page_window = None
+            try:
+                w.events.closed += closed
+            except Exception:  # noqa: BLE001
+                pass
+            self._page_window = w
+            if w.events.loaded.wait(PAGE_LOAD_WAIT):
+                loaded.set()
+        except Exception:  # noqa: BLE001
+            log.exception("finestra delle pagine")
 
     def quit(self) -> None:
         try:
