@@ -175,6 +175,26 @@ wait(ui, c.analyze)
 diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
 assert "Osservatore: 3 fotogrammi allegati" in diario and c.obs_frames == [], "allegati all'F8 e poi azzerati"
 
+# Claude Code mancante: BIG-BOB lo installa da solo e apre l'accesso
+import configura  # noqa: E402
+calls = []
+configura.install_claude = lambda log=print: calls.append("installa") or "C:/finto/claude.exe"
+c.claude_login = lambda: calls.append("login")
+c._session_free.wait(60)  # finisce l'apprendimento in background dell'ultimo F8
+time.sleep(1)
+c._session_free.wait(60)
+old_session = c.session
+c.claude, c.session = None, None
+n = len(ui.events)
+c._install_claude()
+assert calls == ["installa", "login"] and c.claude == "C:/finto/claude.exe" and c.session is not None
+assert any(e.get("call") == "claude_login" for e in ui.events[n:]), "pulsante ACCEDI A CLAUDE"
+configura.install_claude = lambda log=print: None
+c.claude, c.session = None, None
+c._install_claude()
+assert c.claude is None and any("installalo a mano" in str(e).lower() for e in ui.events[-3:])
+c.session = old_session
+
 c.stop()
 shutil.rmtree(tmp, ignore_errors=True)
 print("CONTROLLER OK")

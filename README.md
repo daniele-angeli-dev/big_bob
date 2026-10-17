@@ -10,14 +10,16 @@ BIG-BOB è il tuo coach personale per Origins TCG, gira sul tuo PC con Claude Co
 
 ## Requisiti
 - Windows con **Python 3.10+** (python.org, spunta "Add python.exe to PATH" durante l'installazione)
-- **Claude Code** installato e collegato al tuo account Max (guida ufficiale: https://docs.claude.com/en/docs/claude-code/setup).
+- **Claude Code** collegato al tuo account Claude (Pro o Max; oppure una chiave API). Se manca lo installano da soli
+  l'installer e BIG-BOB stesso al primo avvio: a te resta solo l'accesso (guida: https://code.claude.com/docs/en/setup).
   Verifica: apri un terminale e scrivi `claude`; se si apre e sei loggato, sei a posto.
 
 ## Installazione: BIG-BOB-Setup.exe
 Doppio clic su **BIG-BOB-Setup.exe** e segui le schermate:
 1. **Benvenuto** e scelta della cartella (se BIG-BOB c'è già, propone la stessa: il codice si aggiorna, i dati restano).
 2. Se è già installato puoi scegliere **Aggiorna/ripara** oppure **Disinstalla**.
-3. Controlla **Python, Claude Code e Git** e installa con winget quello che manca (Git serve per gli aggiornamenti).
+3. Controlla **Python, Claude Code e Git** e installa quello che manca (Claude Code con l'installer ufficiale, gli altri
+   con winget; Git serve per gli aggiornamenti).
 4. Copia BIG-BOB, installa le librerie, fa i collaudi e crea **l'icona sul desktop e nel menu Start**.
 5. **Collega Claude**: abbonamento (consigliato) o chiave API, modello (Sonnet/Opus/Haiku), pulsanti
    *Accedi a Claude* e *Prova collegamento*.

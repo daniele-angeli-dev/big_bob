@@ -41,9 +41,56 @@ def apply(modello: str | None = None, connessione: str | None = None, api_key: s
     return cfg
 
 
+def claude_candidates() -> list[Path]:
+    """Dove finisce Claude Code installato con l'installer ufficiale, winget o npm (anche se il PATH non è aggiornato)."""
+    import os
+    home = Path(os.environ.get("USERPROFILE") or Path.home())
+    local = Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
+    roaming = Path(os.environ.get("APPDATA") or home / "AppData" / "Roaming")
+    return [home / ".local" / "bin" / "claude.exe", local / "Microsoft" / "WinGet" / "Links" / "claude.exe",
+            roaming / "npm" / "claude.cmd", home / ".local" / "bin" / "claude"]
+
+
 def find_claude() -> str | None:
     import shutil
-    return shutil.which("claude") or shutil.which("claude.cmd") or shutil.which("claude.exe")
+    found = shutil.which("claude") or shutil.which("claude.cmd") or shutil.which("claude.exe")
+    if found:
+        return found
+    return next((str(p) for p in claude_candidates() if p.is_file()), None)
+
+
+def install_claude(log=print) -> str | None:
+    """Installa Claude Code (installer ufficiale; se non va, winget). Restituisce il percorso di claude o None."""
+    import os
+    import shutil
+    import subprocess
+    if find_claude():
+        return find_claude()
+    if os.name != "nt":
+        log("Installazione automatica di Claude Code disponibile solo su Windows.")
+        return None
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    ps = shutil.which("powershell") or os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32",
+                                                    "WindowsPowerShell", "v1.0", "powershell.exe")
+    attempts = [("installer ufficiale", [ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                                         "irm https://claude.ai/install.ps1 | iex"])]
+    if shutil.which("winget"):
+        attempts.append(("winget", ["winget", "install", "-e", "--id", "Anthropic.ClaudeCode", "--silent",
+                                    "--accept-package-agreements", "--accept-source-agreements"]))
+    for name, cmd in attempts:
+        log(f"Installo Claude Code ({name})…")
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900,
+                               creationflags=flags)
+            if r.returncode != 0:
+                log(f"{name}: codice {r.returncode} {(r.stderr or r.stdout or '').strip()[-300:]}")
+        except Exception as e:  # noqa: BLE001
+            log(f"{name}: {e}")
+        exe = find_claude()
+        if exe:
+            log(f"Claude Code installato: {exe}")
+            return exe
+    return None
 
 
 def claude_env(cfg: dict | None = None) -> dict:
@@ -106,7 +153,13 @@ if __name__ == "__main__":
     ap.add_argument("--mostra", action="store_true")
     ap.add_argument("--riassunto", action="store_true", help="modello|connessione|si/no chiave (per l'installer)")
     ap.add_argument("--prova", action="store_true", help="prova il collegamento a Claude")
+    ap.add_argument("--trova-claude", action="store_true", help="stampa il percorso di claude (codice 1 se manca)")
+    ap.add_argument("--installa-claude", action="store_true", help="installa Claude Code se manca")
     a = ap.parse_args()
+    if a.trova_claude or a.installa_claude:
+        exe = install_claude() if a.installa_claude else find_claude()
+        print(exe or "Claude Code non trovato")
+        sys.exit(0 if exe else 1)
     if a.riassunto:
         c = store.load("config")
         print(f"{c.get('modello_live', 'sonnet')}|{c.get('connessione') or 'abbonamento'}|"

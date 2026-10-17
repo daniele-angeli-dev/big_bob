@@ -119,7 +119,8 @@ SYSTEM_PROMPT = (
 
 
 def find_claude() -> str | None:
-    return shutil.which("claude") or shutil.which("claude.cmd") or shutil.which("claude.exe")
+    import configura
+    return configura.find_claude()
 
 
 class ClaudeSession:
@@ -346,10 +347,33 @@ class Controller:
         except Exception:  # noqa: BLE001
             log.exception("pulizia registrazioni vuote")
         if not self.claude:
-            self.say("Non trovo il comando 'claude'. Installa Claude Code e fai il login (vedi README).", "warn")
+            if os.name == "nt" and not os.environ.get("BIGBOB_NO_SYNC"):
+                threading.Thread(target=self._install_claude, daemon=True, name="bb-claude").start()
+            else:
+                self.say("Non trovo il comando 'claude'. Installa Claude Code e fai il login (vedi README).", "warn")
         else:
             self.say("Pronto. F8 analizza il round, F9 cattura per la scansione, F10 nasconde. "
                      "Premi NUOVA prima di iniziare una partita.", "dim")
+
+    def _install_claude(self) -> None:
+        """Claude Code manca: lo installa da solo, poi apre il terminale per l'accesso con l'account Claude."""
+        import configura
+        self.say("Claude Code non è installato: lo installo adesso (uno o due minuti). Intanto non premere F8.", "warn")
+        self.status("Installo Claude Code…")
+        exe = configura.install_claude(log=lambda m: log.info("installa claude: %s", m))
+        if not exe:
+            self.say("Non sono riuscito a installare Claude Code. Installalo a mano: apri PowerShell e incolla "
+                     "irm https://claude.ai/install.ps1 | iex — poi riapri BIG-BOB.", "warn")
+            self.status("Claude Code non installato")
+            return
+        self.claude = exe
+        self.session = ClaudeSession(self.claude, ROOT)
+        self.status("Claude Code installato")
+        self.say("Claude Code installato. Ora accedi con il TUO account Claude (Pro o Max) nel terminale che si apre: "
+                 "segui le istruzioni nel browser, poi chiudi il terminale e premi PROVA COLLEGAMENTO nelle "
+                 "impostazioni (⚙). Con una chiave API invece scegli «Chiave API» in ⚙.", "lesson")
+        self.emit({"type": "action", "label": "ACCEDI A CLAUDE", "call": "claude_login"})
+        self.claude_login()
 
     def stop(self) -> None:
         self._stop.set()

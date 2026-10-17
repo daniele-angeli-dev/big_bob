@@ -37,7 +37,9 @@ if sys.stdout is None:
 
 from origins import screen, store  # noqa: E402
 
-CLAUDE = shutil.which("claude") or shutil.which("claude.cmd") or shutil.which("claude.exe")
+import configura  # noqa: E402
+
+CLAUDE = configura.find_claude()
 
 PROMPT_TURNO = (
     "[F8 · analisi turno] Chiama get_screen e leggi la situazione. Aggiorna lo stato con update_match, "

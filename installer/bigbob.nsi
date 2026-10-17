@@ -79,6 +79,7 @@ Var PY
 Var PYW
 Var TESTFAIL
 Var CLAUDEOK
+Var CLAUDEEXE
 Var Dlg
 Var RbSub
 Var RbApi
@@ -142,6 +143,24 @@ FunctionEnd
 Function AvviaBigBob
   SetOutPath "$INSTDIR"
   Exec '"$PYW" "$INSTDIR\app.py"'
+FunctionEnd
+
+Function TrovaClaude ; percorso di claude in $CLAUDEEXE ("" se manca), anche se il PATH non è aggiornato
+  StrCpy $CLAUDEEXE ""
+  ${If} ${FileExists} "$PROFILE\.local\bin\claude.exe"
+    StrCpy $CLAUDEEXE "$PROFILE\.local\bin\claude.exe"
+    Return
+  ${EndIf}
+  ${If} ${FileExists} "$LOCALAPPDATA\Microsoft\WinGet\Links\claude.exe"
+    StrCpy $CLAUDEEXE "$LOCALAPPDATA\Microsoft\WinGet\Links\claude.exe"
+    Return
+  ${EndIf}
+  nsExec::ExecToStack 'cmd /c where claude'
+  Pop $0
+  Pop $1
+  ${If} $0 == 0
+    StrCpy $CLAUDEEXE "claude"
+  ${EndIf}
 FunctionEnd
 
 Function Esegui ; $0 = descrizione, $1 = comando. Ritorna il codice in $2
@@ -281,7 +300,10 @@ FunctionEnd
 
 Function OnAccedi
   Pop $0
-  Exec '"$SYSDIR\cmd.exe" /c start "Accedi a Claude" /d "$INSTDIR" cmd /k claude'
+  ${If} $CLAUDEEXE == ""
+    StrCpy $CLAUDEEXE "claude"
+  ${EndIf}
+  Exec '"$SYSDIR\cmd.exe" /c start "Accedi a Claude" /d "$INSTDIR" cmd /k "$CLAUDEEXE"'
   ${NSD_SetText} $LbTest "Si è aperto Claude Code: segui le istruzioni per accedere (se non te lo chiede scrivi /login e scegli il tuo account). Poi torna qui e premi Prova collegamento."
 FunctionEnd
 
@@ -332,17 +354,27 @@ Section "BIG-BOB" SecMain
     StrCpy $PYW "$PY"
   ${EndIf}
 
-  ; --- Claude Code
-  nsExec::ExecToStack 'cmd /c where claude'
-  Pop $0
-  Pop $1
-  StrCpy $CLAUDEOK "1"
-  ${If} $0 != 0
+  ; --- Claude Code (se manca lo installo: installer ufficiale, poi winget)
+  Call TrovaClaude
+  ${If} $CLAUDEEXE == ""
+    StrCpy $0 "Installo Claude Code (installer ufficiale, uno o due minuti)"
+    StrCpy $1 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"'
+    Call Esegui
+    Call TrovaClaude
+  ${EndIf}
+  ${If} $CLAUDEEXE == ""
+    StrCpy $0 "Installo Claude Code con winget"
+    StrCpy $1 'winget install -e --id Anthropic.ClaudeCode --silent --accept-package-agreements --accept-source-agreements'
+    Call Esegui
+    Call TrovaClaude
+  ${EndIf}
+  ${If} $CLAUDEEXE == ""
     StrCpy $CLAUDEOK "0"
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Non trovo Claude Code. BIG-BOB si installa lo stesso, ma per rispondere ha bisogno di Claude Code collegato al tuo account.$\r$\n$\r$\nTi apro la guida ufficiale: installalo, fai il login con «claude» e poi apri BIG-BOB."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Non sono riuscito a installare Claude Code. BIG-BOB si installa lo stesso e riprova da solo al primo avvio.$\r$\n$\r$\nTi apro la guida ufficiale nel caso serva farlo a mano."
     ExecShell "open" "${GUIDE_URL}"
   ${Else}
-    DetailPrint "Claude Code: trovato"
+    StrCpy $CLAUDEOK "1"
+    DetailPrint "Claude Code: $CLAUDEEXE"
   ${EndIf}
 
   ; --- Git (serve per «Aggiorna BIG-BOB»)

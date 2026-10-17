@@ -95,8 +95,9 @@ except Exception as e:  # noqa: BLE001
 
 # 6. Claude Code
 print("\n--- Claude Code ---")
-cl = shutil.which("claude") or shutil.which("claude.cmd") or shutil.which("claude.exe")
-riga(OK if cl else KO, f"comando claude: {cl or 'non trovato nel PATH'}")
+import configura  # noqa: E402
+cl = configura.find_claude()
+riga(OK if cl else KO, f"comando claude: {cl or 'non installato -> riapri BIG-BOB: lo installa da solo'}")
 riga(OK if (ROOT / ".mcp.json").exists() else KO,
      ".mcp.json presente" if (ROOT / ".mcp.json").exists() else ".mcp.json mancante -> rilancia installa.bat")
 

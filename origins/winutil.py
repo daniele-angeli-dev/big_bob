@@ -83,12 +83,14 @@ def open_claude_terminal(root: Path) -> str:
         except Exception:  # noqa: BLE001
             pass
         return "Claude Code è già aperto."
+    import configura
+    exe = configura.find_claude() or "claude"
     try:
         if shutil.which("wt"):
             subprocess.Popen(["wt", "-w", "new", "--title", TERMINAL_TITLE, "--suppressApplicationTitle",
-                              "-d", str(root), "cmd", "/k", "claude"])
+                              "-d", str(root), "cmd", "/k", exe])
         else:
-            subprocess.Popen(f'start "{TERMINAL_TITLE}" cmd /k claude', shell=True, cwd=str(root))
+            subprocess.Popen(f'start "{TERMINAL_TITLE}" cmd /k "{exe}"', shell=True, cwd=str(root))
         return "Claude Code aperto."
     except Exception as e:  # noqa: BLE001
         log.exception("apertura terminale")
