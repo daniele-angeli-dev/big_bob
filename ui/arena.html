@@ -22,8 +22,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 /* header */
 .head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel);flex-shrink:0}
 .brand{display:flex;align-items:center;gap:10px}
-.logo{width:34px;height:30px;background:var(--teal);transform:skewX(-12deg);display:flex;align-items:center;justify-content:center}
-.logo span{transform:skewX(12deg);font-family:var(--display);font-size:17px;color:var(--bg)}
+.logo{width:38px;height:38px;flex-shrink:0;display:block}
 .title{font-family:var(--display);font-size:24px;letter-spacing:1px;font-style:italic}
 .wbtn{width:30px;height:30px;border-radius:8px;border:2px solid var(--line);background:transparent;color:var(--dim);font-size:16px;font-weight:700;line-height:1}
 .wbtn:hover{border-color:var(--dim);color:#fff}
@@ -251,7 +250,14 @@ body.inmatch .score .l{font-size:11px}
 <body>
 <div class="app">
   <header class="head pywebview-drag-region">
-    <div class="brand pywebview-drag-region"><div class="logo"><span>BB</span></div><div class="title">BIG-BOB</div></div>
+    <div class="brand pywebview-drag-region"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="46" cy="54" r="40" fill="#FFD23F"/><circle cx="46" cy="54" r="31.6" fill="#24104F"/>
+      <circle cx="46" cy="54" r="24" fill="#FFD23F"/><circle cx="46" cy="54" r="16" fill="#24104F"/>
+      <circle cx="46" cy="54" r="8.8" fill="#FF8A3D"/>
+      <g transform="rotate(-40 46 54)"><rect x="48" y="51.6" width="44" height="4.8" fill="#fff"/>
+        <polygon points="48,54 58,48.8 58,59.2" fill="#fff"/>
+        <polygon points="84,54 94,44 98,46 90,54" fill="#1FD6C4"/><polygon points="84,54 94,64 98,62 90,54" fill="#1FD6C4"/></g>
+    </svg><div class="title">BIG-BOB</div></div>
     <div style="display:flex;gap:6px">
       <button class="wbtn" id="btnSet" aria-label="Impostazioni" title="Impostazioni: collegamento a Claude, modello, opzioni"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="8" cy="8" r="2.4"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg></button>
       <button class="wbtn" id="btnTerm" aria-label="Apri Claude Code per i comandi" title="Apri Claude Code (/scansiona, /mazzo, /lezioni…)" style="font-family:var(--body);font-size:13px">&gt;_</button>
