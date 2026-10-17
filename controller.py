@@ -81,8 +81,9 @@ PROMPT_AUTO = (
 )
 PROMPT_OSSERVATORE = (
     "[OSSERVATORE] Prima della schermata attuale trovi {n} fotogrammi presi da BIG-BOB da quando hai risposto "
-    "l'ultima volta, in ordine di tempo (la zona nera è la finestra di BIG-BOB). Guardali per ricostruire cosa è "
-    "successo nel frattempo: carte rivelate o giocate dall'avversario anche se poi distrutte o scartate, magie lanciate, "
+    "l'ultima volta, in ordine di tempo, ognuno con orario e zona dello schermo: di solito sono RITAGLI ad alta "
+    "risoluzione della sola zona cambiata (leggi i nomi delle carte), alcuni presi durante le animazioni (la zona nera è "
+    "la finestra di BIG-BOB). Guardali tutti per ricostruire cosa è successo nel frattempo: carte rivelate o giocate dall'avversario anche se poi distrutte o scartate, magie lanciate, "
     "creature morte in combattimento, carte pescate o create da effetti (Spellbook e simili), barrier colpite. Metti "
     "tutto in update_match (avv_giocati / avv_scartati / avv_creati, miei_scartati / my_created): così i contatori e le "
     "probabilità restano veri. "
@@ -1221,36 +1222,53 @@ class Controller:
         self.status(f"Registrazione: {self.rec_count} fotogrammi")
 
     # ------------------------------------------------ osservatore: la partita tra un F8 e l'altro
-    OBS_MAX_ATTACH = 6     # fotogrammi allegati al massimo a un F8 (i più diversi tra loro)
-    OBS_MAX_KEEP = 300     # fotogrammi tenuti nel diario per partita
+    OBS_MAX_ATTACH = 10    # ritagli allegati al massimo a un F8 (uno per ogni tratto, poi i più cambiati)
+    OBS_MAX_KEEP = 400     # file tenuti nel diario per partita
+    OBS_LOCAL_T = 8        # quanto deve cambiare una zona (0-255) per salvare un fotogramma
 
     def _observe(self, mask, score: float) -> None:
+        """Cattura e salva un fotogramma (senza ritaglio: usato quando non si sa cosa è cambiato)."""
         try:
-            img = screen.grab_masked(store.load("config").get("titolo_finestra", "Origins"), mask)
+            img = screen.grab_masked(store.load("config").get("titolo_finestra", "Origins"), mask, max_width=1600)
+            self._observe_img(img, None, score, False)
+        except Exception:  # noqa: BLE001
+            log.exception("fotogramma dell'osservatore non salvato")
+
+    def _observe_img(self, img, grid, score: float, moving: bool) -> None:
+        from origins import observer
+        try:
             self._journal("")
             folder = self.journal_dir / "osservatore"
             folder.mkdir(exist_ok=True)
             self._obs_n += 1
-            p = folder / f"{self._obs_n:04d}_{time.strftime('%H%M%S')}.jpg"
-            img.save(p, "JPEG", quality=70, optimize=True)
+            stamp = time.strftime("%H%M%S")
+            full = folder / f"{self._obs_n:04d}_{stamp}.jpg"
+            rgb = img.convert("RGB")
+            rgb.save(full, "JPEG", quality=75, optimize=True)
+            bbox = observer.changed_bbox(grid) if grid else None
+            part = full
+            if bbox and (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) < 0.7:
+                part = folder / f"{self._obs_n:04d}_{stamp}_zona.jpg"
+                observer.crop(rgb, bbox).save(part, "JPEG", quality=82, optimize=True)
             with self._obs_lock:
-                self.obs_frames.append({"path": p, "score": score, "t": time.time()})
-                self.obs_frames = self.obs_frames[-60:]
+                self.obs_frames.append({"path": part, "intera": full, "score": score, "t": time.time(),
+                                        "ora": time.strftime("%H:%M:%S"), "zona": observer.position_label(bbox),
+                                        "movimento": moving})
+                self.obs_frames = self.obs_frames[-150:]
             old = sorted(folder.glob("*.jpg"))
             for f in old[:-self.OBS_MAX_KEEP]:
                 f.unlink(missing_ok=True)
         except Exception:  # noqa: BLE001
             log.exception("fotogramma dell'osservatore non salvato")
 
-    def _take_obs_frames(self) -> list[Path]:
-        """I fotogrammi da allegare all'F8: i più significativi (cambio maggiore), in ordine di tempo; poi si azzera."""
+    def _take_obs_frames(self) -> list[dict]:
+        """I fotogrammi da allegare all'F8: uno per ogni tratto della sequenza (il più cambiato) più i più cambiati,
+        in ordine di tempo, con orario e zona; poi si azzera."""
+        from origins import observer
         with self._obs_lock:
             frames, self.obs_frames = self.obs_frames, []
-        frames = [f for f in frames if f["path"].exists()]
-        if len(frames) > self.OBS_MAX_ATTACH:
-            keep = sorted(frames, key=lambda f: -f["score"])[:self.OBS_MAX_ATTACH]
-            frames = sorted(keep, key=lambda f: f["t"])
-        return [f["path"] for f in frames]
+        frames = [f for f in frames if Path(f["path"]).exists()]
+        return observer.select(frames, self.OBS_MAX_ATTACH)
 
     # ------------------------------------------------ cattura con finestra nascosta
     def hidden_capture(self, folder: Path | None = None) -> Path:
@@ -1279,7 +1297,7 @@ class Controller:
 
     # ------------------------------------------------ chiamata a Claude Code
     def _ask(self, prompt: str, label: str | None, attach: bool = False, kind: str = "other",
-             frames: list[Path] | None = None) -> None:
+             frames: list | None = None) -> None:
         if not self.claude:
             self.say("Claude Code non trovato.", "warn")
             return
@@ -1319,14 +1337,20 @@ class Controller:
         self.emit({"type": "busy", "value": True, "what": what, "budget": BUDGET_SECONDS if kind == "live" else 0})
         content: list[dict] = []
         import base64
-        for f in frames or []:  # prima i fotogrammi dell'osservatore, in ordine di tempo
+        n_frames = len(frames or [])
+        for i, f in enumerate(frames or [], 1):  # prima i fotogrammi dell'osservatore, in ordine di tempo
+            path = Path(f["path"]) if isinstance(f, dict) else Path(f)
             try:
-                content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                                                             "data": base64.b64encode(f.read_bytes()).decode()}})
+                data = base64.b64encode(path.read_bytes()).decode()
             except OSError:
                 continue
+            if isinstance(f, dict):
+                content.append({"type": "text", "text": f"Fotogramma {i}/{n_frames} · {f.get('ora', '')} · zona cambiata: "
+                                                        f"{f.get('zona', '')}{' (durante un’animazione)' if f.get('movimento') else ''}"})
+            content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data}})
         if frames:
-            self._journal(f"Osservatore: {len(frames)} fotogrammi allegati ({', '.join(f.name for f in frames)})")
+            names = [(Path(f["path"]) if isinstance(f, dict) else Path(f)).name for f in frames]
+            self._journal(f"Osservatore: {len(frames)} fotogrammi allegati ({', '.join(names)})")
         if attach and shot is not None:
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/png",
                                                          "data": base64.b64encode(shot.read_bytes()).decode()}})
@@ -1508,6 +1532,7 @@ class Controller:
 
     # ------------------------------------------------ Auto / Registra
     def _watch_loop(self) -> None:
+        from origins import observer
         from PIL import ImageChops, ImageStat
 
         def d(a, b):
@@ -1516,41 +1541,52 @@ class Controller:
         prev = ref_rec = ref_auto = ref_obs = None
         last_rec = last_obs = 0.0
         while not self._stop.is_set():
-            time.sleep(0.7)
             observing = self._match_active and store.load("config").get("osservatore", True)
+            time.sleep(0.35 if observing else 0.7)  # in partita guarda più spesso: gli effetti durano poco
             if not (self.auto_on or self.rec_on or observing):
                 prev = ref_rec = ref_auto = ref_obs = None
                 continue
             if self.capturing or time.time() - self.last_capture < 1.0:
                 continue
+            title = store.load("config").get("titolo_finestra", "Origins")
             try:
                 mask = self.ui.rect() if self.ui.is_visible() else None
-                sig = screen.thumbnail_signature(store.load("config").get("titolo_finestra", "Origins"), mask=mask)
+                if observing:  # una sola cattura: serve sia a capire cosa cambia sia a salvare il fotogramma
+                    img = screen.grab_masked(title, mask, max_width=1600)
+                    sig = observer.signature(img)
+                else:
+                    img = None
+                    sig = screen.thumbnail_signature(title, mask=mask)
             except Exception:  # noqa: BLE001
                 continue
             if prev is None:
-                prev = ref_rec = ref_auto = sig
+                prev = ref_rec = ref_auto = ref_obs = sig
                 continue
-            moving = d(sig, prev) > 1.0
+            local_move = observer.cell_diff(sig, prev)[0]
+            moving = d(sig, prev) > 1.0 or local_move > 12
             prev = sig
+            now_t = time.time()
+            if observing and img is not None:
+                # osservatore: salva quando una zona cambia, anche durante le animazioni (rivelazioni, magie e
+                # combattimento durano poco e non aspettano che lo schermo si fermi)
+                if ref_obs is None:
+                    ref_obs = sig
+                else:
+                    loc, _glob, grid = observer.cell_diff(sig, ref_obs)
+                    gap = now_t - last_obs
+                    if loc > self.OBS_LOCAL_T and ((not moving and gap >= 0.6) or (moving and gap >= 1.0)):
+                        self._observe_img(img, grid, loc, moving)
+                        ref_obs, last_obs = sig, now_t
+            else:
+                ref_obs = None
             if moving:
                 continue
-            now_t = time.time()
             if self.rec_on:
                 if ref_rec is None or (d(sig, ref_rec) > 2.0 and now_t - last_rec > 1.5):
                     self._q.put(("record_frame", None))
                     ref_rec, last_rec = sig, now_t
             else:
                 ref_rec = None
-            if observing:
-                # osservatore: un fotogramma leggero a ogni schermata nuova e ferma (rivelazioni, combattimento, scarti)
-                if ref_obs is None:
-                    ref_obs = sig
-                elif d(sig, ref_obs) > 2.0 and now_t - last_obs > 1.2:
-                    self._observe(mask, d(sig, ref_obs))
-                    ref_obs, last_obs = sig, now_t
-            else:
-                ref_obs = None
             if self.auto_on:
                 if ref_auto is None:
                     ref_auto = sig

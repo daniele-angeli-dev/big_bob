@@ -13,6 +13,11 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Osservatore più attento tra un F8 e l'altro**: guarda lo schermo ogni 0,35 s invece di 0,7, si accorge anche di una
+  carta che compare in un angolo (confronta zona per zona, non la media di tutto lo schermo) e salva anche durante le
+  animazioni, così rivelazioni, magie e combattimenti brevi non sfuggono più. All'F8 allega fino a 10 fotogrammi
+  (prima 6), scelti in modo da coprire tutto l'intervallo, come ritagli ad alta risoluzione della zona cambiata con
+  orario e posizione: Claude legge i nomi delle carte invece di intuirli da un'immagine rimpicciolita.
 - **Coach onesto, non accondiscendente**: prima di darti ragione BIG-BOB verifica con i dati (testi delle carte,
   regole, conti di combattimento, com'è finita la partita) e, se sbagli, te lo dice con i numeri; non cambia idea solo
   perché insisti. Solo i fatti verificati diventano lezioni confermate; le opinioni di strategia restano ipotesi

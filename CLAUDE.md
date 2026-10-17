@@ -92,8 +92,11 @@ Con `update_match` passa sempre anche `my_reinforced` / `opp_reinforced` se una 
 Quando indichi dove giocare una carta, gli slot si contano **da 1** (slot 1, 2, 3, come nel CAMPO di
 `update_match`), mai da 0: es. `▶ Marian al centro, slot 2`.
 
-**Osservatore.** Durante la partita BIG-BOB salva da solo un fotogramma a ogni schermata nuova e, all'F8, ti allega
-i più significativi (richiesta "[OSSERVATORE]", prima della schermata attuale; la zona nera è la finestra di BIG-BOB).
+**Osservatore.** Durante la partita BIG-BOB guarda lo schermo ogni ~0,35 s e salva un fotogramma quando una zona
+cambia, anche durante le animazioni; all'F8 ti allega fino a 10 fotogrammi (richiesta "[OSSERVATORE]", prima della
+schermata attuale), di solito RITAGLI ad alta risoluzione della sola zona cambiata, ognuno con orario e posizione
+(es. "in basso a destra", "durante un'animazione"); la zona nera è la finestra di BIG-BOB. Leggi i nomi delle carte nei
+ritagli: non indovinarli.
 Usali per ricostruire ciò che è successo tra un F8 e l'altro: carte avversarie giocate anche se poi distrutte o
 scartate, magie lanciate, creature morte, carte create, pescate extra. Tutto va in `update_match`.
 
