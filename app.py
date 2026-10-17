@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -273,6 +274,12 @@ class Api:
     def sync_brain_now(self):
         return self._c.sync_brain_now()
 
+    def reset_window(self):
+        cfg = store.load("config")
+        cfg.pop("finestra", None)
+        store.save("config", cfg)
+        self._c.say("Posizione dimenticata: al prossimo avvio BIG-BOB si apre al centro, alto quanto lo schermo.", "dim")
+
     def brain_consent(self, ok=True):
         self._c.brain_consent(bool(ok))
 
@@ -324,6 +331,69 @@ def _available_height(webview) -> int:
         return HEIGHT
 
 
+class Geometry:
+    """Ricorda dove e quanto grande l'hai lasciata: la finestra riparte lì (config.json → "finestra").
+
+    pywebview su Windows può leggere e scrivere posizione e dimensioni in unità diverse (pixel fisici o scalati),
+    quindi dopo ogni spostamento controllo il risultato e correggo con il rapporto osservato."""
+
+    def __init__(self, window) -> None:
+        self.w = window
+        self._timer = None
+        self._ready = False
+
+    def _now(self):
+        w = self.w
+        return int(w.x), int(w.y), int(w.width), int(w.height)
+
+    def _apply(self, setter, a: int, b: int, read) -> None:
+        setter(a, b)
+        time.sleep(0.25)
+        ra, rb = read()
+        if a and abs(ra - a) > 4 and ra > 0:  # unità diverse: correggo una volta con il rapporto osservato
+            f = ra / a
+            if 0.4 < f < 2.6:
+                setter(int(round(a / f)), int(round(b / f)))
+
+    def restore(self) -> None:
+        g = store.load("config").get("finestra") or {}
+        try:
+            x, y, wd, ht = int(g["x"]), int(g["y"]), int(g["w"]), int(g["h"])
+        except (KeyError, TypeError, ValueError):
+            self._ready = True
+            return
+        if wd < 300 or ht < 400 or x < -300 or y < -50 or x > 8000 or y > 5000:
+            self._ready = True
+            return
+        try:
+            self._apply(self.w.resize, wd, ht, lambda: self._now()[2:])
+            self._apply(self.w.move, x, y, lambda: self._now()[:2])
+            log.info("finestra ripristinata: %s (richiesto %s)", self._now(), (x, y, wd, ht))
+        except Exception:  # noqa: BLE001
+            log.exception("ripristino della finestra")
+        self._ready = True
+
+    def changed(self, *_a) -> None:
+        if not self._ready:
+            return
+        if self._timer:
+            self._timer.cancel()
+        self._timer = threading.Timer(1.2, self.save)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def save(self) -> None:
+        try:
+            x, y, wd, ht = self._now()
+            if wd < 300 or ht < 400:
+                return  # ridotta a icona o in transizione: non la salvo
+            cfg = store.load("config")
+            cfg["finestra"] = {"x": x, "y": y, "w": wd, "h": ht}
+            store.save("config", cfg)
+        except Exception:  # noqa: BLE001
+            log.exception("salvataggio della posizione della finestra")
+
+
 def run_web() -> None:
     import webview
 
@@ -354,6 +424,13 @@ def run_web() -> None:
             winutil.set_window_icon("BIG-BOB", ROOT / "ui" / "bigbob.ico")
         except Exception:  # noqa: BLE001
             log.exception("icona finestra")
+        geo = Geometry(window)  # torna dove l'avevi lasciata, con la stessa dimensione
+        try:
+            geo.restore()
+            window.events.moved += geo.changed
+            window.events.resized += geo.changed
+        except Exception:  # noqa: BLE001
+            log.exception("posizione della finestra")
         cfg = store.load("config")
         if not cfg.get("terminale_v2"):  # da ottobre 2026 il terminale non si apre più da solo
             cfg["apri_claude_code_all_avvio"] = False

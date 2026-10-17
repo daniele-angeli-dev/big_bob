@@ -117,8 +117,12 @@ out = call("update_match", turn=3, my_deck_left=19, opp_deck_left=18)
 assert "CONTATORI: tu mazzo 19 · mano 3 | avversario mazzo 18 · mano 4" in out and "STIMA RAPIDA" in out, out
 ev = evaluate.heuristic(store.load("match"))
 assert ev["pct"] > 55, ev  # una barrier già distrutta e un'altra a 5
-assert json.loads(call("set_match_eval", mia_percentuale=64, motivo="campo migliore"))["pct"] == 64
-assert evaluate.current_eval(store.load("match")) == {"pct": 64, "motivo": "campo migliore", "fonte": "BIG-BOB"}
+assert set(ev["fattori"]) == {"campo", "mano", "barrier"} and ev["fattori"]["barrier"] == 1, ev
+assert json.loads(call("set_match_eval", mia_percentuale=64, motivo="campo migliore", campo="vantaggio",
+                       mano="parità"))["pct"] == 64
+cur = evaluate.current_eval(store.load("match"))
+assert {k: cur[k] for k in ("pct", "motivo", "fonte")} == {"pct": 64, "motivo": "campo migliore", "fonte": "BIG-BOB"}
+assert cur["fattori"]["campo"] == 1 and cur["fattori"]["mano"] == 0 and cur["fattori"]["barrier"] == 1, cur
 call("update_match", turn=4)
 assert evaluate.current_eval(store.load("match"))["fonte"] == "stima rapida", "la stima di BIG-BOB vale per il suo round"
 store.save("match", {})

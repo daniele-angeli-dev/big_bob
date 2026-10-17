@@ -378,11 +378,13 @@ def _counters_summary(m: dict) -> str:
 
 
 @mcp.tool()
-def set_match_eval(mia_percentuale: int, motivo: str = "") -> str:
+def set_match_eval(mia_percentuale: int, motivo: str = "", campo: str = "", mano: str = "", barrier: str = "") -> str:
     """Salva la tua stima di chi sta vincendo (la barra sopra le barrier nella finestra): mia_percentuale = probabilità
     che Daniele vinca (1-99), motivo = mezza riga. Ragiona su barrier e barrier distrutte, campo, carte in mano e mazzo,
-    location e carte probabili dell'avversario."""
-    return _j(evaluate.save_eval(mia_percentuale, motivo))
+    location e carte probabili dell'avversario. campo / mano / barrier: "vantaggio", "parità" o "svantaggio" di Daniele
+    su quel fronte (la finestra li mostra sotto la barra; tieni conto anche di effetti e qualità delle carte, non solo
+    dei numeri); vuoto = lascia la stima rapida."""
+    return _j(evaluate.save_eval(mia_percentuale, motivo, {"campo": campo, "mano": mano, "barrier": barrier}))
 
 
 def _locations_summary(m: dict) -> str:

@@ -112,7 +112,8 @@ Per i dettagli c'è `opponent_deck`.
 
 **Barra di vantaggio.** Dopo la risposta live, nel turno in background, chiami `set_match_eval` con la probabilità che
 Daniele vinca (1-99): parti dalla STIMA RAPIDA e correggila con ciò che i numeri non vedono (effetti delle carte,
-location, carte probabili dell'avversario, chi rivela prima, fatica). Mai durante la risposta live.
+location, carte probabili dell'avversario, chi rivela prima, fatica). Passa anche `campo`, `mano` e `barrier`
+("vantaggio", "parità" o "svantaggio" di Daniele): la finestra li mostra sotto la barra. Mai durante la risposta live.
 
 **Conti di combattimento: non farli a mente.** Passa sempre `board` a `update_match` (creature in campo
 per corsia e slot, con le statistiche attuali): ti restituisce la PREVISIONE DEL COMBATTIMENTO se nessuno

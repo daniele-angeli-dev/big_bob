@@ -84,7 +84,25 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .oppdeck .od-l{letter-spacing:1px;flex-shrink:0}
 .oppdeck b{color:var(--orange);font-size:13px;white-space:nowrap;flex-shrink:0}
 .oppdeck #hOdList{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.ev-why{font-size:11px;color:var(--dim);margin-top:-6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:-4px}
+.fct{display:flex;align-items:center;justify-content:center;gap:6px;height:24px;border-radius:6px;font-size:11px;font-weight:700;
+  letter-spacing:1px;background:var(--bg);color:var(--dim);white-space:nowrap}
+.fct b{font-size:13px;letter-spacing:0}
+.fct.adv{background:var(--teal);color:var(--bg)}.fct.dis{background:var(--orange);color:#241000}.fct.par{background:var(--panel2);color:#fff}
+/* in partita: tutto più compatto, così la mossa ha spazio */
+body.inmatch .labp{padding:7px 10px;gap:4px;margin-bottom:8px}
+body.inmatch .labp .lab-txt,body.inmatch .labp .lab-btns{display:none}
+body.inmatch .ctrl{padding:8px 12px}
+body.inmatch .hud{padding:10px 12px}
+body.inmatch #hudBody{gap:7px !important}
+body.inmatch .round{font-size:24px}
+body.inmatch .manac{width:32px;height:32px;font-size:17px}
+body.inmatch .manal{font-size:12px}
+body.inmatch .lanes{gap:8px}
+body.inmatch .lane{gap:3px}
+body.inmatch .bar,body.inmatch .bar i{height:9px}
+body.inmatch .score .n{font-size:20px}
+body.inmatch .score .l{font-size:11px}
 @media (prefers-reduced-motion: reduce){.ev-me{transition:none}}
 .counts{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;color:var(--dim)}
 .counts b{color:#fff;font-size:14px}
@@ -99,13 +117,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .move{margin:10px 12px 0;padding:12px 14px;background:var(--yellow);color:var(--bg);border-radius:10px;display:flex;flex-direction:column;gap:5px;flex-shrink:0}
 .move .k{font-family:var(--display);font-size:13px;letter-spacing:1.5px;display:flex;justify-content:space-between}
 .move .k span{font-family:var(--body);font-weight:700;font-size:12px;letter-spacing:0}
-.move .m{font-family:var(--display);font-size:21px;line-height:1.1;font-style:italic;text-transform:uppercase}
-.move .w{font-size:14px;font-weight:600}
+.move .m{font-family:var(--display);font-size:26px;line-height:1.12;font-style:italic;text-transform:uppercase}
+.move .w{font-size:16px;font-weight:600;line-height:1.3}
 .move.tracker{background:var(--panel2);color:#fff;padding:9px 14px}
 .move.tracker .m,.move.tracker .w{display:none}
 .move.tracker .k{color:var(--dim)}
 .chips{margin:8px 12px 0;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
-.chip{padding:6px 10px;background:var(--panel);border-left:4px solid var(--line);border-radius:6px;font-size:13px;font-weight:600;line-height:1.3}
+.chip{padding:6px 10px;background:var(--panel);border-left:4px solid var(--line);border-radius:6px;font-size:14px;font-weight:600;line-height:1.3}
 .chip.t-min{border-color:var(--orange)} .chip.t-pes{border-color:var(--teal)} .chip.t-avv{border-color:var(--pink)} .chip.t-loc{border-color:#fff}
 .chip.wide{grid-column:1 / -1}
 .chip small{display:block;font-size:11px;letter-spacing:1px;color:var(--dim);font-weight:700}
@@ -258,7 +276,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         <div class="mana"><div class="manac" id="hMana" aria-label="Mana">–</div><div class="manal">MANA<br>rivela prima: <b id="hFirst">–</b></div></div>
       </div>
       <div class="evalb" id="hEval" role="img" aria-label="Chi sta vincendo"><div class="ev-me" id="hEvMe" style="width:50%">TU 50%</div><div class="ev-opp" id="hEvOpp">50% AVV</div></div>
-      <div class="ev-why" id="hEvWhy"></div>
+      <div class="facts" id="hFacts" role="group" aria-label="Campo, mano e barrier rispetto all'avversario">
+        <span class="fct" data-k="campo">CAMPO <b>–</b></span><span class="fct" data-k="mano">MANO <b>–</b></span><span class="fct" data-k="barrier">BARRIER <b>–</b></span>
+      </div>
       <div class="lanes" id="hLanes"></div>
       <div class="score"><div class="n" style="color:var(--teal)" id="hMine">0</div><div class="l">BARRIER DISTRUTTE</div><div class="n" style="color:var(--orange)" id="hOpp">0</div></div>
       <div class="counts"><div class="me" id="hCntMe">TU · MAZZO <b>–</b> · MANO <b>–</b></div><div class="op" id="hCntOpp">AVV · MAZZO <b>–</b> · MANO <b>–</b></div></div>
@@ -381,6 +401,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (al primo avvio di ogni giorno)</label>
     <label class="opt" for="oThink">Tetto ragionamento live (token) <input class="inp" id="oThink" type="number" min="0" step="500" style="width:90px;height:34px;flex-grow:0"></label>
     <div class="btnrow" style="align-items:center"><span class="hint">Spiegazione dei tasti</span><button type="button" class="btn2" id="btnTut">RIVEDI IL TUTORIAL</button></div>
+    <div class="btnrow" style="align-items:center"><span class="hint">BIG-BOB si riapre dove e grande come l'hai lasciato</span><button type="button" class="btn2" id="btnWin">RIPRISTINA POSIZIONE</button></div>
     <div class="sec">CERVELLO COMUNE</div>
     <label class="opt"><input type="checkbox" id="oShare"> Contribuisci in forma anonima: regole, lezioni, testi delle carte verificati e risultati delle partite (niente nomi né schermate)</label>
     <label class="opt"><input type="checkbox" id="oUse"> Usa ciò che hanno imparato gli altri giocatori (regole, lezioni, mazzi avversari più visti)</label>
@@ -426,6 +447,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   var LANES = ['SINISTRA','CENTRO','DESTRA'];
   function fmt(b){ return (b && b.v != null) ? (b.v + '/' + b.max) : '–'; }
   function renderHud(m){
+    document.body.classList.toggle('inmatch', !!m);
     if (!m){ $('hudEmpty').classList.remove('hidden'); $('hudBody').classList.add('hidden'); return; }
     $('hudEmpty').classList.add('hidden'); $('hudBody').classList.remove('hidden');
     $('hRound').textContent = 'ROUND ' + (m.round != null ? m.round : '–');
@@ -436,8 +458,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('hEvMe').style.width = pct + '%'; $('hEvMe').textContent = pct >= 18 ? 'TU ' + pct + '%' : pct + '%';
     $('hEvOpp').textContent = (100 - pct) >= 18 ? (100 - pct) + '% AVV' : (100 - pct) + '%';
     $('hEval').setAttribute('aria-label', 'Probabilità di vittoria: tu ' + pct + '%, avversario ' + (100 - pct) + '%');
-    $('hEvWhy').textContent = ev.motivo ? ((ev.fonte === 'BIG-BOB' ? 'BIG-BOB: ' : 'stima rapida: ') + ev.motivo) : '';
-    $('hEvWhy').title = $('hEvWhy').textContent;
+    $('hEval').title = ev.motivo ? ((ev.fonte === 'BIG-BOB' ? 'BIG-BOB: ' : 'stima rapida: ') + ev.motivo) : '';
+    var fa = ev.fattori || {};
+    Array.prototype.forEach.call(document.querySelectorAll('#hFacts .fct'), function(c){
+      var v = fa[c.dataset.k], cls = v === 1 ? 'adv' : v === -1 ? 'dis' : v === 0 ? 'par' : '';
+      c.className = 'fct' + (cls ? ' ' + cls : '');
+      c.querySelector('b').textContent = v === 1 ? '▲' : v === -1 ? '▼' : v === 0 ? '=' : '–';
+      var word = v === 1 ? 'in vantaggio' : v === -1 ? 'in svantaggio' : v === 0 ? 'in parità' : 'non ancora stimato';
+      c.title = c.dataset.k.charAt(0).toUpperCase() + c.dataset.k.slice(1) + ': ' + word;
+      c.setAttribute('aria-label', c.title);
+    });
     var c = m.contatori || {};
     function cnt(el, who, deck, est, hand){
       el.innerHTML = '';
@@ -823,6 +853,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   $('btnQuit').onclick = function(){ call('quit'); };
   $('btnOrigin').onclick = function(){ call('open_origin'); };
   $('btnTut').onclick = function(){ hide(); setTimeout(function(){ tutShow(0); }, 120); };
+  $('btnWin').onclick = function(){ hide(); call('reset_window'); };
   $('btnLearn').onclick = function(){ call('open_library', 'mazzi'); };
   $('btnTerm').onclick = function(){ call('open_terminal'); };
   $('form').onsubmit = function(e){ e.preventDefault(); var v = $('q').value.trim(); if (!v) return; $('q').value = ''; call('chat', v); };

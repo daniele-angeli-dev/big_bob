@@ -127,7 +127,8 @@ PROMPT_IMPARA = (
 PROMPT_VALUTA = (
     "Infine chiama set_match_eval con la probabilità (1-99) che Daniele vinca la partita: parti dalla STIMA RAPIDA "
     "di update_match e correggila con quello che i numeri non vedono (cosa fanno le carte in campo e in mano, location, "
-    "carte probabili dell'avversario, chi rivela prima, fatica), motivo in mezza riga. "
+    "carte probabili dell'avversario, chi rivela prima, fatica), motivo in mezza riga, e campo / mano / barrier "
+    "(vantaggio, parità o svantaggio di Daniele su ciascun fronte). "
 )
 PROMPT_SOLO_VALUTA = (
     "[VALUTAZIONE · in background: Daniele non sta aspettando questa risposta] " + PROMPT_VALUTA

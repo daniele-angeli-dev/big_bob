@@ -13,6 +13,9 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- Finestra di gioco più leggibile: in partita pannelli più compatti e mossa in caratteri grandi; sotto la barra di
+  vantaggio, al posto della frase, tre indicatori immediati **CAMPO · MANO · BARRIER** (▲ vantaggio, = parità,
+  ▼ svantaggio). BIG-BOB si riapre dove e grande come l'hai lasciato (⚙ → *Ripristina posizione* per tornare al centro).
 - Cervello comune: SINCRONIZZA ORA nello Studio ora aspetta e mostra l'esito lì (inviati, ricevuti, tempo o il
   problema preciso); un errore nell'invio non blocca più la ricezione; l'ultimo esito si vede anche in ⚙ e in
   `diagnostica.bat`, che ora controlla anche il server.
