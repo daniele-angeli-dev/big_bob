@@ -36,6 +36,7 @@ python tests\test_deckproj.py
 python tests\test_cervello.py
 python tests\test_archetype.py
 python tests\test_history.py
+python tests\test_pilot.py
 python collegamenti.py installa
 echo.
 echo Fatto. I tuoi dati (data, config.json, logs, captures) non sono stati toccati.

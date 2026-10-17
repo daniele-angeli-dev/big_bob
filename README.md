@@ -13,6 +13,12 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Pilota automatico (sperimentale)**: con il pulsante PILOTA, in allenamento e in creazione, BIG-BOB gioca al posto
+  tuo: a ogni round sceglie la giocata, trascina le carte dalla mano al campo e conferma il turno con il mouse. Si
+  accende insieme ad AUTO; per riprendere il controllo basta muovere il mouse (si ferma subito) o premere F12. Non
+  funziona mai in ranked. Le posizioni di carte e spazi le legge Claude dalla schermata, quindi ogni tanto può
+  mancare il bersaglio: in quel caso al round dopo riprova. Attenzione: i termini di servizio dei giochi online spesso
+  vietano i programmi che giocano al posto tuo, e in casual l'avversario non sa di giocare contro un bot.
 - **Barre animate**: quando BIG-BOB aggiorna il campo dopo uno screen, le barrier non cambiano più di colpo: la barra
   scende (con una scia chiara che mostra quanto si è perso e una piccola scossa) o sale con un lampo, il numero conta
   fino al valore nuovo e accanto compare il danno (-8) o la cura (+5). Una barrier distrutta scende a zero, mostra

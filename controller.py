@@ -306,7 +306,21 @@ class ClaudeSession:
 
 
 # ---------------------------------------------------------------- parser risposta live
-MARKERS = {"▶": "mossa", "⚠": "minacce", "🎴": "pescate", "👁": "avv_mano", "📍": "location"}
+MARKERS = {"▶": "mossa", "⚠": "minacce", "🎴": "pescate", "👁": "avv_mano", "📍": "location", "🤖": "pilota"}
+
+PROMPT_PILOTA = (
+    "\n[PILOTA AUTOMATICO ATTIVO] In questa partita giochi TU al posto di Daniele: le tue azioni vengono eseguite con "
+    "il mouse. Dopo le righe della risposta live aggiungi come ULTIMA riga una riga che inizia con 🤖 con le azioni "
+    "sulla schermata allegata (l'ultima immagine), separate da ' ; ': 'trascina X1,Y1 > X2,Y2' per portare una carta "
+    "dalla mano allo spazio del campo, 'clicca X,Y' per pulsanti (fine turno / conferma, Keep, carte da cambiare nel "
+    "mulligan). X e Y sono in PERCENTUALE della larghezza e dell'altezza della schermata allegata (0-100, una cifra "
+    "decimale), al centro dell'elemento: guarda bene dove sono la carta e lo spazio. Prima le carte nell'ordine in cui "
+    "vuoi che si attivino, poi il pulsante che conferma il turno. Solo carte che puoi pagare con il mana di adesso; se "
+    "giocando una carta la mano si sposta, considera che le carte a destra scorrono. Se non è la tua fase di gioco "
+    "(animazioni, attesa dell'avversario, combattimento, schermata di fine) o hai già confermato il turno, scrivi "
+    "'🤖 niente'. Se nella schermata vedi che una tua azione di prima non è riuscita (carta ancora in mano), ripetila "
+    "con coordinate corrette."
+)
 
 
 def parse_live(text: str) -> dict | None:
@@ -324,6 +338,8 @@ def parse_live(text: str) -> dict | None:
             found = True
             body = line[1:].strip().lstrip("️").strip()
             body = re.sub(r"^(Giocata|Mossa|Avversario|Prossima pescata|Pescata|Location)\s*:\s*", "", body, flags=re.I)
+            if key == "pilota":
+                continue
             if key == "mossa":
                 if " — " in body and not out["mossa"]:
                     body, why = body.split(" — ", 1)
@@ -363,6 +379,10 @@ class Controller:
         self.last_call = 0.0
         self.last_capture = 0.0
         self.auto_on = False
+        self.pilot_on = False          # pilota automatico: BIG-BOB gioca al posto di Daniele (mai in ranked)
+        self._pilot_stop = False
+        self._pilot_rounds: dict = {}
+        self._shot_region = None       # regione dello schermo della schermata mandata a Claude (per le coordinate)
         self.rec_on = False
         self.rec_dir: Path | None = None
         self.rec_count = 0
@@ -461,6 +481,7 @@ class Controller:
     def emit_state(self) -> None:
         cfg = store.load("config")
         self.emit({"type": "state", "mode": cfg.get("modalita", "allenamento"), "auto": self.auto_on,
+                   "pilot": bool(getattr(self, "pilot_on", False)),
                    "rec": self.rec_on, "busy": self.busy, "round_seconds": ROUND_SECONDS,
                    "voice": bool(cfg.get("voce", True)) and self.voice.available(),
                    "voice_available": self.voice.available(),
@@ -510,6 +531,9 @@ class Controller:
         cur = cfg.get("modalita") if cfg.get("modalita") in self.MODES else "allenamento"
         cfg["modalita"] = self.MODES[(self.MODES.index(cur) + 1) % len(self.MODES)]
         store.save("config", cfg)
+        if cfg["modalita"] == "ranked" and getattr(self, "pilot_on", False):
+            self.pilot_on, self._pilot_stop = False, True
+            self.say("Ranked: pilota automatico spento.", "dim")
         self.emit_state()
         if cfg["modalita"] == "creazione" and not deckproj.active():
             self.say("Modalità CREAZIONE MAZZO: premi CREA MAZZO e BIG-BOB costruisce un mazzo partendo dal meta, poi "
@@ -1096,7 +1120,96 @@ class Controller:
         self.auto_on = bool(on)
         if not self.auto_on:  # toglie dalla coda le analisi automatiche non ancora partite
             self._drop_queued("analyze", True)
+            self.pilot_on = False  # senza AUTO il pilota non vede i round
         self.emit_state()
+
+    # ------------------------------------------------ pilota automatico (solo allenamento / creazione)
+    def set_pilot(self, on: bool) -> None:
+        if on and self._mode() == "ranked":
+            self.say("Il pilota automatico non funziona in ranked: lì BIG-BOB dà solo i numeri.", "warn")
+            on = False
+        self.pilot_on = bool(on)
+        if self.pilot_on:
+            self.auto_on = True  # il pilota gioca a ogni round: serve che BIG-BOB guardi da solo
+            self._pilot_rounds = {}
+            cfg = store.load("config")
+            self.say("PILOTA AUTOMATICO acceso: a ogni round BIG-BOB sceglie la giocata e la esegue con il mouse. "
+                     "Per riprendere il controllo muovi il mouse (si ferma subito) o premi F12. È sperimentale: le "
+                     "coordinate le legge Claude dalla schermata, quindi ogni tanto può mancare uno spazio.", "dim")
+            if not cfg.get("pilota_avviso_visto"):
+                self.say("Attenzione: molti giochi online vietano nei termini di servizio i programmi che giocano al "
+                         "posto tuo, e chi gioca contro di te in casual non sa di avere davanti un bot. Usalo a tuo "
+                         "rischio; contro il bot del gioco il rischio è minore.", "warn")
+                cfg["pilota_avviso_visto"] = True
+                store.save("config", cfg)
+            if not self.busy:
+                self.analyze(auto=True)
+        else:
+            self._pilot_stop = True
+        self.emit_state()
+
+    def stop_pilot(self) -> None:
+        if getattr(self, "pilot_on", False):
+            self._pilot_stop = True
+            self.pilot_on = False
+            self.status("Pilota automatico spento (F12)")
+            self.emit_state()
+
+    def _pilot_after(self, final: str) -> None:
+        """Dopo una risposta live con il pilota acceso: esegue le azioni della riga 🤖 (in un thread a parte)."""
+        from origins import pilot
+        if not getattr(self, "pilot_on", False) or self._mode() == "ranked":
+            return
+        actions = pilot.parse(final)
+        if not actions:
+            if actions is None:
+                log.info("pilota: nessuna riga 🤖 nella risposta")
+            return
+        turn = (store.load("match") or {}).get("turno") if store.FILES["match"].exists() else None
+        n = self._pilot_rounds.get(turn, 0)
+        if n >= pilot.MAX_PER_ROUND:
+            self._journal(f"🤖 Pilota: già {n} giocate nel round {turn}, non ne faccio altre")
+            return
+        self._pilot_rounds[turn] = n + 1
+        region = getattr(self, "_shot_region", None)
+        threading.Thread(target=self._pilot_exec, args=(actions, region), daemon=True, name="bb-pilota").start()
+
+    def _pilot_exec(self, actions: list, region) -> None:
+        from origins import pilot, winutil
+        title = store.load("config").get("titolo_finestra", "Origins")
+        gw = screen.game_window(title)
+        if not region or not gw or not pilot.WIN:
+            self._journal("🤖 Pilota: finestra del gioco non trovata, nessuna azione")
+            self.status("Pilota: finestra del gioco non trovata")
+            return
+        hwnd, now = gw
+        if any(abs(a - b) > 8 for a, b in zip(now, region)):
+            self._journal(f"🤖 Pilota: il gioco si è spostato ({region} → {now}), nessuna azione")
+            self.status("Pilota: la finestra del gioco si è spostata, aspetto il prossimo round")
+            return
+        self._pilot_stop = False
+        pts = pilot.points(actions, region)
+        hide = self.ui.is_visible() and pilot.overlaps(pts, self.ui.rect())
+        self.status(f"🤖 eseguo {len(actions)} azioni")
+        try:
+            if hide:
+                self.ui.hide()
+                time.sleep(0.15)
+            winutil.activate(hwnd)
+            time.sleep(0.15)
+            done = pilot.run(actions, region, pilot.Mouse(stop=lambda: self._pilot_stop))
+            self._journal("🤖 Pilota: " + pilot.describe(actions) + "\n" + "\n".join(f"- {d}" for d in done))
+        except pilot.Interrotto as e:
+            self.pilot_on = False
+            self._journal(f"🤖 Pilota interrotto: {e}")
+            self.say(f"Pilota automatico spento: {e}. Riprendi tu.", "warn")
+            self.emit_state()
+        except Exception:  # noqa: BLE001
+            log.exception("pilota automatico")
+        finally:
+            if hide:
+                self.ui.show()
+            self.last_call = time.time()  # AUTO aspetta che la mossa sia sullo schermo prima di guardare di nuovo
 
     def _drop_queued(self, kind: str, arg=None) -> int:
         kept, dropped = [], 0
@@ -1142,6 +1255,8 @@ class Controller:
         if auto and not self.auto_on:
             return  # AUTO spento mentre questa analisi era in coda: niente cattura, niente finestra che lampeggia
         prompt = (PROMPT_AUTO if auto else PROMPT_TURNO).format(mode=self._mode())
+        if getattr(self, "pilot_on", False) and self._mode() != "ranked":
+            prompt += PROMPT_PILOTA
         frames = self._take_obs_frames()
         if frames:
             n_mom = sum(len(f.get("foglio") or [f]) for f in frames)
@@ -1187,8 +1302,9 @@ class Controller:
 
     def _do_end_match(self, result: str) -> None:
         # partita finita: si fermano l'analisi automatica e (dopo, così il messaggio resta visibile) la registrazione
-        if self.auto_on:
+        if self.auto_on or self.pilot_on:
             self.auto_on = False
+            self.pilot_on, self._pilot_stop = False, True
             self.emit_state()
         flags = ""
         if self.flags:
@@ -1417,6 +1533,7 @@ class Controller:
         try:
             if kind != "crea":  # creare un mazzo non riguarda lo schermo
                 shot = self.hidden_capture()  # get_screen userà questa cattura (finestra esclusa)
+                self._shot_region = screen.last_region
         except Exception:  # noqa: BLE001
             log.exception("pre-cattura fallita: Claude catturerà da solo")
         self.req_n += 1
@@ -1504,6 +1621,7 @@ class Controller:
                         if parsed and parsed.get("mossa") and store.load("config").get("voce", True):
                             self.voice.say(parsed["mossa"])
                         if kind == "live":
+                            self._pilot_after(final)
                             self.live_n += 1
                             learn = self.live_n >= 2 and store.load("config").get("apprendimento_live", True)
                     self.emit({"type": "timing", "secs": round(dt, 1), "budget": BUDGET_SECONDS if kind == "live" else 0})

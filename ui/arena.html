@@ -34,6 +34,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 /* controls */
 .ctrl{display:flex;align-items:center;gap:8px;padding:10px 12px;flex-wrap:wrap;flex-shrink:0}
 .sk{transform:skewX(-10deg);border:none;padding:6px 11px;font-weight:700;font-size:13px}
+.ctrl .sk{padding:6px 9px}
+@media (max-width:520px){.ctrl{gap:5px;padding-left:10px;padding-right:10px}.ctrl .sk{padding:5px 6px;font-size:12px}.ctrl .mode{font-size:12px;letter-spacing:.5px}}
 .mode{background:var(--yellow);color:var(--bg);font-family:var(--display);font-weight:400;font-size:14px;letter-spacing:1px}
 .mode.ranked{background:var(--orange);color:#241000}
 .mode.lab{background:var(--teal);color:var(--bg)}
@@ -53,6 +55,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .lab-btns button.main{background:var(--teal);color:var(--bg)}
 .tog{border:2px solid var(--line);background:transparent;color:var(--dim)}
 .tog[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:var(--bg)}
+.tog.pil[aria-pressed="true"]{background:var(--yellow);border-color:var(--yellow);color:var(--bg)}
 .tog.rec[aria-pressed="true"]{background:#FF4D6D;border-color:#FF4D6D;color:#fff}
 .act{background:var(--panel2);color:#fff}
 .act:hover,.tog:hover{filter:brightness(1.15)}
@@ -268,6 +271,7 @@ body.inmatch .score .l{font-size:11px}
   <div class="ctrl">
     <button class="sk mode" id="btnMode" title="Cambia modalità">ALLENAMENTO</button>
     <button class="sk tog" id="btnAuto" aria-pressed="false" title="Analizza da solo quando lo schermo cambia">AUTO</button>
+    <button class="sk tog pil" id="btnPilot" aria-pressed="false" title="Pilota automatico: BIG-BOB gioca al posto tuo (solo allenamento). Muovi il mouse o premi F12 per fermarlo">PILOTA</button>
     <button class="sk tog rec" id="btnRec" aria-pressed="false" title="Salva un fotogramma a ogni cambio di schermata">REGISTRA</button>
     <div class="grow"></div>
     <button class="sk act" id="btnNew">NUOVA</button>
@@ -779,6 +783,8 @@ body.inmatch .score .l{font-size:11px}
     b.title = 'Modalità: allenamento → ranked (solo numeri, nessun consiglio) → creazione mazzo';
     renderLab(c, s.lab);
     $('btnAuto').setAttribute('aria-pressed', s.auto ? 'true' : 'false');
+    $('btnPilot').setAttribute('aria-pressed', s.pilot ? 'true' : 'false');
+    $('btnPilot').classList.toggle('hidden', r);
     $('btnRec').setAttribute('aria-pressed', s.rec ? 'true' : 'false');
     $('btnRec').textContent = s.rec ? '● REC' : 'REGISTRA';
     $('btnVoice').setAttribute('aria-pressed', s.voice ? 'true' : 'false');
@@ -952,6 +958,7 @@ body.inmatch .score .l{font-size:11px}
 
   $('btnMode').onclick = function(){ call('toggle_mode'); };
   $('btnAuto').onclick = function(){ call('set_auto', $('btnAuto').getAttribute('aria-pressed') !== 'true'); };
+  $('btnPilot').onclick = function(){ call('set_pilot', $('btnPilot').getAttribute('aria-pressed') !== 'true'); };
   $('btnRec').onclick = function(){ call('set_record', $('btnRec').getAttribute('aria-pressed') !== 'true'); };
   $('btnVoice').onclick = function(){ call('set_voice', $('btnVoice').getAttribute('aria-pressed') !== 'true'); };
   $('btnF8').onclick = function(){ call('analyze'); };

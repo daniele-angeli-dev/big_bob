@@ -209,6 +209,9 @@ class Api:
     def set_record(self, on):
         self._c.set_record(on)
 
+    def set_pilot(self, on):
+        self._c.set_pilot(on)
+
     def set_voice(self, on):
         self._c.set_voice(on)
 
@@ -308,6 +311,7 @@ def register_hotkeys(ctrl) -> bool:
         keyboard.add_hotkey(cfg.get("hotkey_analisi", "f8"), ctrl.analyze)
         keyboard.add_hotkey(cfg.get("hotkey_scan", "f9"), ctrl.scan)
         keyboard.add_hotkey("f10", ctrl.toggle_visibility)
+        keyboard.add_hotkey("f12", ctrl.stop_pilot)  # riprendi il controllo dal pilota automatico
         return True
     except Exception as e:  # noqa: BLE001
         log.exception("scorciatoie non registrate")

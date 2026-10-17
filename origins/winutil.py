@@ -54,6 +54,19 @@ def exclude_from_capture(title: str = "BIG-BOB", on: bool = True) -> bool:
         return False
 
 
+def activate(hwnd) -> bool:
+    """Porta in primo piano una finestra (il gioco, prima che il pilota automatico clicchi). True se ora è davanti."""
+    if not WIN or not hwnd:
+        return False
+    import ctypes
+    u = ctypes.windll.user32
+    if u.GetForegroundWindow() == hwnd:
+        return True
+    u.ShowWindow(hwnd, 9)  # SW_RESTORE
+    u.SetForegroundWindow(hwnd)
+    return u.GetForegroundWindow() == hwnd
+
+
 def focus_window(title: str = "BIG-BOB") -> bool:
     """Riporta in primo piano una finestra già aperta (anche se era nascosta con F10)."""
     h = _find(title)

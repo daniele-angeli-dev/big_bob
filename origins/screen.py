@@ -30,6 +30,7 @@ EXCLUDE = ("big-bob", "claude", "cmd.exe", "powershell", "terminal", "esplora", 
            "chrome", "edge", "firefox", "opera", "brave", "discord")
 FRESH_SECONDS = 20  # get_screen riusa la cattura fatta dall'overlay se è più recente di così
 last_source = "nessuna cattura"
+last_region = None  # (left, top, width, height) in pixel dello schermo dell'ultima cattura: serve al pilota automatico
 
 
 def list_windows() -> list[dict]:
@@ -65,6 +66,24 @@ def _game_region(title: str):
 
 
 _region_cache: dict = {"t": 0.0, "title": None, "region": None}
+
+
+def game_window(title: str):
+    """(hwnd, (left, top, width, height)) della finestra del gioco, o None."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import pygetwindow as gw
+    except ImportError:
+        return None
+    t = title.lower()
+    wins = [w for w in gw.getAllWindows()
+            if t in w.title.lower() and w.width > 300 and w.height > 300 and not w.isMinimized
+            and not any(x in w.title.lower() for x in EXCLUDE)]
+    if not wins:
+        return None
+    w = max(wins, key=lambda w: w.width * w.height)
+    return getattr(w, "_hWnd", None), (max(w.left, 0), max(w.top, 0), w.width, w.height)
 
 
 def _game_region_cached(title: str, max_age: float = 2.0):
@@ -109,7 +128,7 @@ def grab(title: str = "Origins") -> Image.Image:
 
 def grab_with_region(title: str = "Origins"):
     """Come grab, ma restituisce anche la regione catturata (left, top, width, height) in pixel reali."""
-    global last_source
+    global last_source, last_region
     import mss
     with mss.mss() as sct:
         region = _game_region(title)
@@ -123,6 +142,7 @@ def grab_with_region(title: str = "Origins"):
         raw = sct.grab(mon)
         img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
     reg = (mon["left"], mon["top"], mon["width"], mon["height"])
+    last_region = reg
     if img.width > MAX_WIDTH:
         img = img.resize((MAX_WIDTH, int(img.height * MAX_WIDTH / img.width)), Image.LANCZOS)
     return img, reg
