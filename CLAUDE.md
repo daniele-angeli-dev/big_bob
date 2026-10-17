@@ -109,6 +109,11 @@ Daniele, cervello comune) più simili alle carte che l'avversario ha giocato, co
 come giocarci contro. In allenamento/creazione usalo nel piano (e nel "perché" quando conta); in ranked mettilo solo
 nella riga 👁 (es. `👁 Avversario (4 in mano): … · mazzo "Bat Swarm" 72% (Aggro)`), senza il consiglio di gioco.
 Per i dettagli c'è `opponent_deck`.
+Subito sotto c'è la PREVISIONE AVVERSARIO del round: le carte che ha probabilmente in mano (dalla lista stimata, con le
+copie già uscite), quelle che può giocare adesso con il suo mana ordinate per probabilità di giocata (costo, round in
+cui di solito si giocano, tipo di mazzo), la minaccia principale, il piano tipico del suo tipo di mazzo e la tua corsia
+più esposta. Usala per anticipare: la riga ⚠ deve nominare la minaccia prevista quando conta. La riga "Previsione del
+round N" dice cosa avevi previsto e cosa ha giocato davvero: le sorprese (✗) sono materiale per le lezioni.
 
 **Barra di vantaggio.** Dopo la risposta live, nel turno in background, chiami `set_match_eval` con la probabilità che
 Daniele vinca (1-99): parti dalla STIMA RAPIDA e correggila con ciò che i numeri non vedono (effetti delle carte,

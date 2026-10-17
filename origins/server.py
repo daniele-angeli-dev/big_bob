@@ -354,6 +354,16 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
         v = m.get(k)
         snap[k] = list(v) if isinstance(v, list) else v
     m["storico"] = (m.get("storico") or [])[-59:] + [snap]
+    # previsione delle carte avversarie: prima controllo com'è andata quella del round scorso, poi ne faccio una nuova
+    try:
+        chk = archetype.check_previous(m)
+        if chk:
+            m["previsioni"] = (m.get("previsioni") or [])[-39:] + [chk]
+        pr = archetype.predict(m)
+        m["previsione"] = {"turno": m.get("turno"), "viste": dict(evaluate.seen_opp(m)),
+                           "carte": [x["carta"] for x in (pr.get("giocabili") or pr.get("carte") or [])[:4]]}
+    except Exception:  # noqa: BLE001
+        pass
     save("match", m)
     view = _match_view(m)
     if my_deck_left is not None:
@@ -448,7 +458,13 @@ def _odds_summary(m: dict, top: int = 6) -> str:
                        and store.find("cards", c)["costo"] <= mana + 1)
         lines.append(f"- Pescata giocabile al prossimo round (costo ≤{mana + 1}): "
                      f"{round(odds.p_at_least_one(rem_n, playable, 1) * 100)}%")
-    if m.get("avv_mano") is not None:
+    try:
+        pr = archetype.predict(m)
+    except Exception:  # noqa: BLE001
+        pr = {}
+    if m.get("avv_mano") is not None and pr.get("carte"):
+        pass  # la mano avversaria è nella PREVISIONE qui sotto (dal mazzo stimato, con le varianti)
+    elif m.get("avv_mano") is not None:
         seen_o = dict(evaluate.seen_opp(m))
         o = odds.opponent_hand_odds(load("meta"), m.get("avv_leggendaria") or None, seen_o, m["avv_mano"])
         arch = ", ".join(f"{a['nome']} {round(a['peso'] * 100)}%" for a in o.get("archetipi_compatibili", [])[:3])
@@ -465,8 +481,17 @@ def _odds_summary(m: dict, top: int = 6) -> str:
         line = archetype.summary(ident)
         if line:
             lines.append(f"\nMAZZO AVVERSARIO (dalle carte viste confrontate con i mazzi del meta): {line}")
-            if ident.get("contro"):
-                lines.append(f"- Come giocarci contro (solo in allenamento/creazione): {ident['contro']}")
+            lines += archetype.predict_lines(pr)
+        last = (m.get("previsioni") or [None])[-1]
+        if last and last.get("turno") != m.get("turno"):
+            ok = ", ".join(f"{c} ✓" for c in last["azzeccate"])
+            ko = ", ".join(f"{c} ✗" for c in last["sorprese"])
+            lines.append(f"- Previsione del round {last.get('turno')}: avevo previsto {', '.join(last['previste']) or 'niente'}"
+                         f" → ha giocato {', '.join(x for x in (ok, ko) if x)}"
+                         + (" (le ✗ sono sorprese: se insegnano qualcosa, registra una lezione nel turno di "
+                            "apprendimento)" if last["sorprese"] else ""))
+        if line and ident.get("contro"):
+            lines.append(f"- Come giocarci contro (solo in allenamento/creazione): {ident['contro']}")
     except Exception as e:  # noqa: BLE001
         lines.append(f"- Mazzo avversario non stimato: {e}")
     return "\n".join(lines)

@@ -1438,7 +1438,15 @@ class Controller:
     def _opp_deck(m: dict):
         from origins import archetype
         try:
-            return archetype.short(archetype.identify(m))
+            sh = archetype.short(archetype.identify(m))
+            pr = archetype.predict(m)
+            probs = [{"carta": x["carta"], "p": round(x["p_mano"] * 100)}
+                     for x in (pr.get("giocabili") or pr.get("carte") or [])[:3]]
+            if sh is None and probs:
+                sh = {"tipo": "?", "p": None, "mazzo": None, "p_mazzo": None, "viste": 0}
+            if sh is not None:
+                sh["probabili"] = probs
+            return sh
         except Exception:  # noqa: BLE001
             log.exception("mazzo avversario")
             return None

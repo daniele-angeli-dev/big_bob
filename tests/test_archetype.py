@@ -109,6 +109,46 @@ last = store.load("matches")[-1]
 check(last.get("tipo_avversario") == "Control" and last.get("mazzo_avversario_stimato") == "Night Control (OriginsMeta)",
       "la partita salva tipo e mazzo avversario")
 
+print("5. previsione delle carte avversarie")
+m = match(["Lenta 1", "Magia 2"], hand=4)
+m.update({"mana": 5, "barrier_mie": [20, 6, 20]})
+pr = archetype.predict(m)
+names = [x["carta"] for x in pr["carte"]]
+check(pr["tipo"] == "Control" and all(n.startswith(("Lenta", "Magia")) for n in names),
+      f"carte probabili dal mazzo stimato: {names}")
+check(all(x["costo"] <= 5 for x in pr["giocabili"]) and pr["giocabili"], f"giocabili con 5 mana: {pr['giocabili']}")
+check(0.5 < pr["p_giocabile"] <= 1, f"probabilità di avere una giocata: {pr['p_giocabile']}")
+check(pr["minaccia"] and pr["minaccia"]["carta"].startswith("Lenta"), f"minaccia: {pr['minaccia']}")
+check(pr["piano"] and "rimozioni" in pr["piano"] and pr["bersaglio"] == "", "piano tipico del Control, senza bersaglio")
+_orig = archetype._card_rounds
+archetype._card_rounds = lambda: {"lenta-3": 2.0, "magia-1": 6.0, "lenta-4": 9.0}  # round medio da OriginsMeta
+pt = archetype.predict({**m, "turno": 6})
+archetype._card_rounds = _orig
+check(pt["giocabili"][0]["carta"] == "Magia 1", f"il round tipico conta: {[x['carta'] for x in pt['giocabili']]}")
+pa = archetype.predict({**match(["Rapida 1", "Rapida 2"], hand=3), "mana": 2, "barrier_mie": [20, 6, 20]})
+check(pa["tipo"] == "Aggro" and "centro" in pa["bersaglio"], f"Aggro punta la corsia più bassa: {pa['bersaglio']}")
+check(all((x["costo"] or 0) <= 2 for x in pa["giocabili"]), "solo carte da 2 mana")
+lines = archetype.predict_lines(pr)
+check(lines[0].startswith("PREVISIONE AVVERSARIO") and any("Minaccia principale" in x for x in lines), "righe per update_match")
+check(archetype.predict(match([], hand=None))["carte"] == [], "senza carte in mano note: niente percentuali")
+
+print("6. previsione verificata round per round")
+call("start_match", my_deck="Test", opponent_legendary="Dracula")
+call("update_match", turn=3, mana=4, opp_played=["Lenta 1"], opp_hand_size=4)
+prev = store.load("match")["previsione"]
+check(prev["carte"] and prev["turno"] == 3, f"previsione salvata: {prev['carte']}")
+out = call("update_match", turn=4, mana=5, opp_played=["Lenta 1", prev["carte"][0], "Rapida 7"], opp_hand_size=3)
+pv = store.load("match")["previsioni"][-1]
+check(pv["azzeccate"] == [prev["carte"][0]] and pv["sorprese"] == ["Rapida 7"], f"confronto: {pv}")
+check("Previsione del round 3" in out and "Rapida 7 ✗" in out and "PREVISIONE AVVERSARIO" in out, "update_match lo dice")
+import controller as _ctl  # noqa: E402
+hud = _ctl.Controller._opp_deck(store.load("match"))
+check(hud and len(hud["probabili"]) >= 1 and "p" in hud["probabili"][0], f"finestra: {hud and hud['probabili']}")
+call("end_match", result="sconfitta")
+from origins import report  # noqa: E402
+report.LOGS = tmp / "logs"
+check("CARTE AVVERSARIE PREVISTE" in report.stats_body(), "statistiche: precisione delle previsioni")
+
 shutil.rmtree(tmp, ignore_errors=True)
 print("\nFALLITI:", len(FAILED))
 sys.exit(1 if FAILED else 0)

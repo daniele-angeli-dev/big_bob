@@ -91,20 +91,8 @@ def _prior(a: dict) -> float:
     return a.get("volte_visto", 0) + 0.5 * (a.get("community") or 0) + 1
 
 
-def identify(m: dict, meta: list[dict] | None = None, top: int = 3) -> dict:
-    """Mazzi più probabili dell'avversario e tipo, dalle carte viste nella partita m."""
-    from origins import evaluate
-    meta = meta if meta is not None else store.load("meta")
-    leg = (m.get("avv_leggendaria") or "").strip()
-    seen = [c for c in evaluate.seen_opp(m) if store.slug(c) != store.slug(leg)]
-    cands = [a for a in meta if a.get("carte") and (not leg or store.slug(a.get("leggendaria", "")) == store.slug(leg))]
-    out = {"leggendaria": leg or None, "carte_viste": len(seen), "mazzi": [], "tipi": {}, "tipo": None}
-    if not cands:
-        if len(seen) >= 3:
-            t = curve_type(seen)
-            out["tipo"] = {**t, "p": None, "da": "curva delle carte viste (nessun mazzo del meta per questa leggendaria)"}
-            out["contro"] = CONTRO.get(t["etichetta"], CONTRO.get(t["base"], ""))
-        return out
+def _posterior(cands: list[dict], seen: list[str]) -> list[tuple[float, dict, list[str]]]:
+    """[(probabilità, mazzo, carte viste fuori lista)] dal più probabile."""
     scored = []
     for a in cands:
         pool = {store.slug(c) for c in a["carte"]}
@@ -112,7 +100,29 @@ def identify(m: dict, meta: list[dict] | None = None, top: int = 3) -> dict:
         scored.append((math.log(_prior(a)) + len(miss) * math.log(FUORI_LISTA), a, miss))
     mx = max(s for s, _, _ in scored)
     tot = sum(math.exp(s - mx) for s, _, _ in scored)
-    post = sorted(((math.exp(s - mx) / tot, a, miss) for s, a, miss in scored), key=lambda x: -x[0])
+    return sorted(((math.exp(s - mx) / tot, a, miss) for s, a, miss in scored), key=lambda x: -x[0])
+
+
+def _candidates(m: dict, meta: list[dict]) -> tuple[str, list[str], list[dict]]:
+    from origins import evaluate
+    leg = (m.get("avv_leggendaria") or "").strip()
+    seen = [c for c in evaluate.seen_opp(m) if store.slug(c) != store.slug(leg)]
+    cands = [a for a in meta if a.get("carte") and (not leg or store.slug(a.get("leggendaria", "")) == store.slug(leg))]
+    return leg, seen, cands
+
+
+def identify(m: dict, meta: list[dict] | None = None, top: int = 3) -> dict:
+    """Mazzi più probabili dell'avversario e tipo, dalle carte viste nella partita m."""
+    meta = meta if meta is not None else store.load("meta")
+    leg, seen, cands = _candidates(m, meta)
+    out = {"leggendaria": leg or None, "carte_viste": len(seen), "mazzi": [], "tipi": {}, "tipo": None}
+    if not cands:
+        if len(seen) >= 3:
+            t = curve_type(seen)
+            out["tipo"] = {**t, "p": None, "da": "curva delle carte viste (nessun mazzo del meta per questa leggendaria)"}
+            out["contro"] = CONTRO.get(t["etichetta"], CONTRO.get(t["base"], ""))
+        return out
+    post = _posterior(cands, seen)
     tipi: dict[str, float] = {}
     for p, a, _ in post:
         t = deck_type(a)
@@ -166,4 +176,185 @@ def short(ident: dict) -> dict | None:
     return {"tipo": t["etichetta"] + (f" · {t['sottotipo']}" if t.get("sottotipo") else ""),
             "p": round(t["p"] * 100) if t.get("p") is not None else None,
             "mazzo": d["nome"] if d else None, "p_mazzo": round(d["p"] * 100) if d else None,
-            "viste": ident.get("carte_viste", 0)}
+            "viste": ident.get("carte_viste", 0), "probabili": ident.get("probabili") or []}
+
+
+# ============================================================================ previsione delle carte avversarie
+
+PIANO = {
+    "Aggro": "riempie in fretta le corsie con creature economiche e punta la tua barrier più bassa o una corsia vuota",
+    "Midrange (aggro)": "mette pressione con creature medie fin dai primi round e cerca scambi favorevoli",
+    "Midrange": "occupa le corsie con creature solide e cerca di vincere gli scambi, senza fretta",
+    "Midrange (control)": "si difende nei primi round e cala creature grosse dal round 5-6",
+    "Control": "trattiene magie e rimozioni per rispondere a ciò che giochi; le minacce grosse arrivano a fine partita",
+    "Combo": "rallenta e cerca i pezzi della combo, poi prova a chiudere tutto in un round",
+}
+DANNO_RE = ("damage", "danni", "danno", "destroy", "distrugg", "deal ")
+
+
+def _card(name: str) -> dict:
+    return store.find("cards", name) or {}
+
+
+def _danger(e: dict) -> float:
+    att = e.get("attacco") if isinstance(e.get("attacco"), (int, float)) else 0
+    txt = str(e.get("testo") or "").lower()
+    return att + (3 if any(k in txt for k in DANNO_RE) else 0)
+
+
+def _target(m: dict, label: str) -> str:
+    """La tua corsia più esposta, per i mazzi che spingono (aggro / midrange aggro)."""
+    if not label.startswith(("Aggro", "Midrange (aggro)", "Midrange")):
+        return ""
+    from origins import combat
+    vals = m.get("barrier_mie") or []
+    if len(vals) < 3 or not all(isinstance(v, (int, float)) for v in vals[:3]):
+        return ""
+    names = ["sinistra", "centro", "destra"]
+    blockers = [0, 0, 0]
+    if m.get("campo"):
+        try:
+            lanes = combat.normalize_board(m["campo"])
+            blockers = [sum(1 for u in ln["mie"] if u) for ln in lanes[:3]]
+        except Exception:  # noqa: BLE001
+            pass
+    i = min(range(3), key=lambda k: (vals[k] + 8 * blockers[k], k))
+    return f"la tua corsia {names[i]} (barrier {vals[i]}{', nessun blocco' if not blockers[i] else ''})"
+
+
+def _card_rounds() -> dict[str, float]:
+    """Round medio in cui ogni carta viene giocata (statistiche di OriginsMeta), se disponibile."""
+    try:
+        from origins import originsmeta
+        st = originsmeta.load_state().get("statistiche") or {}
+        rows = []
+        for key in ("statistiche", "piu_giocati"):
+            rows += (((st.get(key) or {}).get("interpretate") or {}).get("carte") or {}).get("righe") or []
+        return {store.slug(r["nome"]): float(r["round_medio"]) for r in rows
+                if r.get("nome") and isinstance(r.get("round_medio"), (int, float)) and 0 < r["round_medio"] < 20}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _timing(cost, mana, avg_round, turn, label: str) -> float:
+    """Quanto è probabile che una carta che ha in mano venga giocata proprio ora (0-1): conta quanto il costo sfrutta
+    il mana del round, il round in cui di solito si gioca (OriginsMeta) e il tipo di mazzo."""
+    w = 1.0
+    if isinstance(cost, (int, float)) and isinstance(mana, int):
+        spread = 2.5 if label.startswith("Aggro") else 1.6
+        w *= math.exp(-((mana - cost) ** 2) / (2 * spread ** 2))
+        if label.startswith("Aggro") and cost <= 3:
+            w = max(w, 0.8)  # l'aggro gioca le carte economiche appena può
+    if isinstance(turn, int):  # round tipico sconosciuto = valore medio, così chi "è nel suo round" passa davanti
+        w *= math.exp(-((turn - avg_round) ** 2) / (2 * 2.0 ** 2)) if avg_round else 0.6
+    return w
+
+
+def predict(m: dict, meta: list[dict] | None = None, top: int = 6) -> dict:
+    """Cosa ha probabilmente in mano l'avversario e cosa può giocare in questo round, dal mazzo stimato."""
+    from origins import odds
+    meta = meta if meta is not None else store.load("meta")
+    leg, seen, cands = _candidates(m, meta)
+    ident = identify(m, meta)
+    hand = m.get("avv_mano")
+    mana = m.get("mana") if isinstance(m.get("mana"), int) else None
+    out = {"mana": mana, "mano": hand, "carte": [], "giocabili": [], "p_giocabile": None, "minaccia": None,
+           "piano": None, "bersaglio": "", "tipo": (ident.get("tipo") or {}).get("etichetta")}
+    label = out["tipo"] or ""
+    if label:
+        out["piano"] = PIANO.get(label) or PIANO.get(label.split(" ")[0])
+        out["bersaglio"] = _target(m, label)
+    if not cands or not isinstance(hand, int) or hand <= 0:
+        return out
+    from origins import evaluate
+    seen_ct = {store.slug(k): v for k, v in evaluate.seen_opp(m).items()}
+    unseen = max(odds.DECK_SIZE - sum(seen_ct.values()), hand)
+    agg: dict[str, dict] = {}
+    p_play = 0.0
+    for p, a, _ in _posterior(cands, seen):
+        if p < MIN_P:
+            continue
+        full = odds.deck_counts(a.get("leggendaria") or leg, a["carte"])
+        playable_left = 0
+        for c, copies in full.items():
+            left = copies - seen_ct.get(store.slug(c), 0)
+            if left <= 0:
+                continue
+            e = _card(c)
+            cost = e.get("costo") if isinstance(e.get("costo"), (int, float)) else None
+            if mana is not None and cost is not None and cost <= mana:
+                playable_left += left
+            x = agg.setdefault(store.slug(c), {"carta": e.get("nome") or c, "p_mano": 0.0, "costo": cost,
+                                               "attacco": e.get("attacco"), "vita": e.get("vita"),
+                                               "tipo": e.get("tipo"), "pericolo": _danger(e)})
+            x["p_mano"] += p * odds.p_at_least_one(unseen, left, hand)
+        if mana is not None:
+            p_play += p * odds.p_at_least_one(unseen, playable_left, hand)
+    cards = sorted(agg.values(), key=lambda x: -x["p_mano"])
+    rounds = _card_rounds()
+    turn = m.get("turno") if isinstance(m.get("turno"), int) else None
+    for x in cards:
+        x["p_mano"] = round(x["p_mano"], 3)
+        x["giocabile"] = (mana is not None and x["costo"] is not None and x["costo"] <= mana)
+        x["round_medio"] = rounds.get(store.slug(x["carta"]))
+        x["ora"] = round(x["p_mano"] * _timing(x["costo"], mana, x["round_medio"], turn, label), 3) \
+            if x["giocabile"] else 0.0
+    out["carte"] = cards[:top]
+    # le giocate più probabili adesso: in mano, giocabili, e "giuste" per il round e il tipo di mazzo
+    out["giocabili"] = sorted([x for x in cards if x["giocabile"] and x["p_mano"] >= 0.1],
+                              key=lambda x: -x["ora"])[:4]
+    if mana is not None:
+        out["p_giocabile"] = round(p_play, 3)
+    threats = [x for x in cards if (x["giocabile"] or mana is None) and x["p_mano"] >= 0.15 and x["pericolo"] > 0]
+    if threats:
+        t = max(threats, key=lambda x: (x["ora"] or x["p_mano"] * 0.5) * x["pericolo"])
+        out["minaccia"] = {"carta": t["carta"], "p_mano": t["p_mano"], "attacco": t["attacco"], "vita": t["vita"]}
+    return out
+
+
+def predict_lines(pr: dict) -> list[str]:
+    """Le righe della PREVISIONE per update_match."""
+    if not pr:
+        return []
+    pc = lambda x: f"{round(x * 100)}%"  # noqa: E731
+    lines = []
+    head = "PREVISIONE AVVERSARIO (questo round" + (f", mana {pr['mana']}" if pr.get("mana") is not None else "") + \
+        (f", {pr['mano']} carte in mano" if pr.get("mano") is not None else "") + "):"
+    if pr.get("carte"):
+        lines.append(head)
+        lines.append("- In mano probabilmente: " + " · ".join(
+            f"{x['carta']} {pc(x['p_mano'])}" + (f" (costo {x['costo']}{', giocabile' if x['giocabile'] else ''})"
+                                               if x.get("costo") is not None else "") for x in pr["carte"]))
+        if pr.get("p_giocabile") is not None:
+            lines.append(f"- Può giocare almeno una carta da ≤{pr['mana']} questo round: {pc(pr['p_giocabile'])}"
+                         + (f"; le giocate più probabili adesso (mana, round tipico, tipo di mazzo): "
+                            f"{', '.join(x['carta'] for x in pr['giocabili'])}" if pr.get("giocabili") else ""))
+        if pr.get("minaccia"):
+            t = pr["minaccia"]
+            stats = f" {t['attacco']}/{t['vita']}" if t.get("attacco") is not None and t.get("vita") is not None else ""
+            lines.append(f"- Minaccia principale: {t['carta']}{stats} ({pc(t['p_mano'])} in mano)")
+    elif pr.get("piano"):
+        lines.append(head.replace("):", "): nessuna lista del meta per stimare le carte; solo il tipo di mazzo"))
+    if pr.get("piano"):
+        lines.append(f"- Piano tipico ({pr['tipo']}): {pr['piano']}"
+                     + (f"; bersaglio probabile: {pr['bersaglio']}" if pr.get("bersaglio") else ""))
+    return lines
+
+
+def check_previous(m: dict) -> dict | None:
+    """Confronta la previsione del round scorso con ciò che l'avversario ha giocato davvero (per imparare)."""
+    prev = m.get("previsione")
+    if not prev:
+        return None
+    from origins import evaluate
+    now = evaluate.seen_opp(m)
+    before = {k: v for k, v in (prev.get("viste") or {}).items()}
+    played = []
+    for k, v in now.items():
+        played += [k] * max(0, v - before.get(k, 0))
+    if not played:
+        return None
+    predicted = {store.slug(c) for c in prev.get("carte") or []}
+    return {"turno": prev.get("turno"), "previste": prev.get("carte") or [], "giocate": played,
+            "azzeccate": [c for c in played if store.slug(c) in predicted],
+            "sorprese": [c for c in played if store.slug(c) not in predicted]}

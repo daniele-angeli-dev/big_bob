@@ -154,6 +154,8 @@ def stats_body() -> str:
                     followed[1] += 1
     times = _times()
     ls = lessons.load()
+    pred_hit = sum(len(p.get("azzeccate") or []) for g in games for p in g.get("previsioni") or [])
+    pred_all = sum(len(p.get("giocate") or []) for g in games for p in g.get("previsioni") or [])
     tiles = [
         (str(len(games)), "PARTITE"),
         (f"{len(wins) / len(games) * 100:.0f}%" if games else "–", "WINRATE"),
@@ -162,6 +164,7 @@ def stats_body() -> str:
         (f"{followed[0] / followed[2] * 100:.0f}%" if followed[2] else "–", "CONSIGLI SEGUITI"),
         (f"{followed[1] / followed[0] * 100:.0f}%" if followed[0] else "–", "…E ANDATI BENE"),
         (str(sum(1 for x in ls if x.get("stato") == "confermata")), "LEZIONI CONFERMATE"),
+        (f"{pred_hit / pred_all * 100:.0f}%" if pred_all else "–", "CARTE AVVERSARIE PREVISTE"),
     ]
     body = [f"<p class='sub'>{len(games)} partite registrate · aggiornato {store.now()}</p>",
             "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles)
