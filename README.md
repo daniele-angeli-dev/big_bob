@@ -13,6 +13,10 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Contatori dei mazzi corretti**: le carte giocate si sommano round dopo round invece di sparire quando non sono più
+  sul campo; il numero letto sullo schermo non resta fermo nei round dopo (scala di una pescata a round); il conto non
+  scende mai sotto le regole (4 iniziali + 1 a round) e la carta del potere leggendario non conta come pescata. BIG-BOB
+  impara da solo, dai numeri letti, se si pesca anche al round 1. Passando il mouse sul numero vedi da dove viene.
 - AUTO spento si spegne davvero: le analisi automatiche ancora in coda vengono scartate, quindi niente più catture e
   finestra che sparisce e ricompare dopo averlo disattivato. REGISTRA non fa più lampeggiare la finestra: i fotogrammi
   si prendono senza nasconderla (la zona di BIG-BOB resta nera, come per l'osservatore).

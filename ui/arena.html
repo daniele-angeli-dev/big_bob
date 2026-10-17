@@ -471,15 +471,15 @@ body.inmatch .score .l{font-size:11px}
       c.setAttribute('aria-label', c.title);
     });
     var c = m.contatori || {};
-    function cnt(el, who, deck, est, hand){
+    function cnt(el, who, deck, est, hand, how){
       el.innerHTML = '';
       el.appendChild(document.createTextNode(who + ' · MAZZO '));
-      var b1 = document.createElement('b'); b1.textContent = deck != null ? deck : '–'; if (est) b1.className = 'est'; b1.title = est ? 'stimato dalle carte uscite' : 'letto dallo schermo'; el.appendChild(b1);
+      var b1 = document.createElement('b'); b1.textContent = deck != null ? deck : '–'; if (est) b1.className = 'est'; b1.title = est ? 'stimato (' + (how || 'carte uscite') + ')' : 'letto dallo schermo in questo round'; el.appendChild(b1);
       el.appendChild(document.createTextNode(' · MANO '));
       var b2 = document.createElement('b'); b2.textContent = hand != null ? hand : '–'; el.appendChild(b2);
     }
-    cnt($('hCntMe'), 'TU', c.mio_mazzo, c.mio_mazzo_stimato, c.mia_mano);
-    cnt($('hCntOpp'), 'AVV', c.avv_mazzo, c.avv_mazzo_stimato, c.avv_mano);
+    cnt($('hCntMe'), 'TU', c.mio_mazzo, c.mio_mazzo_stimato, c.mia_mano, c.mio_mazzo_come);
+    cnt($('hCntOpp'), 'AVV', c.avv_mazzo, c.avv_mazzo_stimato, c.avv_mano, c.avv_mazzo_come);
     var od = m.avv_mazzo;
     $('hOppDeck').classList.toggle('hidden', !od || od.tipo === '?');
     var pl = (od && od.probabili) || [];

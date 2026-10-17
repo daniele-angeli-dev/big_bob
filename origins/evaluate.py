@@ -38,25 +38,84 @@ def seen_opp(m: dict) -> Counter:
     return _subtract(seen, Counter(m.get("avv_creati", [])))
 
 
+MANO_INIZIALE = 4
+
+
+def draw_offset(side: str) -> int:
+    """Correzione imparata dai contatori letti sullo schermo (es. se si pesca anche al round 1): 0 se non si sa."""
+    try:
+        v = int((store.load("config").get("contatori_offset") or {}).get(side, 0))
+        return max(-2, min(3, v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _out_by_rules(turn, side: str) -> int:
+    """Carte uscite dal mazzo come minimo secondo le regole: mano iniziale + una pescata a round."""
+    t = turn if isinstance(turn, int) and turn > 0 else 1
+    return MANO_INIZIALE + (t - 1) + draw_offset(side)
+
+
+def _deck_estimate(m: dict, side: str, out_tracked: int | None) -> tuple[int | None, bool, str]:
+    """(carte nel mazzo, stimato?, come). Le fonti, dalla più affidabile:
+    1. il numero letto sullo schermo in QUESTO round;
+    2. l'ultimo numero letto in un round precedente, meno una pescata per ogni round passato;
+    3. il massimo tra le carte uscite secondo le regole (mano iniziale + 1 a round) e quelle viste uscire.
+    Le stime 2 e 3 sono "almeno": si prende quella con più carte uscite (le pescate extra le alzano)."""
+    turn = m.get("turno")
+    vis = (m.get("mazzi_visti") or {}).get(side)
+    if vis and vis.get("turno") == turn and isinstance(vis.get("carte"), int):
+        return vis["carte"], False, "letto sullo schermo"
+    outs = [(_out_by_rules(turn, side), "regole (mano iniziale + 1 a round)")]
+    if out_tracked is not None:
+        outs.append((out_tracked, "carte viste uscire"))
+    if vis and isinstance(vis.get("carte"), int) and isinstance(vis.get("turno"), int) and isinstance(turn, int):
+        outs.append((DECK_SIZE - vis["carte"] + max(0, turn - vis["turno"]), f"letto al round {vis['turno']} + pescate"))
+    out, how = max(reversed(outs), key=lambda x: x[0])  # a parità vale la fonte più concreta (numero letto)
+    return max(0, DECK_SIZE - out), True, how
+
+
 def counters(m: dict) -> dict:
-    """{'mio_mazzo', 'mia_mano', 'avv_mazzo', 'avv_mano'} con 'stimato' quando non letto dallo schermo."""
+    """{'mio_mazzo', 'mia_mano', 'avv_mazzo', 'avv_mano'} con 'stimato' quando non letto dallo schermo in questo round."""
     my_hand = len(m.get("mia_mano") or [])
-    my_deck_calc = max(0, DECK_SIZE - sum(seen_mine(m).values()))
-    my_vis = m.get("mazzo_rimasto_visibile")
+    # la carta del potere leggendario arriva in mano senza uscire dal mazzo: se Claude non l'ha segnata tra le
+    # carte create, ne tolgo una dal conto (altrimenti il mazzo risulterebbe sempre con una carta in meno)
+    my_out = sum(seen_mine(m).values()) - (0 if m.get("miei_creati") else 1)
+    mine, mine_est, mine_how = _deck_estimate(m, "mio", max(0, my_out))
     opp_hand = m.get("avv_mano")
-    opp_out = sum(seen_opp(m).values()) + (opp_hand or 0)
-    opp_deck_calc = max(0, DECK_SIZE - opp_out) if opp_hand is not None or opp_out else None
-    opp_vis = m.get("avv_mazzo_visibile")
+    opp_out = None
+    if opp_hand is not None or seen_opp(m):
+        opp_out = max(0, sum(seen_opp(m).values()) + (opp_hand or 0) - (0 if m.get("avv_creati") else 1))
+    opp, opp_est, opp_how = _deck_estimate(m, "avv", opp_out)
     return {
-        "mio_mazzo": my_vis if isinstance(my_vis, int) else my_deck_calc,
-        "mio_mazzo_stimato": not isinstance(my_vis, int),
+        "mio_mazzo": mine, "mio_mazzo_stimato": mine_est, "mio_mazzo_come": mine_how,
         "mia_mano": my_hand,
-        "avv_mazzo": opp_vis if isinstance(opp_vis, int) else opp_deck_calc,
-        "avv_mazzo_stimato": not isinstance(opp_vis, int),
+        "avv_mazzo": opp, "avv_mazzo_stimato": opp_est, "avv_mazzo_come": opp_how,
         "avv_mano": opp_hand,
         "mie_create": len(m.get("miei_creati") or []),
         "avv_create": len(m.get("avv_creati") or []),
     }
+
+
+def learn_offset(m: dict, side: str, visible: int) -> None:
+    """Quando il gioco mostra il numero di carte nel mazzo, imparo come si pesca (es. se anche al round 1):
+    tengo la correzione più piccola osservata nei primi round (le pescate extra da effetti la alzerebbero)."""
+    turn = m.get("turno")
+    if not isinstance(turn, int) or turn < 1 or turn > 4 or not isinstance(visible, int):
+        return
+    obs = (DECK_SIZE - visible) - (MANO_INIZIALE + turn - 1)
+    if not -2 <= obs <= 3:
+        return
+    cfg = store.load("config")
+    offs = dict(cfg.get("contatori_offset") or {})
+    seen = dict(cfg.get("contatori_offset_visti") or {})
+    prev = seen.get(side)
+    seen[side] = obs if prev is None else min(prev, obs)
+    if offs.get(side) != seen[side]:
+        offs[side] = seen[side]
+        cfg["contatori_offset"] = offs
+    cfg["contatori_offset_visti"] = seen
+    store.save("config", cfg)
 
 
 def _fractions(vals, reinf) -> list[float]:

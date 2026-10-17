@@ -285,6 +285,16 @@ def start_match(my_deck: str, opponent_legendary: str = "") -> str:
     return out
 
 
+def _merge_max(old: list[str], new: list[str]) -> list[str]:
+    """Unione per conteggio massimo: ["A","B"] + ["B","B","C"] → ["A","B","B","C"]."""
+    from collections import Counter
+    co, cn = Counter(old), Counter(new)
+    out = list(old)
+    for card, n in cn.items():
+        out += [card] * max(0, n - co.get(card, 0))
+    return out
+
+
 @mcp.tool()
 def update_match(turn: int | None = None, my_hand: list[str] | None = None,
                  my_played: list[str] | None = None, my_discarded: list[str] | None = None,
@@ -296,7 +306,8 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
                  reveals_first: str | None = None, my_deck_left: int | None = None,
                  my_reinforced: list[bool] | None = None, opp_reinforced: list[bool] | None = None,
                  board: dict | None = None, my_created: list[str] | None = None,
-                 opp_created: list[str] | None = None, opp_deck_left: int | None = None, note: str = "") -> str:
+                 opp_created: list[str] | None = None, opp_deck_left: int | None = None, note: str = "",
+                 correct_lists: bool = False) -> str:
     """Aggiorna lo stato della partita con ciò che vedi sullo schermo e restituisce già le probabilità
     (mia prossima pescata, pescata giocabile, mano avversaria): NON serve chiamare anche my_draw_odds o
     opponent_hand_odds, che restano per domande specifiche (es. "entro 2 round"). Le liste di carte sono lo stato
@@ -314,16 +325,33 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
       fonte più affidabile per i contatori).
     my_created / opp_created: lista COMPLETA delle carte arrivate NON dal mazzo (la carta del potere leggendario,
       carte generate da Spellbook o da altri effetti, token): non contano come pescate dal mazzo. Le carte pescate in
-      più da effetti invece vanno normalmente in mano/giocate (vengono dal mazzo)."""
+      più da effetti invece vanno normalmente in mano/giocate (vengono dal mazzo).
+    Giocate, scarti e carte create si sommano a quelle già registrate (una carta giocata non torna indietro): se non
+    vedi più una carta giocata nei round prima (morta, magia già risolta) non serve ripeterla. correct_lists=true
+    sostituisce invece le liste con quelle che passi (solo per correggere un errore di lettura)."""
     m = load("match")
     if not m:
         return "Nessuna partita attiva: usa start_match."
     upd = {"turno": turn, "mia_mano": my_hand, "miei_giocati": my_played, "miei_scartati": my_discarded,
            "avv_giocati": opp_played, "avv_scartati": opp_discarded, "miei_creati": my_created,
            "avv_creati": opp_created}
+    grow_only = {"miei_giocati", "miei_scartati", "avv_giocati", "avv_scartati", "miei_creati", "avv_creati"}
     for k, v in upd.items():
-        if v is not None:
-            m[k] = _canon_list(v) if isinstance(v, list) else v
+        if v is None:
+            continue
+        v = _canon_list(v) if isinstance(v, list) else v
+        if k in grow_only and isinstance(v, list) and not correct_lists:
+            v = _merge_max(m.get(k) or [], v)  # le carte giocate non tornano nel mazzo: si somma, non si sostituisce
+        m[k] = v
+    if my_deck_left is not None or opp_deck_left is not None:
+        seen_decks = m.setdefault("mazzi_visti", {})
+        for side, val in (("mio", my_deck_left), ("avv", opp_deck_left)):
+            if isinstance(val, int) and 0 <= val <= 40:
+                seen_decks[side] = {"turno": m.get("turno"), "carte": val}
+                try:
+                    evaluate.learn_offset(m, side, val)
+                except Exception:  # noqa: BLE001
+                    pass
     # per il laboratorio dei mazzi: carte passate dalla mano e round della prima giocata
     m["viste_in_mano"] = list(dict.fromkeys((m.get("viste_in_mano") or []) + (m.get("mia_mano") or [])))
     first = m.setdefault("prima_giocata", {})
@@ -380,9 +408,10 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
 def _counters_summary(m: dict) -> str:
     c = evaluate.counters(m)
     ev = evaluate.heuristic(m)
-    est = lambda flag: " (stimato)" if flag else ""  # noqa: E731
-    return (f"\n\nCONTATORI: tu mazzo {c['mio_mazzo']}{est(c['mio_mazzo_stimato'])} · mano {c['mia_mano']}"
-            f" | avversario mazzo {c['avv_mazzo'] if c['avv_mazzo'] is not None else '?'}{est(c['avv_mazzo_stimato'])}"
+    est = lambda flag, how: f" (stimato: {how})" if flag else ""  # noqa: E731
+    return (f"\n\nCONTATORI: tu mazzo {c['mio_mazzo']}{est(c['mio_mazzo_stimato'], c['mio_mazzo_come'])} · mano {c['mia_mano']}"
+            f" | avversario mazzo {c['avv_mazzo'] if c['avv_mazzo'] is not None else '?'}"
+            f"{est(c['avv_mazzo_stimato'], c['avv_mazzo_come'])}"
             f" · mano {c['avv_mano'] if c['avv_mano'] is not None else '?'}"
             f"\nSTIMA RAPIDA: vinci al {ev['pct']}% ({ev['motivo']})")
 

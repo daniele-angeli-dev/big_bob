@@ -102,6 +102,10 @@ scartate, magie lanciate, creature morte, carte create, pescate extra. Tutto va 
 generate da Spellbook o da altri effetti, token) vanno in `my_created` / `opp_created` (liste complete): così non
 falsano carte rimaste e probabilità. Le pescate extra da effetti vengono dal mazzo: mettile in mano/giocate come le
 altre. `update_match` restituisce i CONTATORI e una STIMA RAPIDA di chi sta vincendo.
+Giocate, scarti e carte create **si sommano** round dopo round (una carta giocata non torna nel mazzo): non serve
+ripetere quelle dei round prima che non vedi più; se hai letto male una carta usa `correct_lists=true` con le liste
+giuste. Senza numeri sullo schermo BIG-BOB stima il mazzo dall'ultimo numero letto meno una pescata a round, e non
+scende mai sotto le regole (4 carte iniziali + 1 a round): appena il gioco mostra i mazzi, passali sempre.
 
 **Mazzo avversario.** `update_match` restituisce anche MAZZO AVVERSARIO: le liste del meta (OriginsMeta, partite di
 Daniele, cervello comune) più simili alle carte che l'avversario ha giocato, con probabilità, e il tipo di mazzo

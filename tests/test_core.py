@@ -111,10 +111,20 @@ call("update_match", turn=3, my_hand=["Carta 1", "Carta 2", "Carta 5"], my_playe
      my_barriers=[20, 20, 20], opp_barriers=[20, 5, 20], my_destroyed=0, opp_destroyed=1)
 m = store.load("match")
 c_ = evaluate.counters(m)
-assert c_["mio_mazzo"] == 25 - 4 and c_["mio_mazzo_stimato"], c_   # Carta 5 creata: non esce dal mazzo
-assert c_["avv_mazzo"] == 25 - (2 + 4) and c_["avv_mano"] == 4, c_  # Carta 8 creata
+# round 3: almeno 4 (mano iniziale) + 2 pescate fuori dal mazzo, anche se se ne vedono solo 4 (Carta 5 è creata)
+assert c_["mio_mazzo"] == 25 - 6 and c_["mio_mazzo_stimato"] and "regole" in c_["mio_mazzo_come"], c_
+assert c_["avv_mazzo"] == 25 - 6 and c_["avv_mano"] == 4, c_  # 2 giocate (Carta 8 creata) + 4 in mano
 out = call("update_match", turn=3, my_deck_left=19, opp_deck_left=18)
 assert "CONTATORI: tu mazzo 19 · mano 3 | avversario mazzo 18 · mano 4" in out and "STIMA RAPIDA" in out, out
+# round 5 senza numeri sullo schermo: parte dall'ultimo letto e toglie una pescata a round (non resta fermo a 19)
+call("update_match", turn=5, my_played=["Carta 9"])
+c_ = evaluate.counters(store.load("match"))
+assert c_["mio_mazzo"] == 17 and c_["avv_mazzo"] == 16 and "letto al round 3" in c_["mio_mazzo_come"], c_
+mg = store.load("match")["miei_giocati"]
+assert sorted(mg) == ["Carta 3", "Carta 4", "Carta 9"], "le carte giocate si sommano, non spariscono"
+call("update_match", my_played=["Carta 4", "Carta 9"], correct_lists=True)
+assert sorted(store.load("match")["miei_giocati"]) == ["Carta 4", "Carta 9"], "correzione esplicita"
+call("update_match", turn=3)
 ev = evaluate.heuristic(store.load("match"))
 assert ev["pct"] > 55, ev  # una barrier già distrutta e un'altra a 5
 assert set(ev["fattori"]) == {"campo", "mano", "barrier"} and ev["fattori"]["barrier"] == 1, ev
