@@ -14,11 +14,12 @@ import logging
 import os
 import queue
 import re
-import shutil
 import subprocess
 import threading
 import time
 from pathlib import Path
+
+from PIL import Image
 
 from origins import deckproj, evaluate, screen, store, usage
 from origins.voice import Voice
@@ -82,9 +83,10 @@ PROMPT_AUTO = (
     "(modalità {mode}). Se non è cambiato niente di rilevante rispondi solo: '—'."
 )
 PROMPT_OSSERVATORE = (
-    "[OSSERVATORE] Prima della schermata attuale trovi {n} fotogrammi presi da BIG-BOB da quando hai risposto "
+    "[OSSERVATORE] Prima della schermata attuale trovi {n} presi da BIG-BOB da quando hai risposto "
     "l'ultima volta, in ordine di tempo, ognuno con orario e zona dello schermo: di solito sono RITAGLI ad alta "
-    "risoluzione della sola zona cambiata (leggi i nomi delle carte), alcuni presi durante le animazioni (BIG-BOB di solito è invisibile alle catture; se vedi "
+    "risoluzione della sola zona cambiata (leggi i nomi delle carte); quando sono tanti sono affiancati in fogli con i "
+    "ritagli numerati [1], [2]… nello stesso ordine, alcuni presi durante le animazioni (BIG-BOB di solito è invisibile alle catture; se vedi "
     "una zona nera, è la sua finestra). Guardali tutti per ricostruire cosa è successo nel frattempo: carte rivelate o giocate dall'avversario anche se poi distrutte o scartate, magie lanciate, "
     "creature morte in combattimento, carte pescate o create da effetti (Spellbook e simili), barrier colpite. Metti "
     "tutto in update_match (opp_played_new / my_played_new per le carte giocate da allora, opp_discarded / "
@@ -614,8 +616,18 @@ class Controller:
             quit_()
 
     # ------------------------------------------------ meta, carte e location da OriginsMeta
+    def _cleanup_space(self) -> None:
+        """Toglie le immagini che non servono più (vedi origins/spazio.py): la cartella di BIG-BOB non cresce senza limiti."""
+        from origins import spazio
+        try:
+            rep = spazio.cleanup(active=self.journal_dir)
+            log.info("spazio: %s · ora %s", rep, spazio.usage())
+        except Exception:  # noqa: BLE001
+            log.exception("pulizia dello spazio")
+
     def _startup_data(self) -> None:
         """All'avvio, in ordine (scrivono negli stessi file): prima OriginsMeta, poi il cervello comune."""
+        self._cleanup_space()
         try:
             self._startup_meta()
         finally:
@@ -753,15 +765,19 @@ class Controller:
                      "cervello_contribuisci", "cervello_usa", "invisibile_catture")
 
     def get_settings(self) -> None:
-        from origins import cervello, updates
+        from origins import cervello, spazio, updates
         cfg = store.load("config")
         vals = {k: cfg.get(k) for k in self.SETTINGS_KEYS}
+        try:
+            space = {**spazio.usage(), "limite": int(cfg.get("spazio_max_mb") or spazio.DEFAULT_MAX_MB)}
+        except Exception:  # noqa: BLE001
+            space = {}
         vals.setdefault("connessione", "abbonamento")
         vals["connessione"] = vals["connessione"] or "abbonamento"
         vals["api_key_impostata"] = bool(cfg.get("api_key"))
         self.emit({"type": "settings", "valori": vals, "versione": updates.installed_version(),
                    "claude_trovato": bool(self.claude),
-                   "cervello": {"attivo": cervello.enabled(), "riga": cervello.summary_line()}})
+                   "cervello": {"attivo": cervello.enabled(), "riga": cervello.summary_line()}, "spazio": space})
 
     def save_settings(self, vals: dict) -> None:
         import configura
@@ -850,7 +866,7 @@ class Controller:
             except Exception:  # noqa: BLE001
                 pass
             return f"{m.group(1)}data:{mime};base64,{base64.b64encode(data).decode()}{m.group(3)}"
-        return re.sub(r"(src=['\"])([^'\":]+\.png)(['\"])", embed, text)
+        return re.sub(r"(src=['\"])([^'\":]+\.(?:png|jpg))(['\"])", embed, text)
 
     @staticmethod
     def _open_external(path: Path) -> None:
@@ -1128,7 +1144,8 @@ class Controller:
         prompt = (PROMPT_AUTO if auto else PROMPT_TURNO).format(mode=self._mode())
         frames = self._take_obs_frames()
         if frames:
-            prompt = PROMPT_OSSERVATORE.format(n=len(frames)) + prompt
+            n_mom = sum(len(f.get("foglio") or [f]) for f in frames)
+            prompt = PROMPT_OSSERVATORE.format(n=f"{n_mom} momenti in {len(frames)} immagini") + prompt
         self._ask(prompt, label=None if auto else "Analisi round", attach=True, kind="live", frames=frames)
 
     def _do_chat(self, text: str) -> None:
@@ -1148,6 +1165,7 @@ class Controller:
         self.status(f"Scansione salvata · {n} in coda" + (" · ⚠ schermo intero" if warn else ""))
 
     def _do_new_match(self, deck: str) -> None:
+        threading.Thread(target=self._cleanup_space, daemon=True, name="bb-spazio").start()
         with self._obs_lock:
             self.obs_frames = []
         self._obs_n = 0
@@ -1222,16 +1240,18 @@ class Controller:
         if not self.rec_on or self.rec_dir is None:
             return
         self.rec_count += 1
-        name = f"{self.rec_count:04d}_{time.strftime('%H%M%S')}.png"
+        name = f"{self.rec_count:04d}_{time.strftime('%H%M%S')}.jpg"
         if self.ui.is_visible():
             # senza nascondere BIG-BOB (niente lampeggio): invisibile alle catture, o con la sua zona annerita
             img = screen.grab_masked(store.load("config").get("titolo_finestra", "Origins"), self._capture_mask(),
                                      max_width=1920)
-            img.save(self.rec_dir / name)
+            img.convert("RGB").save(self.rec_dir / name, "JPEG", quality=88)
             self.last_capture = time.time()
         else:
             p = self.hidden_capture(self.rec_dir)
-            p.rename(p.with_name(name))
+            with Image.open(p) as im:
+                im.convert("RGB").save(p.with_name(name), "JPEG", quality=88)
+            p.unlink(missing_ok=True)
         self.status(f"Registrazione: {self.rec_count} fotogrammi")
 
     # ------------------------------------------------ osservatore: la partita tra un F8 e l'altro
@@ -1248,40 +1268,102 @@ class Controller:
             log.exception("fotogramma dell'osservatore non salvato")
 
     def _observe_img(self, img, grid, score: float, moving: bool) -> None:
+        """Mette il fotogramma in coda per il salvataggio: il ciclo di osservazione non aspetta il disco."""
+        from origins import observer
+        bbox = observer.changed_bbox(grid) if grid else None
+        item = {"img": img, "bbox": bbox, "score": score, "t": time.time(), "ora": time.strftime("%H:%M:%S"),
+                "moving": moving}
+        if getattr(self, "_obs_async", False):
+            try:
+                self._obs_save_q.put_nowait(item)
+                return
+            except Exception:  # noqa: BLE001  (coda piena: lo salvo subito)
+                pass
+        self._save_obs(item)
+
+    def _obs_saver(self) -> None:
+        while not self._stop.is_set():
+            try:
+                item = self._obs_save_q.get(timeout=0.5)
+            except Exception:  # noqa: BLE001
+                continue
+            try:
+                self._save_obs(item)
+            finally:
+                self._obs_save_q.task_done()
+
+    def _obs_flush(self, timeout: float = 1.5) -> None:
+        """Aspetta che i fotogrammi in coda siano salvati (all'F8 servono anche quelli degli ultimi istanti)."""
+        q = getattr(self, "_obs_save_q", None)
+        end = time.time() + timeout
+        while q is not None and q.unfinished_tasks and time.time() < end:
+            time.sleep(0.02)
+
+    def _save_obs(self, item: dict) -> None:
         from origins import observer
         try:
             self._journal("")
             folder = self.journal_dir / "osservatore"
             folder.mkdir(exist_ok=True)
             self._obs_n += 1
-            stamp = time.strftime("%H%M%S")
+            stamp = time.strftime("%H%M%S", time.localtime(item["t"]))
             full = folder / f"{self._obs_n:04d}_{stamp}.jpg"
-            rgb = img.convert("RGB")
-            rgb.save(full, "JPEG", quality=75, optimize=True)
-            bbox = observer.changed_bbox(grid) if grid else None
+            rgb = item["img"].convert("RGB")
+            small = rgb if rgb.width <= 1600 else rgb.resize((1600, int(rgb.height * 1600 / rgb.width)), Image.BILINEAR)
+            small.save(full, "JPEG", quality=72)
+            bbox = item["bbox"]
             part = full
             if bbox and (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) < 0.7:
                 part = folder / f"{self._obs_n:04d}_{stamp}_zona.jpg"
-                observer.crop(rgb, bbox).save(part, "JPEG", quality=82, optimize=True)
+                observer.crop(rgb, bbox).save(part, "JPEG", quality=85)  # dalla risoluzione piena: testo leggibile
             with self._obs_lock:
-                self.obs_frames.append({"path": part, "intera": full, "score": score, "t": time.time(),
-                                        "ora": time.strftime("%H:%M:%S"), "zona": observer.position_label(bbox),
-                                        "movimento": moving})
-                self.obs_frames = self.obs_frames[-150:]
-            old = sorted(folder.glob("*.jpg"))
-            for f in old[:-self.OBS_MAX_KEEP]:
-                f.unlink(missing_ok=True)
+                self.obs_frames.append({"path": part, "intera": full, "score": item["score"], "t": item["t"],
+                                        "ora": item["ora"], "zona": observer.position_label(bbox), "bbox": bbox,
+                                        "movimento": item["moving"]})
+                self.obs_frames = self.obs_frames[-400:]
+                self.obs_saved = getattr(self, "obs_saved", 0) + 1
+            if self._obs_n % 20 == 0:
+                old = sorted(folder.glob("*.jpg"))
+                for f in old[:-self.OBS_MAX_KEEP]:
+                    f.unlink(missing_ok=True)
         except Exception:  # noqa: BLE001
             log.exception("fotogramma dell'osservatore non salvato")
 
     def _take_obs_frames(self) -> list[dict]:
-        """I fotogrammi da allegare all'F8: uno per ogni tratto della sequenza (il più cambiato) più i più cambiati,
-        in ordine di tempo, con orario e zona; poi si azzera."""
+        """I fotogrammi da allegare all'F8, in ordine di tempo: senza i doppioni della stessa animazione e, se sono
+        tanti, affiancati in fogli da 2-4 ritagli (al massimo OBS_MAX_ATTACH immagini). Poi si azzera."""
         from origins import observer
+        self._obs_flush()
         with self._obs_lock:
             frames, self.obs_frames = self.obs_frames, []
+            saved, self.obs_saved = getattr(self, "obs_saved", 0), 0
         frames = [f for f in frames if Path(f["path"]).exists()]
-        return observer.select(frames, self.OBS_MAX_ATTACH)
+        groups = observer.plan(frames, self.OBS_MAX_ATTACH)
+        out, n = [], 0
+        for g in groups:
+            if len(g) == 1:
+                n += 1
+                out.append({**g[0], "num": str(n)})
+                continue
+            try:
+                ims, labs = [], []
+                for f in g:
+                    n += 1
+                    with Image.open(f["path"]) as im:
+                        ims.append(im.convert("RGB"))
+                    labs.append(str(n))
+                p = Path(g[0]["path"]).with_name(Path(g[0]["path"]).stem + "_foglio.jpg")
+                observer.sheet(ims, labs).save(p, "JPEG", quality=85)
+                out.append({"path": p, "foglio": [{**f, "num": lab} for f, lab in zip(g, labs)], "t": g[0]["t"],
+                            "ora": g[0]["ora"], "zona": "", "score": max(f["score"] for f in g)})
+            except Exception:  # noqa: BLE001
+                log.exception("foglio dell'osservatore")
+                out += g
+        kept = sum(len(x.get("foglio") or [x]) for x in out)
+        self.obs_stats = {"salvati": len(frames), "momenti": kept, "immagini": len(out), "da_quando": saved,
+                          "ciclo": round(getattr(self, "_obs_cycle", 0.0), 2)}
+        log.info("osservatore: %s", self.obs_stats)
+        return out
 
     # ------------------------------------------------ cattura con finestra nascosta
     def _capture_mask(self):
@@ -1342,8 +1424,9 @@ class Controller:
         if shot is not None:
             try:
                 self._journal("")
-                dest = self.journal_dir / f"{self.req_n:02d}.png"
-                shutil.copy(shot, dest)
+                dest = self.journal_dir / f"{self.req_n:02d}.jpg"  # JPEG: ~10 volte più leggero del PNG, leggibile
+                with Image.open(shot) as im:
+                    im.convert("RGB").save(dest, "JPEG", quality=85)
                 img_note = f" · schermata {dest.name}"
             except Exception:  # noqa: BLE001
                 log.exception("copia schermata nel diario fallita")
@@ -1364,13 +1447,22 @@ class Controller:
                 data = base64.b64encode(path.read_bytes()).decode()
             except OSError:
                 continue
-            if isinstance(f, dict):
-                content.append({"type": "text", "text": f"Fotogramma {i}/{n_frames} · {f.get('ora', '')} · zona cambiata: "
-                                                        f"{f.get('zona', '')}{' (durante un’animazione)' if f.get('movimento') else ''}"})
+            if isinstance(f, dict) and f.get("foglio"):
+                parts = [f"[{x['num']}] {x.get('ora', '')} {x.get('zona', '')}"
+                         f"{' (animazione)' if x.get('movimento') else ''}" for x in f["foglio"]]
+                content.append({"type": "text", "text": f"Immagine {i}/{n_frames}: foglio con {len(parts)} ritagli "
+                                                        f"numerati, in ordine di tempo: " + " · ".join(parts)})
+            elif isinstance(f, dict):
+                content.append({"type": "text", "text": f"Immagine {i}/{n_frames} · [{f.get('num', i)}] {f.get('ora', '')}"
+                                                        f" · zona cambiata: {f.get('zona', '')}"
+                                                        f"{' (durante un’animazione)' if f.get('movimento') else ''}"})
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data}})
         if frames:
             names = [(Path(f["path"]) if isinstance(f, dict) else Path(f)).name for f in frames]
-            self._journal(f"Osservatore: {len(frames)} fotogrammi allegati ({', '.join(names)})")
+            st = getattr(self, "obs_stats", None) or {}
+            extra = (f" · {st.get('momenti')} momenti da {st.get('salvati')} fotogrammi salvati, ciclo "
+                     f"{st.get('ciclo')} s") if st else ""
+            self._journal(f"Osservatore: {len(frames)} immagini allegate{extra} ({', '.join(names)})")
         if attach and shot is not None:
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/png",
                                                          "data": base64.b64encode(shot.read_bytes()).decode()}})
@@ -1559,26 +1651,39 @@ class Controller:
         def d(a, b):
             return ImageStat.Stat(ImageChops.difference(a, b)).mean[0]
 
+        import queue
+        self._obs_save_q = queue.Queue(maxsize=60)
+        self._obs_async = True
+        threading.Thread(target=self._obs_saver, daemon=True, name="bb-osservatore").start()
         prev = ref_rec = ref_auto = ref_obs = None
         last_rec = last_obs = 0.0
+        cfg, cfg_t = {}, 0.0
+        period = 0.3
         while not self._stop.is_set():
-            observing = self._match_active and store.load("config").get("osservatore", True)
-            time.sleep(0.35 if observing else 0.7)  # in partita guarda più spesso: gli effetti durano poco
+            t0 = time.time()
+            if t0 - cfg_t > 1.0:  # la configurazione si rilegge al massimo una volta al secondo
+                cfg, cfg_t = store.load("config"), t0
+            observing = self._match_active and cfg.get("osservatore", True)
             if not (self.auto_on or self.rec_on or observing):
                 prev = ref_rec = ref_auto = ref_obs = None
+                time.sleep(0.7)
                 continue
-            if self.capturing or time.time() - self.last_capture < 1.0:
+            excluded = getattr(self, "capture_excluded", False)
+            # con BIG-BOB invisibile alle catture l'F8 non nasconde la finestra: si può continuare a guardare
+            if not excluded and (self.capturing or time.time() - self.last_capture < 1.0):
+                time.sleep(0.2)
                 continue
-            title = store.load("config").get("titolo_finestra", "Origins")
+            title = cfg.get("titolo_finestra", "Origins")
             try:
                 mask = self._capture_mask()
-                if observing:  # una sola cattura: serve sia a capire cosa cambia sia a salvare il fotogramma
-                    img = screen.grab_masked(title, mask, max_width=1600)
+                if observing:  # una sola cattura veloce a piena risoluzione: per capire cosa cambia e per i ritagli
+                    img = screen.grab_fast(title, mask)
                     sig = observer.signature(img)
                 else:
                     img = None
                     sig = screen.thumbnail_signature(title, mask=mask)
             except Exception:  # noqa: BLE001
+                time.sleep(0.5)
                 continue
             if prev is None:
                 prev = ref_rec = ref_auto = ref_obs = sig
@@ -1588,18 +1693,20 @@ class Controller:
             prev = sig
             now_t = time.time()
             if observing and img is not None:
-                # osservatore: salva quando una zona cambia, anche durante le animazioni (rivelazioni, magie e
-                # combattimento durano poco e non aspettano che lo schermo si fermi)
+                # osservatore: salva ogni volta che una zona cambia rispetto all'ultimo fotogramma salvato, anche
+                # durante le animazioni; i doppioni della stessa animazione si tolgono dopo, all'F8
                 if ref_obs is None:
                     ref_obs = sig
                 else:
                     loc, _glob, grid = observer.cell_diff(sig, ref_obs)
-                    gap = now_t - last_obs
-                    if loc > self.OBS_LOCAL_T and ((not moving and gap >= 0.6) or (moving and gap >= 1.0)):
+                    if loc > self.OBS_LOCAL_T and now_t - last_obs >= 0.3:
                         self._observe_img(img, grid, loc, moving)
                         ref_obs, last_obs = sig, now_t
             else:
                 ref_obs = None
+            elapsed = time.time() - t0
+            self._obs_cycle = elapsed if not getattr(self, "_obs_cycle", 0) else self._obs_cycle * 0.9 + elapsed * 0.1
+            time.sleep(max(0.05, (period if observing else 0.7) - elapsed))  # ritmo costante, non sleep + lavoro
             if moving:
                 continue
             if self.rec_on:

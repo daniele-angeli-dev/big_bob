@@ -882,7 +882,7 @@ def recording_frames(nome: str, da: int = 0, quanti: int = 10) -> str:
     d = screen.RECORDINGS / nome
     if not d.is_dir():
         return f"Registrazione '{nome}' non trovata"
-    frames = sorted(d.glob("*.png"))
+    frames = screen.frames_in(d)
     return _j({"totale": len(frames), "da": da, "fotogrammi": [str(p) for p in frames[da:da + quanti]]})
 
 

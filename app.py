@@ -19,8 +19,12 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 (ROOT / "logs").mkdir(exist_ok=True)
-logging.basicConfig(filename=ROOT / "logs" / "bigbob.log", level=logging.INFO, encoding="utf-8",
-                    format="%(asctime)s %(levelname)s %(message)s")
+from logging.handlers import RotatingFileHandler  # noqa: E402
+
+# il registro non cresce oltre ~10 MB: a 5 MB diventa bigbob.log.1 (si tiene un solo file vecchio)
+logging.basicConfig(handlers=[RotatingFileHandler(ROOT / "logs" / "bigbob.log", maxBytes=5_000_000, backupCount=1,
+                                                  encoding="utf-8")],
+                    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("bigbob")
 PAGE_LOAD_WAIT = 60
 if sys.stderr is None:  # pythonw non ha console

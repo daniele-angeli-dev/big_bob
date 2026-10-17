@@ -216,5 +216,36 @@ assert "Remove-Item" in collegamenti.build_script(remove=True)
 assert collegamenti._ps_quote("C:\\Daniele's\\x") == "'C:\\Daniele''s\\x'"
 assert winutil.single_instance() is True  # fuori da Windows non blocca mai
 
+# spazio su disco: si tengono solo le immagini che servono
+from origins import spazio  # noqa: E402
+import os as _os2  # noqa: E402
+import time as _t2  # noqa: E402
+spazio.LOGS, spazio.CAPTURES = tmp / "sp_logs", tmp / "sp_cap"
+for i in range(33):  # 33 partite finite con l'osservatore
+    m = spazio.LOGS / "partite" / f"20261001-{i:06d}"
+    (m / "osservatore").mkdir(parents=True)
+    (m / "01.jpg").write_bytes(b"x" * 1000)
+    for n in ("0001_a.jpg", "0002_a.jpg", "0002_a_zona.jpg", "0003_a_foglio.jpg"):
+        (m / "osservatore" / n).write_bytes(b"x" * 1000)
+    (m / "diario.md").write_text("## #1 · 10:00:00 · Analisi round · schermata 01.jpg\n"
+                                 "Osservatore: 2 immagini allegate · 3 momenti (0002_a_zona.jpg, 0003_a_foglio.jpg)\n",
+                                 encoding="utf-8")
+rec = spazio.CAPTURES / "registrazioni" / "vecchia"
+rec.mkdir(parents=True)
+(rec / "0001_x.jpg").write_bytes(b"x" * 1000)
+(rec / "ELABORATA").write_text("ok")
+_os2.utime(rec / "ELABORATA", (_t2.time() - 9 * 86400,) * 2)
+active = spazio.LOGS / "partite" / "20261001-000032"
+rep = spazio.cleanup(active=active, max_mb=800)
+recent = spazio.LOGS / "partite" / "20261001-000031"
+assert sorted(p.name for p in (recent / "osservatore").iterdir()) == ["0002_a_zona.jpg", "0003_a_foglio.jpg"], rep
+assert len(list((active / "osservatore").iterdir())) == 4, "la partita in corso non si tocca"
+assert not (spazio.LOGS / "partite" / "20261001-000000" / "osservatore").exists(), "osservatore delle partite vecchie"
+assert rep["cartelle_osservatore_tolte"] == 2 and not list(rec.glob("*.jpg")) and (rec / "ELABORATA").exists(), rep
+rep = spazio.cleanup(active=active, max_mb=0)  # limite superato: via le schermate, il diario resta
+assert not list((spazio.LOGS / "partite" / "20261001-000001").glob("*.jpg"))
+assert (spazio.LOGS / "partite" / "20261001-000001" / "diario.md").exists() and rep["schermate_tolte"] > 0
+assert spazio.usage()["totale"] < 0.1
+
 shutil.rmtree(tmp)
 print("TUTTI I TEST OK")

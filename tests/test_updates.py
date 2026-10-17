@@ -139,6 +139,8 @@ class UI:
     def rect(self): return None
 
 
+from origins import spazio  # noqa: E402
+spazio.LOGS, spazio.CAPTURES = tmp / "logs", tmp  # la pulizia del test non tocca i dati veri
 ui = UI()
 c = controller.Controller(ui)
 c.save_settings({"modello_live": "sonnet", "connessione": "abbonamento", "voce": False, "max_thinking_live": "3000"})

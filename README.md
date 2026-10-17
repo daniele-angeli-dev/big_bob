@@ -13,6 +13,19 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Osservatore che non perde momenti**: prima ogni F8 riceveva al massimo 10 fotogrammi e gli altri salvati
+  (anche 30-40 in un round movimentato) venivano scartati, e tra un controllo e l'altro passavano 0,6-1 s per il
+  lavoro di ridimensionare e salvare. Ora lo schermo si guarda a ritmo costante ogni 0,3 s (la cattura è ~10 volte più
+  leggera e il salvataggio avviene in parallelo), si salva a ogni cambio di zona anche durante le animazioni, i
+  doppioni della stessa animazione si tolgono e, se i momenti sono tanti, i ritagli vengono affiancati in fogli
+  numerati: Claude vede fino a 40 momenti per F8 invece di 10. I ritagli sono presi dalla risoluzione piena dello
+  schermo, quindi più leggibili. Il diario registra quanti momenti sono stati salvati e allegati.
+- **Spazio su disco sotto controllo**: le schermate degli F8 e i fotogrammi delle registrazioni ora sono JPEG (circa
+  10 volte più leggeri dei PNG); a ogni avvio e a ogni nuova partita BIG-BOB tiene dei fotogrammi dell'osservatore solo
+  quelli mandati a Claude (quelli che vedi nella cronologia), cancella quelli delle partite oltre le 30 più recenti e
+  i fotogrammi delle registrazioni già studiate da più di 7 giorni. Oltre 800 MB in tutto toglie le schermate delle
+  partite più vecchie (diari, mosse, risposte e lezioni restano sempre). Il registro bigbob.log non supera ~10 MB.
+  Lo spazio usato si vede in Impostazioni.
 - **BIG-BOB invisibile alle catture**: la finestra resta aperta sul monitor ma le catture (F8, osservatore,
   registrazioni) vedono il gioco che c'è sotto, senza zone nere e senza far sparire la finestra all'F8. Serve Windows 10
   (2004) o più recente; si spegne in Impostazioni se vuoi fotografare BIG-BOB stesso (altrimenti nelle tue schermate

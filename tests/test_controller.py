@@ -22,6 +22,8 @@ store.DATA = tmp
 screen.SCAN = tmp / "scan"
 screen.SCAN.mkdir()
 screen.RECORDINGS = tmp / "registrazioni"  # le registrazioni del test non devono finire tra quelle vere
+from origins import spazio  # noqa: E402
+spazio.LOGS, spazio.CAPTURES = tmp / "logs", tmp  # la pulizia del test non tocca i dati veri
 shot = tmp / "shot.png"
 Image.new("RGB", (32, 20), "purple").save(shot)
 
@@ -131,7 +133,7 @@ time.sleep(0.3)
 diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
 assert "Apprendimento" in diario and "Dracula tiene Brides" in diario, diario
 assert "SEGNALAZIONE" in diario and "mana letto male" in diario and "token generati: 42" in diario, diario
-assert len(list(c.journal_dir.glob("*.png"))) >= 2
+assert len(list(c.journal_dir.glob("*.jpg"))) >= 2
 
 c.toggle_mode()
 assert ui.of("state")[-1]["mode"] == "ranked"
@@ -154,7 +156,7 @@ c.rec_dir, c.rec_on, c.rec_count = screen.new_recording(), True, 0
 ui.vis = True
 h0 = ui.hides
 c._do_record_frame()
-assert ui.hides == h0 and len(list(c.rec_dir.glob("0001_*.png"))) == 1, "registrazione senza lampeggio"
+assert ui.hides == h0 and len(list(c.rec_dir.glob("0001_*.jpg"))) == 1, "registrazione senza lampeggio"
 c.rec_on = False
 
 # BIG-BOB invisibile alle catture: niente zona nera e l'F8 non nasconde la finestra
@@ -208,7 +210,19 @@ for i in range(14):
     time.sleep(0.01)
 assert len(c.obs_frames) == 14 and all(f["path"].suffix == ".jpg" for f in c.obs_frames)
 picked = c._take_obs_frames()
-assert len(picked) == 10 and picked == sorted(picked, key=lambda f: f["t"]) and c.obs_frames == []
+assert 1 <= len(picked) <= 2 and c.obs_frames == [], "la stessa animazione non si allega 14 volte"
+# tanti momenti diversi: senza doppioni e, oltre 10, affiancati in fogli numerati (al massimo 10 immagini)
+c.obs_frames = []
+for i in range(26):
+    c._observe(None, 5.0)
+c._obs_flush()
+with c._obs_lock:
+    for i, f in enumerate(c.obs_frames):  # 26 eventi distinti: zone diverse, a 2 s di distanza
+        f["t"], f["bbox"] = 1000 + 2 * i, (0.05 * (i % 4), 0.1, 0.05 * (i % 4) + 0.04, 0.2)
+picked = c._take_obs_frames()
+moments = sum(len(f.get("foglio") or [f]) for f in picked)
+assert len(picked) <= 10 and moments == 26 and any(f.get("foglio") for f in picked), (len(picked), moments)
+assert all(Path(f["path"]).exists() for f in picked) and picked == sorted(picked, key=lambda f: f["t"])
 # una zona cambiata: si salva anche il ritaglio ad alta risoluzione con la sua posizione
 from origins import observer as _obs  # noqa: E402
 big = _Im.new("RGB", (1600, 900), (30, 20, 60))
@@ -218,6 +232,7 @@ big2.paste((250, 250, 250), (1250, 650, 1450, 850))  # una carta compare in bass
 loc, _g, grid = _obs.cell_diff(_obs.signature(big2), a_sig)
 assert loc > c.OBS_LOCAL_T, loc
 c._observe_img(big2, grid, loc, True)
+c._obs_flush()
 f = c.obs_frames[-1]
 assert f["path"].name.endswith("_zona.jpg") and f["zona"] == "in basso a destra" and f["movimento"], f
 assert _Im.open(f["path"]).width < 700, "il ritaglio contiene solo la zona cambiata"
@@ -225,18 +240,19 @@ for i in range(2):
     c._observe(None, 3.0)
 wait(ui, c.analyze)
 diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
-assert "Osservatore: 3 fotogrammi allegati" in diario and "_zona.jpg" in diario and c.obs_frames == [], \
+assert "Osservatore: 3 immagini allegate" in diario and "_zona.jpg" in diario and c.obs_frames == [], \
     "allegati all'F8 (con il ritaglio) e poi azzerati"
 
 # il ciclo dell'osservatore coglie anche un effetto che dura meno di un secondo (senza aspettare lo schermo fermo)
 seq = [big] * 4 + [big2] * 2 + [big] * 6   # la carta compare per ~0,7 s e sparisce
 it = iter(seq)
-screen.grab_masked = lambda title, mask=None, max_width=1024: next(it, big)
+screen.grab_fast = lambda title, mask=None: next(it, big)
 c.obs_frames, c.last_capture = [], 0
 old_active = c._match_active
 c._match_active = True
-time.sleep(0.35 * (len(seq) + 3))
+time.sleep(0.3 * (len(seq) + 4))
 c._match_active = old_active
+c._obs_flush()
 zones = [f["zona"] for f in c.obs_frames]
 assert any(z == "in basso a destra" for z in zones), f"effetto breve visto: {zones}"
 c.obs_frames = []

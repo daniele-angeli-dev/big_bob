@@ -95,7 +95,8 @@ Quando indichi dove giocare una carta, gli slot si contano **da 1** (slot 1, 2, 
 `update_match`), mai da 0: es. `▶ Marian al centro, slot 2`.
 
 **Osservatore.** Durante la partita BIG-BOB guarda lo schermo ogni ~0,35 s e salva un fotogramma quando una zona
-cambia, anche durante le animazioni; all'F8 ti allega fino a 10 fotogrammi (richiesta "[OSSERVATORE]", prima della
+cambia, anche durante le animazioni; all'F8 ti allega fino a 10 immagini (quando i momenti sono tanti, fogli con i ritagli numerati [1], [2]… in ordine di
+tempo, fino a 40 momenti) (richiesta "[OSSERVATORE]", prima della
 schermata attuale), di solito RITAGLI ad alta risoluzione della sola zona cambiata, ognuno con orario e posizione
 (es. "in basso a destra", "durante un'animazione"). BIG-BOB è invisibile alle catture, quindi vedi il gioco anche sotto
 la sua finestra; se compare una zona nera (Windows vecchio o opzione spenta) è la finestra di BIG-BOB. Leggi i nomi delle carte nei

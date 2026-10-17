@@ -64,6 +64,45 @@ def _game_region(title: str):
     return (max(w.left, 0), max(w.top, 0), w.width, w.height, w.title)
 
 
+_region_cache: dict = {"t": 0.0, "title": None, "region": None}
+
+
+def _game_region_cached(title: str, max_age: float = 2.0):
+    """Come _game_region, ma rilegge l'elenco delle finestre al massimo ogni max_age secondi: l'osservatore cattura
+    3 volte al secondo e l'elenco delle finestre è la parte lenta."""
+    c = _region_cache
+    if c["title"] != title or time.time() - c["t"] > max_age:
+        c.update(t=time.time(), title=title, region=_game_region(title))
+    return c["region"]
+
+
+def grab_fast(title: str = "Origins", mask=None) -> Image.Image:
+    """Cattura per l'osservatore: alla risoluzione piena (i ritagli restano leggibili), senza ridimensionare (lento),
+    con la finestra del gioco rilevata al massimo ogni 2 secondi. mask = zona da annerire (se BIG-BOB non è
+    invisibile alle catture)."""
+    global last_source
+    import mss
+    from PIL import ImageDraw
+    with mss.mss() as sct:
+        region = _game_region_cached(title)
+        if region:
+            l, t, w, h, name = region
+            mon = {"left": l, "top": t, "width": w, "height": h}
+            last_source = f"finestra '{name}'"
+        else:
+            mon = sct.monitors[1]
+            last_source = f"schermo intero (nessuna finestra con '{title}' nel titolo)"
+        raw = sct.grab(mon)
+        img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+    if mask:
+        sx, sy = img.width / mon["width"], img.height / mon["height"]
+        ml, mt, mw, mh = mask
+        rl, rt = mon["left"], mon["top"]
+        ImageDraw.Draw(img).rectangle(((ml - rl) * sx, (mt - rt) * sy, (ml - rl + mw) * sx, (mt - rt + mh) * sy),
+                                      fill=(0, 0, 0))
+    return img
+
+
 def grab(title: str = "Origins") -> Image.Image:
     return grab_with_region(title)[0]
 
@@ -163,7 +202,7 @@ def cleanup_empty_recordings(min_age_s: float = 120) -> int:
         return 0
     for d in RECORDINGS.iterdir():
         try:
-            if d.is_dir() and not any(d.glob("*.png")) and not (d / "ELABORATA").exists() \
+            if d.is_dir() and not frames_in(d) and not (d / "ELABORATA").exists() \
                     and time.time() - d.stat().st_mtime > min_age_s:
                 shutil.rmtree(d, ignore_errors=True)
                 n += 1
@@ -172,10 +211,15 @@ def cleanup_empty_recordings(min_age_s: float = 120) -> int:
     return n
 
 
+def frames_in(d: Path) -> list[Path]:
+    """I fotogrammi di una registrazione (JPEG dalle versioni nuove, PNG dalle vecchie)."""
+    return sorted(p for p in d.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg"))
+
+
 def list_recordings() -> list[dict]:
     out = []
     for d in sorted(p for p in RECORDINGS.iterdir() if p.is_dir()):
-        frames = sorted(d.glob("*.png"))
+        frames = frames_in(d)
         out.append({"nome": d.name, "cartella": str(d), "fotogrammi": len(frames),
                     "elaborata": (d / "ELABORATA").exists()})
     return out

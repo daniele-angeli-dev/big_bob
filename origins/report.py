@@ -198,7 +198,7 @@ def replay_html(journal_dir: Path) -> Path:
         p = p.strip()
         if p.startswith("## #"):
             first, _, rest = p.partition("\n")
-            img = re.search(r"schermata (\S+\.png)", first)
+            img = re.search(r"schermata (\S+\.(?:png|jpg))", first)
             meta = re.findall(r"^(Strumenti:.*|Tempo totale:.*)$", rest, flags=re.M)
             answer = re.sub(r"^(Strumenti:.*|Tempo totale:.*)$", "", rest, flags=re.M).strip()
             body.append("<section class='round'><div>"

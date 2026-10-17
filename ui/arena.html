@@ -400,6 +400,7 @@ body.inmatch .score .l{font-size:11px}
     <label class="opt"><input type="checkbox" id="oImpara"> Impara dalle sorprese tra i round</label>
     <label class="opt"><input type="checkbox" id="oTerm"> Apri anche il terminale di Claude Code all'avvio (serve solo per i comandi)</label>
     <label class="opt"><input type="checkbox" id="oObs"> Osserva la partita tra un F8 e l'altro (vede magie scartate e creature morte)</label>
+    <div class="hint" id="spaceTxt" style="margin:4px 0 6px">–</div>
     <label class="opt"><input type="checkbox" id="oInv"> BIG-BOB invisibile alle catture: le schermate vedono il gioco sotto la finestra, senza farla sparire (spegnilo solo per fotografare BIG-BOB)</label>
     <label class="opt"><input type="checkbox" id="oEval"> Barra di vantaggio: BIG-BOB stima chi sta vincendo dopo ogni risposta</label>
     <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (al primo avvio di ogni giorno)</label>
@@ -813,6 +814,9 @@ body.inmatch .score .l{font-size:11px}
     $('oThink').value = v.max_thinking_live != null ? v.max_thinking_live : 4000;
     $('oShare').checked = v.cervello_contribuisci !== false; $('oUse').checked = v.cervello_usa !== false;
     var cb = ev.cervello || {};
+    var sp = ev.spazio || {};
+    $('spaceTxt').textContent = sp.totale != null ? ('Spazio usato da immagini e partite: ' + sp.totale + ' MB su ' + sp.limite
+      + ' MB (oltre il limite si tolgono le schermate più vecchie; diari e lezioni restano)') : '–';
     $('brainTxt').textContent = cb.riga || '–'; $('btnBrain').disabled = !cb.attivo;
     $('oShare').disabled = $('oUse').disabled = !cb.attivo;
     $('verTxt').textContent = 'Versione ' + (ev.versione || '–') + (ev.claude_trovato ? '' : ' · Claude Code non trovato');

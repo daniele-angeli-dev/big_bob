@@ -27,7 +27,7 @@ def journals_dir() -> Path:
 
 # ============================================================================ diario
 
-REQ_RE = re.compile(r"^## #(\d+) · (\d\d:\d\d:\d\d) · (.*?)(?: · schermata (\S+\.png))?\s*$")
+REQ_RE = re.compile(r"^## #(\d+) · (\d\d:\d\d:\d\d) · (.*?)(?: · schermata (\S+\.(?:png|jpg)))?\s*$")
 
 
 def parse_journal(d: Path) -> dict | None:
@@ -61,7 +61,7 @@ def parse_journal(d: Path) -> dict | None:
                 continue
             r = {"n": int(m.group(1)), "ora": m.group(2), "etichetta": m.group(3).strip(), "schermata": m.group(4),
                  "osservatore": [], "strumenti": "", "tempo": None, "risposta": ""}
-            obs = re.search(r"^Osservatore: \d+ fotogrammi allegati \(([^)]*)\)", body, re.M)
+            obs = re.search(r"^Osservatore: \d+ (?:fotogrammi|immagini) allegat[ei][^(\n]*\(([^)]*)\)", body, re.M)
             if obs:
                 r["osservatore"] = [x.strip() for x in obs.group(1).split(",") if x.strip()]
             st = re.search(r"^Strumenti:\s*(.*)$", body, re.M)
@@ -284,7 +284,7 @@ def _detail(pid, m, j, rs, when, deck, opp, typ, long) -> str:
         if j and r["osservatore"]:
             obs = ("<div class='obs'>" + "".join(
                 f"<button type='button' class='shot mini' data-shot='{e(_rel(j, f, 'osservatore'))}' "
-                f"aria-label='Fotogramma dell osservatore {e(f)}'><span></span></button>" for f in r["osservatore"][:6])
+                f"aria-label='Fotogramma dell osservatore {e(f)}'><span></span></button>" for f in r["osservatore"][:10])
                 + "</div>")
         head = f"#{r['n']} · {e(r['ora'])} · {e(r['etichetta'])}" + (f" · round {r['turno']}" if r.get("turno") is not None else "") \
             + (f" · risposta in {r['tempo']:.0f} s" if r.get("tempo") else "")
