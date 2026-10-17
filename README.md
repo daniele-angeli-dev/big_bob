@@ -13,6 +13,9 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Nuova icona**: un bersaglio giallo con una freccetta nel centro, nei colori di BIG-BOB (anche nell'installatore e
+  nella barra di Windows; nelle misure piccole resta solo il bersaglio, così si legge bene). Se dopo l'aggiornamento
+  il collegamento sul desktop mostra ancora la vecchia icona, Windows la aggiorna al riavvio.
 - **Pilota automatico (sperimentale)**: con il pulsante PILOTA, in allenamento e in creazione, BIG-BOB gioca al posto
   tuo: a ogni round sceglie la giocata, trascina le carte dalla mano al campo e conferma il turno con il mouse. Si
   accende insieme ad AUTO; per riprendere il controllo basta muovere il mouse (si ferma subito) o premere F12. Non
