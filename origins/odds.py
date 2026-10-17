@@ -114,14 +114,31 @@ def opponent_hand_odds(archetypes: list[dict], legendary: str | None, opp_seen: 
     cands = [a for a in archetypes if compatible(a)]
     # prior: partite tue + metà peso per le liste della community (+1 di smoothing)
     weights = [a.get("volte_visto", 0) + 0.5 * a.get("community", 0) + 1 for a in cands]
+    soft = False
+    if not cands:  # nessuna lista contiene tutte le carte viste (varianti, tech card): uso le più simili
+        same = [a for a in archetypes if a.get("carte") and (not legendary or not a.get("leggendaria")
+                                                            or a["leggendaria"].lower() == legendary.lower())]
+        for a in same:
+            pool = {c.lower() for c in a.get("carte", [])} | {(a.get("leggendaria") or "").lower()}
+            miss = sum(1 for c in opp_seen if c.lower() not in pool)
+            cands.append(a)
+            weights.append((a.get("volte_visto", 0) + 0.5 * a.get("community", 0) + 1) * (0.08 ** miss))
+        soft = bool(cands)
     tot = sum(weights)
+    if soft:
+        keep = [(a, w) for a, w in zip(cands, weights) if w / tot >= 0.01]
+        cands, weights = [a for a, _ in keep], [w for _, w in keep]
+        tot = sum(weights)
     out = {
         "carte_non_viste_avversario": unseen_total,
         "mano_avversario": hand_size,
-        "archetipi_compatibili": [
-            {"nome": a.get("nome"), "peso": round(w / tot, 3)} for a, w in zip(cands, weights)
-        ] if tot else [],
+        "archetipi_compatibili": sorted(
+            [{"nome": a.get("nome"), "peso": round(w / tot, 3)} for a, w in zip(cands, weights)],
+            key=lambda x: -x["peso"]) if tot else [],
     }
+    if soft:
+        out["avviso"] = ("Nessuna lista contiene tutte le carte viste: uso le più simili (l'avversario gioca una "
+                         "variante)")
     if not cands:
         out["avviso"] = ("Nessun archetipo registrato è compatibile con le carte viste: "
                          "probabilità basate solo sulle carte già viste (possibili seconde copie).")

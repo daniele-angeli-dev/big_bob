@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP, Image  # noqa: E402
 
-from origins import cervello, combat, deckproj, evaluate, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
+from origins import archetype, cervello, combat, deckproj, evaluate, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
 from origins.store import canonical, load, now, save  # noqa: E402
 
 mcp = FastMCP("origins")
@@ -450,6 +450,15 @@ def _odds_summary(m: dict, top: int = 6) -> str:
             lines.append(f"- Nota: {o['avviso']}")
     else:
         lines.append("- Mano avversaria: passa opp_hand_size per avere le probabilità")
+    try:
+        ident = archetype.identify(m)
+        line = archetype.summary(ident)
+        if line:
+            lines.append(f"\nMAZZO AVVERSARIO (dalle carte viste confrontate con i mazzi del meta): {line}")
+            if ident.get("contro"):
+                lines.append(f"- Come giocarci contro (solo in allenamento/creazione): {ident['contro']}")
+    except Exception as e:  # noqa: BLE001
+        lines.append(f"- Mazzo avversario non stimato: {e}")
     return "\n".join(lines)
 
 
@@ -517,9 +526,15 @@ def end_match(result: str, opponent_cards_seen: list[str] | None = None, notes: 
     arch = None
     if m.get("avv_leggendaria"):
         arch = store.record_opponent(m["avv_leggendaria"], seen, result)
+    try:
+        ident = archetype.identify(m)
+    except Exception:  # noqa: BLE001
+        ident = {}
     log = load("matches")
     log.append({**m, "risultato": result, "note_finali": notes, "fine": now(),
-                "archetipo_avversario": arch["nome"] if arch else None})
+                "archetipo_avversario": arch["nome"] if arch else None,
+                "tipo_avversario": (ident.get("tipo") or {}).get("etichetta"),
+                "mazzo_avversario_stimato": (ident.get("mazzi") or [{}])[0].get("nome")})
     save("matches", log)
     save("match", {})
     return _j({"salvata": True, "archetipo": arch})
@@ -534,6 +549,17 @@ def record_opponent_deck(legendary: str, cards_seen: list[str], result: str = ""
     informazione sul meta (pesano nelle probabilità della mano avversaria) ma non come partite tue."""
     return _j(store.record_opponent(legendary, cards_seen, result, archetype,
                                     community=fonte.lower().startswith("comm")))
+
+
+@mcp.tool()
+def opponent_deck() -> str:
+    """Che mazzo sta usando l'avversario: le liste del meta più simili alle carte che ha giocato (con probabilità,
+    carte fuori lista e carte da aspettarsi) e il tipo (Aggro, Midrange aggro/control, Control, Combo; sottotipi
+    Swarm, Tempo, Big, Ramp, Discard), con come giocarci contro. update_match ne mostra già il riassunto."""
+    m = load("match")
+    if not m:
+        return "Nessuna partita attiva."
+    return _j(archetype.identify(m, top=5))
 
 
 @mcp.tool()
@@ -934,7 +960,7 @@ LIVE_TOOLS = {
     "get_screen", "update_match", "simulate_combat", "mulligan_advice", "get_card", "search_cards", "get_location",
     "start_match", "end_match", "get_match", "my_draw_odds", "opponent_hand_odds", "record_lesson", "lesson_review",
     "rules_get", "rules_upsert", "upsert_cards", "upsert_locations", "note_round", "set_match_eval", "list_decks",
-    "save_deck", "validate_deck", "deck_project_status", "deck_project_propose", "community_stats", "community_decks",
+    "save_deck", "validate_deck", "deck_project_status", "opponent_deck", "deck_project_propose", "community_stats", "community_decks",
 }
 if os.environ.get("BIGBOB_TOOLSET") == "live":
     for _name in [t.name for t in mcp._tool_manager.list_tools()]:

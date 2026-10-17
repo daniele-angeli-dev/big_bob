@@ -80,6 +80,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .evalb{display:flex;height:22px;border-radius:6px;overflow:hidden;font-weight:700;font-size:12px;letter-spacing:.5px;background:var(--orange)}
 .ev-me{background:var(--teal);color:var(--bg);display:flex;align-items:center;padding-left:8px;white-space:nowrap;transition:width .6s ease;min-width:0}
 .ev-opp{flex:1;color:#241000;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;white-space:nowrap;min-width:0}
+.oppdeck{display:flex;align-items:baseline;gap:8px;font-size:12px;font-weight:600;color:var(--dim);min-width:0;margin-top:-4px}
+.oppdeck .od-l{letter-spacing:1px;flex-shrink:0}
+.oppdeck b{color:var(--orange);font-size:13px;white-space:nowrap;flex-shrink:0}
+.oppdeck #hOdList{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .ev-why{font-size:11px;color:var(--dim);margin-top:-6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (prefers-reduced-motion: reduce){.ev-me{transition:none}}
 .counts{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;color:var(--dim)}
@@ -258,6 +262,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <div class="lanes" id="hLanes"></div>
       <div class="score"><div class="n" style="color:var(--teal)" id="hMine">0</div><div class="l">BARRIER DISTRUTTE</div><div class="n" style="color:var(--orange)" id="hOpp">0</div></div>
       <div class="counts"><div class="me" id="hCntMe">TU · MAZZO <b>–</b> · MANO <b>–</b></div><div class="op" id="hCntOpp">AVV · MAZZO <b>–</b> · MANO <b>–</b></div></div>
+      <div class="oppdeck hidden" id="hOppDeck" aria-live="polite"><span class="od-l">MAZZO AVV</span><b id="hOdType">–</b><span id="hOdList"></span></div>
     </div>
   </section>
 
@@ -443,6 +448,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     }
     cnt($('hCntMe'), 'TU', c.mio_mazzo, c.mio_mazzo_stimato, c.mia_mano);
     cnt($('hCntOpp'), 'AVV', c.avv_mazzo, c.avv_mazzo_stimato, c.avv_mano);
+    var od = m.avv_mazzo;
+    $('hOppDeck').classList.toggle('hidden', !od);
+    if (od){
+      $('hOdType').textContent = od.tipo.toUpperCase() + (od.p != null ? ' ' + od.p + '%' : '');
+      $('hOdList').textContent = od.mazzo ? '· ' + od.mazzo + (od.p_mazzo != null ? ' ' + od.p_mazzo + '%' : '') : '';
+      $('hOppDeck').title = 'Mazzo avversario stimato da ' + (od.viste || 0) + ' carte viste confrontate con i mazzi del meta'
+        + (od.mazzo ? '. Lista più simile: ' + od.mazzo : '');
+    }
     $('hMine').textContent = m.distrutte_da_me != null ? m.distrutte_da_me : 0;
     $('hOpp').textContent = m.distrutte_a_me != null ? m.distrutte_a_me : 0;
     var box = $('hLanes'); box.innerHTML = '';

@@ -13,6 +13,10 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Mazzo avversario riconosciuto**: dalle carte che gioca, confrontate con i mazzi del meta (OriginsMeta, le tue
+  partite, il cervello comune), BIG-BOB dice quale lista sta usando e che tipo di mazzo è — Aggro, Midrange (aggro o
+  control), Control, Combo, con i sottotipi Swarm, Tempo, Big, Ramp, Discard — e come giocarci contro. Si vede nella
+  finestra (riga MAZZO AVV) e ne tiene conto nei consigli; una carta fuori lista non lo manda più fuori strada.
 - Libro, Origin e statistiche: se la pagina non si carica entro 12 secondi nella finestra di BIG-BOB, BIG-BOB la chiude
   e la apre nel browser (prima poteva restare a caricare a vuoto); il tempo di caricamento finisce in `logs/bigbob.log`.
 - Finestra più alta (fino a 1000 punti, adattata allo schermo senza coprire la barra delle applicazioni): la chat ha

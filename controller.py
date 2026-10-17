@@ -1280,7 +1280,17 @@ class Controller:
             "mazzo": m.get("mio_mazzo"), "avv_leggendaria": m.get("avv_leggendaria"),
             "location": [self._loc(n) for n in (m.get("location") or [])[:3]],
             "contatori": evaluate.counters(m), "valutazione": evaluate.current_eval(m),
+            "avv_mazzo": self._opp_deck(m),
         }})
+
+    @staticmethod
+    def _opp_deck(m: dict):
+        from origins import archetype
+        try:
+            return archetype.short(archetype.identify(m))
+        except Exception:  # noqa: BLE001
+            log.exception("mazzo avversario")
+            return None
 
     @staticmethod
     def _loc(name):

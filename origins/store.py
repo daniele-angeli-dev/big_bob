@@ -220,11 +220,11 @@ def record_opponent(legendary: str, cards_seen: list[str], result: str = "", arc
         target["completo"] = len(target["carte"]) == 12
         save("meta", meta)
         return target
-    target["volte_visto"] += 1
+    target["volte_visto"] = target.get("volte_visto", 0) + 1
     if result.lower().startswith("v"):
-        target["vittorie_mie"] += 1
+        target["vittorie_mie"] = target.get("vittorie_mie", 0) + 1
     elif result.lower().startswith("s") or result.lower().startswith("p"):
-        target["sconfitte_mie"] += 1
+        target["sconfitte_mie"] = target.get("sconfitte_mie", 0) + 1
     target["ultimo"] = now()
     target["completo"] = len(target["carte"]) == 12
     save("meta", meta)

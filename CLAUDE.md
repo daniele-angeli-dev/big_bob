@@ -99,6 +99,13 @@ generate da Spellbook o da altri effetti, token) vanno in `my_created` / `opp_cr
 falsano carte rimaste e probabilità. Le pescate extra da effetti vengono dal mazzo: mettile in mano/giocate come le
 altre. `update_match` restituisce i CONTATORI e una STIMA RAPIDA di chi sta vincendo.
 
+**Mazzo avversario.** `update_match` restituisce anche MAZZO AVVERSARIO: le liste del meta (OriginsMeta, partite di
+Daniele, cervello comune) più simili alle carte che l'avversario ha giocato, con probabilità, e il tipo di mazzo
+(Aggro, Midrange aggro/control, Control, Combo; sottotipi Swarm, Tempo, Big, Ramp, Discard), le carte da aspettarsi e
+come giocarci contro. In allenamento/creazione usalo nel piano (e nel "perché" quando conta); in ranked mettilo solo
+nella riga 👁 (es. `👁 Avversario (4 in mano): … · mazzo "Bat Swarm" 72% (Aggro)`), senza il consiglio di gioco.
+Per i dettagli c'è `opponent_deck`.
+
 **Barra di vantaggio.** Dopo la risposta live, nel turno in background, chiami `set_match_eval` con la probabilità che
 Daniele vinca (1-99): parti dalla STIMA RAPIDA e correggila con ciò che i numeri non vedono (effetti delle carte,
 location, carte probabili dell'avversario, chi rivela prima, fatica). Mai durante la risposta live.
