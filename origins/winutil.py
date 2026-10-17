@@ -32,6 +32,28 @@ def _find(title: str):
     return ctypes.windll.user32.FindWindowW(None, title) or None
 
 
+WDA_NONE = 0x0
+WDA_EXCLUDEFROMCAPTURE = 0x11  # Windows 10 2004 e successivi
+
+
+def exclude_from_capture(title: str = "BIG-BOB", on: bool = True) -> bool:
+    """Rende la finestra invisibile alle catture dello schermo: sul monitor si vede, ma chi cattura lo schermo (BIG-BOB
+    stesso, ma anche registrazioni e strumenti di cattura) vede quello che c'è sotto, cioè il gioco.
+    Così le catture non devono più nascondere la finestra (niente lampeggi) e non hanno zone nere.
+    Restituisce True se Windows l'ha accettato."""
+    h = _find(title)
+    if not h:
+        return False
+    try:
+        import ctypes
+        import sys
+        if sys.getwindowsversion().build < 19041:  # prima della 2004 il valore non esiste
+            return False
+        return bool(ctypes.windll.user32.SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE if on else WDA_NONE))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def focus_window(title: str = "BIG-BOB") -> bool:
     """Riporta in primo piano una finestra già aperta (anche se era nascosta con F10)."""
     h = _find(title)

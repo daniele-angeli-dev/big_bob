@@ -69,7 +69,9 @@ PROMPT_STORIA_SEGUITO = (
 PROMPT_TURNO = (
     "[F8 · analisi round] La schermata del round è allegata: NON chiamare get_screen. Leggila e chiama UNA "
     "volta update_match con lo stato completo (mano, campo, scarti, mana, vita delle barrier e quali sono "
-    "rinforzate, barrier distrutte, chi rivela prima, carte nel mio mazzo, carte in mano all'avversario): "
+    "rinforzate, barrier distrutte, chi rivela prima, carte rimaste nei due mazzi e in mano a entrambi se il gioco le "
+    "mostra; le carte giocate da quando hai risposto l'ultima volta vanno in my_played_new / opp_played_new, con le "
+    "copie ripetute): "
     "ti restituisce anche le probabilità aggiornate. Poi rispondi nel formato 'Risposta live' di CLAUDE.md. "
     "Se non c'è una partita attiva e dallo schermo non capisci il mio mazzo, chiedimelo in una riga. "
     "Tempo massimo 40 secondi. Modalità attuale: {mode}."
@@ -82,10 +84,11 @@ PROMPT_AUTO = (
 PROMPT_OSSERVATORE = (
     "[OSSERVATORE] Prima della schermata attuale trovi {n} fotogrammi presi da BIG-BOB da quando hai risposto "
     "l'ultima volta, in ordine di tempo, ognuno con orario e zona dello schermo: di solito sono RITAGLI ad alta "
-    "risoluzione della sola zona cambiata (leggi i nomi delle carte), alcuni presi durante le animazioni (la zona nera è "
-    "la finestra di BIG-BOB). Guardali tutti per ricostruire cosa è successo nel frattempo: carte rivelate o giocate dall'avversario anche se poi distrutte o scartate, magie lanciate, "
+    "risoluzione della sola zona cambiata (leggi i nomi delle carte), alcuni presi durante le animazioni (BIG-BOB di solito è invisibile alle catture; se vedi "
+    "una zona nera, è la sua finestra). Guardali tutti per ricostruire cosa è successo nel frattempo: carte rivelate o giocate dall'avversario anche se poi distrutte o scartate, magie lanciate, "
     "creature morte in combattimento, carte pescate o create da effetti (Spellbook e simili), barrier colpite. Metti "
-    "tutto in update_match (avv_giocati / avv_scartati / avv_creati, miei_scartati / my_created): così i contatori e le "
+    "tutto in update_match (opp_played_new / my_played_new per le carte giocate da allora, opp_discarded / "
+    "my_discarded, opp_created / my_created per quelle create da effetti): così i contatori e le "
     "probabilità restano veri. "
 )
 PROMPT_STUDIO = (
@@ -747,7 +750,7 @@ class Controller:
     # ------------------------------------------------ impostazioni e collegamento a Claude
     SETTINGS_KEYS = ("modello_live", "connessione", "voce", "apprendimento_live", "apri_claude_code_all_avvio",
                      "max_thinking_live", "modalita", "meta_originsmeta", "osservatore", "barra_vantaggio",
-                     "cervello_contribuisci", "cervello_usa")
+                     "cervello_contribuisci", "cervello_usa", "invisibile_catture")
 
     def get_settings(self) -> None:
         from origins import cervello, updates
@@ -765,7 +768,7 @@ class Controller:
         cfg_before = store.load("config")
         extra = {k: vals[k] for k in ("voce", "apprendimento_live", "apri_claude_code_all_avvio",
                                       "meta_originsmeta", "osservatore", "barra_vantaggio", "cervello_contribuisci",
-                                      "cervello_usa") if k in vals}
+                                      "cervello_usa", "invisibile_catture") if k in vals}
         if "max_thinking_live" in vals:
             try:
                 extra["max_thinking_live"] = max(0, int(vals["max_thinking_live"]))
@@ -784,6 +787,8 @@ class Controller:
         if changed and self.session and not self.busy:
             self.session.reset()  # la prossima risposta usa subito il nuovo modello/collegamento
             threading.Thread(target=self._prewarm, daemon=True).start()
+        if cfg_before.get("invisibile_catture", True) != cfg.get("invisibile_catture", True):
+            self.apply_capture_exclusion()
         self.emit_state()
         self.status("Impostazioni salvate")
 
@@ -1063,6 +1068,14 @@ class Controller:
             self.voice.warm()
         self.emit_state()
 
+    def apply_capture_exclusion(self) -> None:
+        """All'avvio (e quando cambia l'impostazione): BIG-BOB invisibile alle catture, se Windows lo permette."""
+        from origins import winutil
+        on = store.load("config").get("invisibile_catture", True)
+        ok = winutil.exclude_from_capture("BIG-BOB", on)
+        self.capture_excluded = bool(on and ok)
+        log.info("invisibile alle catture: richiesto %s, attivo %s", on, self.capture_excluded)
+
     def set_auto(self, on: bool) -> None:
         self.auto_on = bool(on)
         if not self.auto_on:  # toglie dalla coda le analisi automatiche non ancora partite
@@ -1211,8 +1224,8 @@ class Controller:
         self.rec_count += 1
         name = f"{self.rec_count:04d}_{time.strftime('%H%M%S')}.png"
         if self.ui.is_visible():
-            # senza nascondere BIG-BOB (niente lampeggio a ogni fotogramma): la zona della finestra diventa nera
-            img = screen.grab_masked(store.load("config").get("titolo_finestra", "Origins"), self.ui.rect(),
+            # senza nascondere BIG-BOB (niente lampeggio): invisibile alle catture, o con la sua zona annerita
+            img = screen.grab_masked(store.load("config").get("titolo_finestra", "Origins"), self._capture_mask(),
                                      max_width=1920)
             img.save(self.rec_dir / name)
             self.last_capture = time.time()
@@ -1271,9 +1284,16 @@ class Controller:
         return observer.select(frames, self.OBS_MAX_ATTACH)
 
     # ------------------------------------------------ cattura con finestra nascosta
+    def _capture_mask(self):
+        """La zona da annerire nelle catture: nessuna se BIG-BOB è invisibile alle catture (vede il gioco sotto)."""
+        if getattr(self, "capture_excluded", False) or not self.ui.is_visible():
+            return None
+        return self.ui.rect()
+
     def hidden_capture(self, folder: Path | None = None) -> Path:
         title = store.load("config").get("titolo_finestra", "Origins")
-        visible = self.ui.is_visible()
+        # se BIG-BOB è invisibile alle catture non serve nasconderlo: niente lampeggio
+        visible = self.ui.is_visible() and not getattr(self, "capture_excluded", False)
         self.capturing = True
         try:
             if visible:
@@ -1489,6 +1509,7 @@ class Controller:
 
         self.emit({"type": "hud", "match": {
             "round": m.get("turno"), "mana": m.get("mana"), "rivela_prima": m.get("rivela_prima"),
+            "rivela_prima_dedotta": m.get("rivela_prima_dedotta"),
             "mie": lanes(m.get("barrier_mie"), m.get("rinforzate_mie")),
             "avv": lanes(m.get("barrier_avv"), m.get("rinforzate_avv")),
             "distrutte_da_me": m.get("distrutte_da_me"), "distrutte_a_me": m.get("distrutte_a_me"),
@@ -1550,7 +1571,7 @@ class Controller:
                 continue
             title = store.load("config").get("titolo_finestra", "Origins")
             try:
-                mask = self.ui.rect() if self.ui.is_visible() else None
+                mask = self._capture_mask()
                 if observing:  # una sola cattura: serve sia a capire cosa cambia sia a salvare il fotogramma
                     img = screen.grab_masked(title, mask, max_width=1600)
                     sig = observer.signature(img)

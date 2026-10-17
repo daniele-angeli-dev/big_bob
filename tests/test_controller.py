@@ -157,6 +157,26 @@ c._do_record_frame()
 assert ui.hides == h0 and len(list(c.rec_dir.glob("0001_*.png"))) == 1, "registrazione senza lampeggio"
 c.rec_on = False
 
+# BIG-BOB invisibile alle catture: niente zona nera e l'F8 non nasconde la finestra
+from origins import winutil as _wu  # noqa: E402
+_wu.exclude_from_capture = lambda title="BIG-BOB", on=True: True
+c.apply_capture_exclusion()
+assert c.capture_excluded and c._capture_mask() is None, "invisibile: nessuna maschera"
+masks = []
+screen.grab_masked = lambda title, mask=None, max_width=1024: masks.append(mask) or Image.new("RGB", (320, 180))
+_cap = screen.capture
+screen.capture = lambda title, folder=None: Path(tmp / "f8.png")
+h0 = ui.hides
+c.hidden_capture()
+c._do_record_frame() if c.rec_on else None
+assert ui.hides == h0, "F8 senza far sparire la finestra"
+_wu.exclude_from_capture = lambda title="BIG-BOB", on=True: False  # Windows vecchio: si torna alla maschera
+c.apply_capture_exclusion()
+assert not c.capture_excluded and c._capture_mask() == (0, 0, 10, 10)
+c.hidden_capture()
+assert ui.hides == h0 + 1, "senza esclusione l'F8 nasconde la finestra come prima"
+screen.capture = _cap
+
 c.set_auto(True)
 c.set_record(True)
 time.sleep(0.4)

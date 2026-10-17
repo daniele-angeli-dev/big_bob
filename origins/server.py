@@ -2,6 +2,8 @@
 e calcolare le probabilità. Avvio: python origins/server.py (lo fa Claude Code da .mcp.json)."""
 from __future__ import annotations
 
+from collections import Counter
+
 import json
 import os
 import shutil
@@ -285,6 +287,52 @@ def start_match(my_deck: str, opponent_legendary: str = "") -> str:
     return out
 
 
+def _added(old: list[str], new: list[str]) -> list[str]:
+    """Le carte di new in più rispetto a old (per conteggio)."""
+    from collections import Counter
+    co = Counter(old)
+    out = []
+    for card, n in Counter(new).items():
+        out += [card] * max(0, n - co.get(card, 0))
+    return out
+
+
+def _register_new(m: dict, key: str, cards: list[str]) -> None:
+    """Carte giocate DA QUANDO hai risposto l'ultima volta: si SOMMANO alla lista (una seconda copia giocata dopo che
+    la prima è morta conta due). Dentro lo stesso round non si contano due volte (due F8 nello stesso round)."""
+    turn = str(m.get("turno"))
+    per_turn = m.setdefault("aggiunte_round", {}).setdefault(key, {})
+    already = per_turn.get(turn) or []
+    extra = _added(already, cards)
+    per_turn[turn] = already + extra
+    m[key] = (m.get(key) or []) + extra
+
+
+def _who(v) -> str | None:
+    """'io' / 'avversario' da come Claude lo scrive (io, me, Daniele, tu, avv, opponent, ...)."""
+    s = str(v or "").strip().lower()
+    if not s:
+        return None
+    if s.startswith(("avv", "opp", "nemico", "lui", "loro", "enemy")):
+        return "avversario"
+    if s.startswith(("io", "me", "mio", "tu", "daniele", "player", "giocatore", "you", "i ", "noi")) or s == "i":
+        return "io"
+    return None
+
+
+def reveal_order(m: dict) -> tuple[str | None, bool]:
+    """(chi rivela prima in QUESTO round, dedotto?). Si alterna ogni round (regola confermata): dall'ultima volta che
+    l'ho letto sullo schermo lo deduco, invece di mostrare il valore vecchio (che dopo un round è sempre sbagliato)."""
+    rd = m.get("rivela_prima_letta")
+    turn = m.get("turno")
+    if not rd or rd.get("chi") not in ("io", "avversario"):
+        return None, False
+    if rd.get("turno") == turn or not isinstance(turn, int) or not isinstance(rd.get("turno"), int):
+        return rd["chi"], False
+    same = (turn - rd["turno"]) % 2 == 0
+    return (rd["chi"] if same else ("avversario" if rd["chi"] == "io" else "io")), True
+
+
 def _merge_max(old: list[str], new: list[str]) -> list[str]:
     """Unione per conteggio massimo: ["A","B"] + ["B","B","C"] → ["A","B","B","C"]."""
     from collections import Counter
@@ -307,7 +355,8 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
                  my_reinforced: list[bool] | None = None, opp_reinforced: list[bool] | None = None,
                  board: dict | None = None, my_created: list[str] | None = None,
                  opp_created: list[str] | None = None, opp_deck_left: int | None = None, note: str = "",
-                 correct_lists: bool = False) -> str:
+                 correct_lists: bool = False, my_played_new: list[str] | None = None,
+                 opp_played_new: list[str] | None = None, my_hand_size: int | None = None) -> str:
     """Aggiorna lo stato della partita con ciò che vedi sullo schermo e restituisce già le probabilità
     (mia prossima pescata, pescata giocabile, mano avversaria): NON serve chiamare anche my_draw_odds o
     opponent_hand_odds, che restano per domande specifiche (es. "entro 2 round"). Le liste di carte sono lo stato
@@ -320,15 +369,22 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
        "destra": {...}}  — stesso ordine di slot da entrambe le parti: il primo elemento è lo slot 1, di fronte
       allo slot 1 avversario; null = vuoto. Con Daniele gli slot si chiamano sempre 1, 2, 3 (mai 0).
       Con board la risposta include la PREVISIONE DEL COMBATTIMENTO se nessuno gioca altro.
-    reveals_first: "io" o "avversario" (chi rivela per primo in questo round).
+    reveals_first: "io" o "avversario" (chi rivela per primo in questo round, se lo schermo lo mostra). Basta leggerlo
+      una volta: BIG-BOB lo deduce nei round dopo (si alterna) e lo scrive nella risposta.
     my_deck_left / opp_deck_left: carte rimaste nel mio mazzo / in quello avversario se il gioco le mostra (sono la
       fonte più affidabile per i contatori).
     my_created / opp_created: lista COMPLETA delle carte arrivate NON dal mazzo (la carta del potere leggendario,
       carte generate da Spellbook o da altri effetti, token): non contano come pescate dal mazzo. Le carte pescate in
       più da effetti invece vanno normalmente in mano/giocate (vengono dal mazzo).
-    Giocate, scarti e carte create si sommano a quelle già registrate (una carta giocata non torna indietro): se non
-    vedi più una carta giocata nei round prima (morta, magia già risolta) non serve ripeterla. correct_lists=true
-    sostituisce invece le liste con quelle che passi (solo per correggere un errore di lettura)."""
+    my_played_new / opp_played_new: le carte giocate DA QUANDO hai risposto l'ultima volta (questo round, anche quelle
+      viste solo nei fotogrammi dell'osservatore e poi morte o risolte), con le copie ripetute: si SOMMANO a quelle già
+      registrate, quindi la seconda copia di una carta giocata dopo che la prima è sparita conta. È il modo giusto di
+      registrare le giocate; nello stesso round ripeterle non le conta due volte.
+    my_played / opp_played / *_discarded / *_created: liste complete; si uniscono a quelle registrate senza mai
+      toglierne (una carta giocata non torna nel mazzo), ma una carta con 2 copie conta 2 solo se la ripeti.
+      correct_lists=true sostituisce invece le liste con quelle che passi (solo per correggere un errore di lettura).
+    opp_hand_size / my_hand_size: quante carte in mano ha l'avversario / ho io, contate sullo schermo (se non le passi
+      BIG-BOB le stima dall'ultimo numero letto: +1 pescata a round, -1 per carta giocata)."""
     m = load("match")
     if not m:
         return "Nessuna partita attiva: usa start_match."
@@ -336,6 +392,7 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
            "avv_giocati": opp_played, "avv_scartati": opp_discarded, "miei_creati": my_created,
            "avv_creati": opp_created}
     grow_only = {"miei_giocati", "miei_scartati", "avv_giocati", "avv_scartati", "miei_creati", "avv_creati"}
+    _before = {k: list(m.get(k) or []) for k in grow_only}
     for k, v in upd.items():
         if v is None:
             continue
@@ -343,6 +400,13 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
         if k in grow_only and isinstance(v, list) and not correct_lists:
             v = _merge_max(m.get(k) or [], v)  # le carte giocate non tornano nel mazzo: si somma, non si sostituisce
         m[k] = v
+        if k in grow_only and isinstance(v, list):  # anche ciò che arriva dalle liste complete conta come "già visto"
+            per_turn = m.setdefault("aggiunte_round", {}).setdefault(k, {})
+            t = str(m.get("turno"))
+            per_turn[t] = (per_turn.get(t) or []) + _added(_before.get(k, []), v)
+    for key, new in (("miei_giocati", my_played_new), ("avv_giocati", opp_played_new)):
+        if isinstance(new, list) and new:
+            _register_new(m, key, _canon_list(new))
     if my_deck_left is not None or opp_deck_left is not None:
         seen_decks = m.setdefault("mazzi_visti", {})
         for side, val in (("mio", my_deck_left), ("avv", opp_deck_left)):
@@ -361,16 +425,27 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
         m["location"] = [canonical(x, "locations") for x in locations]
     extra = {"mana": mana, "barrier_mie": my_barriers, "barrier_avv": opp_barriers,
              "distrutte_a_me": my_destroyed, "distrutte_da_me": opp_destroyed,
-             "rivela_prima": reveals_first, "mazzo_rimasto_visibile": my_deck_left,
+             "mazzo_rimasto_visibile": my_deck_left,
              "rinforzate_mie": my_reinforced, "rinforzate_avv": opp_reinforced, "campo": board,
              "avv_mazzo_visibile": opp_deck_left}
     for k, v in extra.items():
         if v is not None:
             m[k] = v
+    if _who(reveals_first):
+        m["rivela_prima_letta"] = {"turno": m.get("turno"), "chi": _who(reveals_first)}
+    m["rivela_prima"], m["rivela_prima_dedotta"] = reveal_order(m)
     if opp_legendary:
         m["avv_leggendaria"] = canonical(opp_legendary)
     if opp_hand_size is not None:
         m["avv_mano"] = opp_hand_size
+        m["avv_mano_letta"] = {"turno": m.get("turno"), "mano": opp_hand_size,
+                               "uscite": len(m.get("avv_giocati") or []) + len(m.get("avv_scartati") or [])}
+    if my_hand is not None or my_hand_size is not None:
+        n = my_hand_size if isinstance(my_hand_size, int) else len(my_hand or [])
+        m["mia_mano_letta"] = {"turno": m.get("turno"), "mano": n,
+                               "uscite": len(m.get("miei_giocati") or []) + len(m.get("miei_scartati") or [])}
+    if opp_hand_size is None and m.get("avv_mano_letta"):
+        m["avv_mano"] = evaluate.counters(m)["avv_mano"]  # stimata: le probabilità sulla mano usano questa
     if note:
         m.setdefault("note", []).append(f"R{m.get('turno')}: {note}")
     m["aggiornato"] = now()
@@ -409,11 +484,19 @@ def _counters_summary(m: dict) -> str:
     c = evaluate.counters(m)
     ev = evaluate.heuristic(m)
     est = lambda flag, how: f" (stimato: {how})" if flag else ""  # noqa: E731
-    return (f"\n\nCONTATORI: tu mazzo {c['mio_mazzo']}{est(c['mio_mazzo_stimato'], c['mio_mazzo_come'])} · mano {c['mia_mano']}"
+    reg = lambda k: ", ".join(f"{n}×{v}" if v > 1 else n for n, v in Counter(m.get(k) or []).items()) or "nessuna"  # noqa: E731
+    who, guess = m.get("rivela_prima"), m.get("rivela_prima_dedotta")
+    first = (f"\nRIVELA PRIMA: {'tu' if who == 'io' else 'avversario'}"
+             + (" (dedotto dall'alternanza: se lo schermo dice altro passa reveals_first)" if guess else "")) if who else (
+        "\nRIVELA PRIMA: non so (passa reveals_first quando lo schermo lo mostra)")
+    return (f"\n\nCONTATORI: tu mazzo {c['mio_mazzo']}{est(c['mio_mazzo_stimato'], c['mio_mazzo_come'])}"
+            f" · mano {c['mia_mano']}{est(c['mia_mano_stimata'], c['mia_mano_come'])}"
             f" | avversario mazzo {c['avv_mazzo'] if c['avv_mazzo'] is not None else '?'}"
             f"{est(c['avv_mazzo_stimato'], c['avv_mazzo_come'])}"
-            f" · mano {c['avv_mano'] if c['avv_mano'] is not None else '?'}"
-            f"\nSTIMA RAPIDA: vinci al {ev['pct']}% ({ev['motivo']})")
+            f" · mano {c['avv_mano'] if c['avv_mano'] is not None else '?'}{est(c['avv_mano_stimata'], c['avv_mano_come'])}"
+            f"\nGIOCATE REGISTRATE (se ne manca una passala in *_played_new): tue {reg('miei_giocati')}"
+            f" | avversario {reg('avv_giocati')}"
+            f"{first}\nSTIMA RAPIDA: vinci al {ev['pct']}% ({ev['motivo']})")
 
 
 @mcp.tool()

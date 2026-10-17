@@ -424,6 +424,10 @@ def run_web() -> None:
             winutil.set_window_icon("BIG-BOB", ROOT / "ui" / "bigbob.ico")
         except Exception:  # noqa: BLE001
             log.exception("icona finestra")
+        try:  # invisibile alle catture: le schermate vedono il gioco sotto BIG-BOB, senza nasconderlo
+            ctrl.apply_capture_exclusion()
+        except Exception:  # noqa: BLE001
+            log.exception("esclusione dalle catture")
         geo = Geometry(window)  # torna dove l'avevi lasciata, con la stessa dimensione
         try:
             geo.restore()

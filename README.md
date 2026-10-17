@@ -13,6 +13,18 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **BIG-BOB invisibile alle catture**: la finestra resta aperta sul monitor ma le catture (F8, osservatore,
+  registrazioni) vedono il gioco che c'è sotto, senza zone nere e senza far sparire la finestra all'F8. Serve Windows 10
+  (2004) o più recente; si spegne in Impostazioni se vuoi fotografare BIG-BOB stesso (altrimenti nelle tue schermate
+  la finestra non compare).
+- **Contatori di mano e mazzo, seconda correzione**: la seconda copia di una carta giocata dopo che la prima è morta
+  ora conta (prima veniva persa e il mazzo risultava con una carta in più); due F8 nello stesso round non contano due
+  volte la stessa giocata. Le carte in mano, tue e avversarie, non restano ferme al numero di un round fa: se non
+  sono lette sullo schermo vengono stimate (+1 pescata a round, -1 per carta giocata) e appaiono più chiare, con la
+  spiegazione al passaggio del mouse. Claude vede le giocate registrate e può aggiungere quella che manca.
+- **"Rivela prima" corretto**: prima mostrava il valore dell'ultima volta che era stato letto, quindi dal round dopo
+  era sempre sbagliato (si alterna) e a volte scambiava te con l'avversario. Ora basta leggerlo una volta: nei round
+  dopo BIG-BOB lo deduce dall'alternanza (in chiaro, "dedotto") finché lo schermo non lo mostra di nuovo.
 - **Osservatore più attento tra un F8 e l'altro**: guarda lo schermo ogni 0,35 s invece di 0,7, si accorge anche di una
   carta che compare in un angolo (confronta zona per zona, non la media di tutto lo schermo) e salva anche durante le
   animazioni, così rivelazioni, magie e combattimenti brevi non sfuggono più. All'F8 allega fino a 10 fotogrammi

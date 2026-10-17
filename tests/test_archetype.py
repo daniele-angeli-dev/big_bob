@@ -149,6 +149,40 @@ from origins import report  # noqa: E402
 report.LOGS = tmp / "logs"
 check("CARTE AVVERSARIE PREVISTE" in report.stats_body(), "statistiche: precisione delle previsioni")
 
+print("7. contatori: seconda copia e mano stimata")
+call("start_match", my_deck="Test", opponent_legendary="Dracula")
+call("update_match", turn=2, opp_played_new=["Rapida 1"], opp_hand_size=5, my_hand=["Rapida 2", "Rapida 3"])
+call("update_match", turn=2, opp_played_new=["Rapida 1"])  # secondo F8 nello stesso round: non conta due volte
+check(store.load("match")["avv_giocati"] == ["Rapida 1"], "stesso round: una copia sola")
+call("update_match", turn=4, opp_played=["Rapida 1"], opp_played_new=["Rapida 1"])  # la prima è morta, gioca la seconda
+check(store.load("match")["avv_giocati"] == ["Rapida 1", "Rapida 1"], "seconda copia in un round dopo: contata")
+call("update_match", turn=5, opp_played=["Rapida 1", "Rapida 4"])
+check(store.load("match")["avv_giocati"].count("Rapida 1") == 2, "le liste complete non tolgono copie")
+from origins import evaluate  # noqa: E402
+c = evaluate.counters(store.load("match"))
+# letta 5 al round 2 con 1 carta uscita; ora round 5 (+3) e 3 carte uscite (+2) → 6
+check(c["avv_mano"] == 6 and c["avv_mano_stimata"], f"mano avversaria stimata: {c['avv_mano']} ({c['avv_mano_come']})")
+check(c["mia_mano"] == 5 and c["mia_mano_stimata"], f"mia mano stimata: {c['mia_mano']}")
+out = call("update_match", turn=5, opp_hand_size=4, my_hand_size=3)
+c = evaluate.counters(store.load("match"))
+check(c["avv_mano"] == 4 and not c["avv_mano_stimata"] and c["mia_mano"] == 3, "letta sullo schermo vince")
+check("GIOCATE REGISTRATE" in out and "Rapida 1×2" in out, "update_match mostra le giocate registrate")
+call("end_match", result="vittoria")
+
+print("8. chi rivela prima")
+call("start_match", my_deck="Test", opponent_legendary="Dracula")
+call("update_match", turn=1, reveals_first="Daniele")
+check(store.load("match")["rivela_prima"] == "io", "'Daniele' = io")
+out = call("update_match", turn=2)
+m = store.load("match")
+check(m["rivela_prima"] == "avversario" and m["rivela_prima_dedotta"] and "dedotto" in out, "round dopo: si alterna")
+call("update_match", turn=5)
+check(store.load("match")["rivela_prima"] == "io", "round 5: 4 round dopo il primo, di nuovo io")
+call("update_match", turn=6, reveals_first="opponent")
+m = store.load("match")
+check(m["rivela_prima"] == "avversario" and not m["rivela_prima_dedotta"], "letto sullo schermo vince")
+call("end_match", result="vittoria")
+
 shutil.rmtree(tmp, ignore_errors=True)
 print("\nFALLITI:", len(FAILED))
 sys.exit(1 if FAILED else 0)

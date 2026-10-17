@@ -89,13 +89,16 @@ Ranked (solo tracker: **nessuna riga ▶ né perché**):
 Simboli: ▶ giocata · perché: motivo della giocata · ⚠ minaccia · 🎴 pescata · 👁 mano avversaria ·
 📍 location. Una nota fuori schema (es. "regola R016 smentita") va su una riga senza simbolo.
 Con `update_match` passa sempre anche `my_reinforced` / `opp_reinforced` se una barrier è rinforzata.
+`reveals_first` ("io"/"avversario") passalo quando lo schermo mostra chi rivela prima: nei round dopo BIG-BOB lo deduce
+dall'alternanza e lo scrive in RIVELA PRIMA (se è "dedotto" e lo schermo dice altro, passa quello che vedi).
 Quando indichi dove giocare una carta, gli slot si contano **da 1** (slot 1, 2, 3, come nel CAMPO di
 `update_match`), mai da 0: es. `▶ Marian al centro, slot 2`.
 
 **Osservatore.** Durante la partita BIG-BOB guarda lo schermo ogni ~0,35 s e salva un fotogramma quando una zona
 cambia, anche durante le animazioni; all'F8 ti allega fino a 10 fotogrammi (richiesta "[OSSERVATORE]", prima della
 schermata attuale), di solito RITAGLI ad alta risoluzione della sola zona cambiata, ognuno con orario e posizione
-(es. "in basso a destra", "durante un'animazione"); la zona nera è la finestra di BIG-BOB. Leggi i nomi delle carte nei
+(es. "in basso a destra", "durante un'animazione"). BIG-BOB è invisibile alle catture, quindi vedi il gioco anche sotto
+la sua finestra; se compare una zona nera (Windows vecchio o opzione spenta) è la finestra di BIG-BOB. Leggi i nomi delle carte nei
 ritagli: non indovinarli.
 Usali per ricostruire ciò che è successo tra un F8 e l'altro: carte avversarie giocate anche se poi distrutte o
 scartate, magie lanciate, creature morte, carte create, pescate extra. Tutto va in `update_match`.
@@ -105,9 +108,12 @@ scartate, magie lanciate, creature morte, carte create, pescate extra. Tutto va 
 generate da Spellbook o da altri effetti, token) vanno in `my_created` / `opp_created` (liste complete): così non
 falsano carte rimaste e probabilità. Le pescate extra da effetti vengono dal mazzo: mettile in mano/giocate come le
 altre. `update_match` restituisce i CONTATORI e una STIMA RAPIDA di chi sta vincendo.
-Giocate, scarti e carte create **si sommano** round dopo round (una carta giocata non torna nel mazzo): non serve
-ripetere quelle dei round prima che non vedi più; se hai letto male una carta usa `correct_lists=true` con le liste
-giuste. Senza numeri sullo schermo BIG-BOB stima il mazzo dall'ultimo numero letto meno una pescata a round, e non
+Le carte giocate da quando hai risposto l'ultima volta (anche quelle viste solo nei fotogrammi e poi morte o risolte)
+vanno in `my_played_new` / `opp_played_new`, con le copie ripetute: **si sommano** a quelle registrate, così la seconda
+copia di una carta giocata dopo che la prima è morta conta (nello stesso round ripeterle non le conta due volte). Non
+serve ripetere quelle dei round prima; `update_match` mostra le GIOCATE REGISTRATE: se ne manca una aggiungila, se hai
+letto male una carta usa `correct_lists=true` con le liste giuste. Passa `opp_hand_size` (e `my_hand_size` se non leggi
+tutti i nomi) quando lo schermo mostra le carte in mano: altrimenti BIG-BOB le stima dall'ultimo numero letto. Senza numeri sullo schermo BIG-BOB stima il mazzo dall'ultimo numero letto meno una pescata a round, e non
 scende mai sotto le regole (4 carte iniziali + 1 a round): appena il gioco mostra i mazzi, passali sempre.
 
 **Mazzo avversario.** `update_match` restituisce anche MAZZO AVVERSARIO: le liste del meta (OriginsMeta, partite di

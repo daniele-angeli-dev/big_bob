@@ -109,6 +109,7 @@ body.inmatch .score .l{font-size:11px}
 .counts b{color:#fff;font-size:14px}
 .counts .me b{color:var(--teal-t)}.counts .op b{color:var(--orange-t)}
 .counts .est{opacity:.7;font-weight:600}
+#hFirst.est{opacity:.7}
 .score .n{font-family:var(--display);font-size:26px}
 .score .l{font-weight:700;font-size:12px;letter-spacing:2px;color:var(--dim)}
 .empty{padding:6px 0;text-align:center;color:var(--dim);font-weight:600}
@@ -399,6 +400,7 @@ body.inmatch .score .l{font-size:11px}
     <label class="opt"><input type="checkbox" id="oImpara"> Impara dalle sorprese tra i round</label>
     <label class="opt"><input type="checkbox" id="oTerm"> Apri anche il terminale di Claude Code all'avvio (serve solo per i comandi)</label>
     <label class="opt"><input type="checkbox" id="oObs"> Osserva la partita tra un F8 e l'altro (vede magie scartate e creature morte)</label>
+    <label class="opt"><input type="checkbox" id="oInv"> BIG-BOB invisibile alle catture: le schermate vedono il gioco sotto la finestra, senza farla sparire (spegnilo solo per fotografare BIG-BOB)</label>
     <label class="opt"><input type="checkbox" id="oEval"> Barra di vantaggio: BIG-BOB stima chi sta vincendo dopo ogni risposta</label>
     <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (al primo avvio di ogni giorno)</label>
     <label class="opt" for="oThink">Tetto ragionamento live (token) <input class="inp" id="oThink" type="number" min="0" step="500" style="width:90px;height:34px;flex-grow:0"></label>
@@ -455,7 +457,9 @@ body.inmatch .score .l{font-size:11px}
     $('hRound').textContent = 'ROUND ' + (m.round != null ? m.round : '–');
     $('hMana').textContent = m.mana != null ? m.mana : '–';
     var f = (m.rivela_prima || '').toLowerCase();
-    $('hFirst').textContent = f ? (f.indexOf('io') === 0 || f.indexOf('tu') === 0 || f.indexOf('me') === 0 ? 'TU' : 'AVV') : '–';
+    $('hFirst').textContent = f ? (f.indexOf('avv') === 0 ? 'AVV' : 'TU') : '–';
+    $('hFirst').className = m.rivela_prima_dedotta ? 'est' : '';
+    $('hFirst').title = !f ? 'non ancora letto' : m.rivela_prima_dedotta ? 'dedotto: si alterna ogni round' : 'letto sullo schermo in questo round';
     var ev = m.valutazione || {}, pct = ev.pct != null ? ev.pct : 50;
     $('hEvMe').style.width = pct + '%'; $('hEvMe').textContent = pct >= 18 ? 'TU ' + pct + '%' : pct + '%';
     $('hEvOpp').textContent = (100 - pct) >= 18 ? (100 - pct) + '% AVV' : (100 - pct) + '%';
@@ -471,15 +475,15 @@ body.inmatch .score .l{font-size:11px}
       c.setAttribute('aria-label', c.title);
     });
     var c = m.contatori || {};
-    function cnt(el, who, deck, est, hand, how){
+    function cnt(el, who, deck, est, hand, how, hest, hhow){
       el.innerHTML = '';
       el.appendChild(document.createTextNode(who + ' · MAZZO '));
       var b1 = document.createElement('b'); b1.textContent = deck != null ? deck : '–'; if (est) b1.className = 'est'; b1.title = est ? 'stimato (' + (how || 'carte uscite') + ')' : 'letto dallo schermo in questo round'; el.appendChild(b1);
       el.appendChild(document.createTextNode(' · MANO '));
-      var b2 = document.createElement('b'); b2.textContent = hand != null ? hand : '–'; el.appendChild(b2);
+      var b2 = document.createElement('b'); b2.textContent = hand != null ? hand : '–'; if (hest) b2.className = 'est'; b2.title = hest ? 'stimato (' + (hhow || '') + ')' : 'letto dallo schermo in questo round'; el.appendChild(b2);
     }
-    cnt($('hCntMe'), 'TU', c.mio_mazzo, c.mio_mazzo_stimato, c.mia_mano, c.mio_mazzo_come);
-    cnt($('hCntOpp'), 'AVV', c.avv_mazzo, c.avv_mazzo_stimato, c.avv_mano, c.avv_mazzo_come);
+    cnt($('hCntMe'), 'TU', c.mio_mazzo, c.mio_mazzo_stimato, c.mia_mano, c.mio_mazzo_come, c.mia_mano_stimata, c.mia_mano_come);
+    cnt($('hCntOpp'), 'AVV', c.avv_mazzo, c.avv_mazzo_stimato, c.avv_mano, c.avv_mazzo_come, c.avv_mano_stimata, c.avv_mano_come);
     var od = m.avv_mazzo;
     $('hOppDeck').classList.toggle('hidden', !od || od.tipo === '?');
     var pl = (od && od.probabili) || [];
@@ -805,7 +809,7 @@ body.inmatch .score .l{font-size:11px}
     $('apiKey').value = ''; $('apiKey').placeholder = v.api_key_impostata ? 'chiave salvata · scrivi per cambiarla' : 'sk-ant-…';
     $('modello').value = v.modello_live || 'sonnet';
     $('oVoce').checked = v.voce !== false; $('oImpara').checked = v.apprendimento_live !== false;
-    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false; $('oObs').checked = v.osservatore !== false; $('oEval').checked = v.barra_vantaggio !== false;
+    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false; $('oObs').checked = v.osservatore !== false; $('oInv').checked = v.invisibile_catture !== false; $('oEval').checked = v.barra_vantaggio !== false;
     $('oThink').value = v.max_thinking_live != null ? v.max_thinking_live : 4000;
     $('oShare').checked = v.cervello_contribuisci !== false; $('oUse').checked = v.cervello_usa !== false;
     var cb = ev.cervello || {};
@@ -826,7 +830,7 @@ body.inmatch .score .l{font-size:11px}
     e.preventDefault();
     var vals = { connessione: connValue(), modello_live: $('modello').value, voce: $('oVoce').checked,
       apprendimento_live: $('oImpara').checked, apri_claude_code_all_avvio: $('oTerm').checked,
-      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10),
+      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, invisibile_catture: $('oInv').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10),
       cervello_contribuisci: $('oShare').checked, cervello_usa: $('oUse').checked };
     var k = $('apiKey').value.trim(); if (k) vals.api_key = k;
     hide(); call('save_settings', vals);

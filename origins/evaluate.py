@@ -75,23 +75,42 @@ def _deck_estimate(m: dict, side: str, out_tracked: int | None) -> tuple[int | N
     return max(0, DECK_SIZE - out), True, how
 
 
+MANO_MAX = 10
+
+
+def _hand(m: dict, side: str, fallback: int | None) -> tuple[int | None, bool, str]:
+    """(carte in mano, stimato?, come). Letto sullo schermo in questo round, altrimenti dall'ultimo numero letto:
+    +1 pescata per ogni round passato, -1 per ogni carta giocata o scartata da allora (massimo 10)."""
+    rd = m.get("mia_mano_letta" if side == "mio" else "avv_mano_letta")
+    turn = m.get("turno")
+    if not rd or not isinstance(rd.get("mano"), int):
+        return fallback, False, ""
+    if rd.get("turno") == turn:
+        return rd["mano"], False, "letto sullo schermo"
+    keys = ("miei_giocati", "miei_scartati") if side == "mio" else ("avv_giocati", "avv_scartati")
+    out_now = sum(len(m.get(k) or []) for k in keys)
+    rounds = max(0, turn - rd["turno"]) if isinstance(turn, int) and isinstance(rd.get("turno"), int) else 0
+    est = rd["mano"] + rounds - max(0, out_now - (rd.get("uscite") or 0))
+    return max(0, min(MANO_MAX, est)), True, f"letto al round {rd['turno']}, +1 a round, -1 per carta giocata"
+
+
 def counters(m: dict) -> dict:
     """{'mio_mazzo', 'mia_mano', 'avv_mazzo', 'avv_mano'} con 'stimato' quando non letto dallo schermo in questo round."""
-    my_hand = len(m.get("mia_mano") or [])
+    my_hand, my_hand_est, my_hand_how = _hand(m, "mio", len(m.get("mia_mano") or []))
     # la carta del potere leggendario arriva in mano senza uscire dal mazzo: se Claude non l'ha segnata tra le
     # carte create, ne tolgo una dal conto (altrimenti il mazzo risulterebbe sempre con una carta in meno)
     my_out = sum(seen_mine(m).values()) - (0 if m.get("miei_creati") else 1)
     mine, mine_est, mine_how = _deck_estimate(m, "mio", max(0, my_out))
-    opp_hand = m.get("avv_mano")
+    opp_hand, opp_hand_est, opp_hand_how = _hand(m, "avv", m.get("avv_mano"))
     opp_out = None
     if opp_hand is not None or seen_opp(m):
         opp_out = max(0, sum(seen_opp(m).values()) + (opp_hand or 0) - (0 if m.get("avv_creati") else 1))
     opp, opp_est, opp_how = _deck_estimate(m, "avv", opp_out)
     return {
         "mio_mazzo": mine, "mio_mazzo_stimato": mine_est, "mio_mazzo_come": mine_how,
-        "mia_mano": my_hand,
+        "mia_mano": my_hand, "mia_mano_stimata": my_hand_est, "mia_mano_come": my_hand_how,
         "avv_mazzo": opp, "avv_mazzo_stimato": opp_est, "avv_mazzo_come": opp_how,
-        "avv_mano": opp_hand,
+        "avv_mano": opp_hand, "avv_mano_stimata": opp_hand_est, "avv_mano_come": opp_hand_how,
         "mie_create": len(m.get("miei_creati") or []),
         "avv_create": len(m.get("avv_creati") or []),
     }
