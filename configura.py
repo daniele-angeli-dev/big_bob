@@ -59,6 +59,42 @@ def find_claude() -> str | None:
     return next((str(p) for p in claude_candidates() if p.is_file()), None)
 
 
+def ensure_claude_on_path(exe: str | None = None) -> bool:
+    """L'installer ufficiale mette claude.exe in %USERPROFILE%\\.local\\bin ma non lo aggiunge al PATH: lo aggiungo io
+    (PATH dell'utente, permanente, e PATH di questo processo), così "claude" funziona anche nei terminali.
+    Restituisce True se ha cambiato qualcosa."""
+    import os
+    exe = exe or find_claude()
+    if os.name != "nt" or not exe:
+        return False
+    folder = str(Path(exe).parent)
+    norm = lambda p: os.path.normcase(os.path.expandvars(p.strip().rstrip("\\")))  # noqa: E731
+    changed = False
+    if norm(folder) not in {norm(p) for p in os.environ.get("PATH", "").split(";") if p}:
+        os.environ["PATH"] = os.environ.get("PATH", "").rstrip(";") + ";" + folder
+        changed = True
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0,
+                            winreg.KEY_READ | winreg.KEY_WRITE) as k:
+            try:
+                cur, kind = winreg.QueryValueEx(k, "Path")
+            except FileNotFoundError:
+                cur, kind = "", winreg.REG_EXPAND_SZ
+            if norm(folder) not in {norm(p) for p in cur.split(";") if p}:
+                winreg.SetValueEx(k, "Path", 0, kind if kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ)
+                                  else winreg.REG_EXPAND_SZ, (cur.rstrip(";") + ";" if cur else "") + folder)
+                changed = True
+                try:  # avvisa Windows: i terminali aperti da ora vedono il PATH nuovo
+                    import ctypes
+                    ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x001A, 0, "Environment", 0x0002, 3000, None)
+                except Exception:  # noqa: BLE001
+                    pass
+    except Exception:  # noqa: BLE001
+        pass
+    return changed
+
+
 def install_claude(log=print) -> str | None:
     """Installa Claude Code (installer ufficiale; se non va, winget). Restituisce il percorso di claude o None."""
     import os
@@ -158,6 +194,8 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.trova_claude or a.installa_claude:
         exe = install_claude() if a.installa_claude else find_claude()
+        if exe:
+            ensure_claude_on_path(exe)
         print(exe or "Claude Code non trovato")
         sys.exit(0 if exe else 1)
     if a.riassunto:

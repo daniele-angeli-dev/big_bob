@@ -406,6 +406,9 @@ Section "BIG-BOB" SecMain
     MessageBox MB_OK|MB_ICONSTOP "L'installazione delle librerie non è riuscita (i dettagli sono nell'elenco). Controlla la connessione a internet e rilancia l'installer."
     Abort
   ${EndIf}
+  StrCpy $0 "Aggiungo Claude Code al PATH (se serve)"
+  StrCpy $1 '"$PY" "$INSTDIR\configura.py" --trova-claude'
+  Call Esegui
   StrCpy $0 "Collego BIG-BOB a Claude Code"
   StrCpy $1 '"$PY" "$INSTDIR\setup_mcp.py"'
   Call Esegui

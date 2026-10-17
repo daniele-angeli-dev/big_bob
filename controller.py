@@ -303,6 +303,12 @@ class Controller:
     def __init__(self, ui) -> None:
         self.ui = ui
         self.claude = find_claude()
+        if self.claude:
+            try:
+                import configura
+                configura.ensure_claude_on_path(self.claude)  # claude trovato ma non nel PATH: lo aggiungo
+            except Exception:  # noqa: BLE001
+                log.exception("PATH di Claude Code")
         self.session = ClaudeSession(self.claude, ROOT) if self.claude else None
         self.voice = Voice()
         cfg = store.load("config")
@@ -367,6 +373,10 @@ class Controller:
             self.status("Claude Code non installato")
             return
         self.claude = exe
+        try:
+            configura.ensure_claude_on_path(exe)
+        except Exception:  # noqa: BLE001
+            log.exception("PATH di Claude Code")
         self.session = ClaudeSession(self.claude, ROOT)
         self.status("Claude Code installato")
         self.say("Claude Code installato. Ora accedi con il TUO account Claude (Pro o Max) nel terminale che si apre: "
