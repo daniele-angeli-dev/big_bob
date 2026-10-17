@@ -149,5 +149,24 @@ c.get_settings()
 st = [e for e in ui.ev if e["type"] == "settings"][-1]
 assert st["valori"]["api_key_impostata"] is True and "api_key" not in st["valori"]
 
+# all'avvio: errori sempre visibili, novità in finestra (fuori partita), barra nascosta quando è tutto a posto
+ui.ev.clear()
+updates.check = lambda: {"disponibile": False, "novita": [], "versione": "abc", "errore": "GitHub non risponde", "rete": True}
+assert c._check_updates(manual=False, startup=True)["rete"]
+assert [e for e in ui.ev if e["type"] == "update"][-1]["errore"] == "GitHub non risponde"
+updates.check = lambda: {"disponibile": True, "novita": ["x"], "versione": "abc", "errore": None}
+c._check_updates(manual=False, startup=True)
+assert [e for e in ui.ev if e["type"] == "update"][-1]["manual"] is True, "all'avvio le novità si aprono in finestra"
+store.save("match", {"mio_mazzo": "X"})
+c._check_updates(manual=False, startup=True)
+assert [e for e in ui.ev if e["type"] == "update"][-1]["manual"] is False, "in partita basta la barra"
+store.save("match", {})
+updates.check = lambda: {"disponibile": False, "novita": [], "versione": "abc", "errore": None}
+c._check_updates(manual=False, startup=True)
+last = [e for e in ui.ev if e["type"] == "update"][-1]
+assert not last["disponibile"] and not last.get("errore"), "tutto a posto: la barra sparisce"
+assert "aggiornato" in [e for e in ui.ev if e["type"] == "status"][-1]["text"]
+assert "controlla_aggiornamenti" not in c.SETTINGS_KEYS, "il controllo all'avvio non si può più spegnere"
+
 shutil.rmtree(tmp, ignore_errors=True)
 print("AGGIORNAMENTI OK")

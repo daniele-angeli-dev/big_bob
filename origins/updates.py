@@ -20,14 +20,47 @@ RESULT = ROOT / "logs" / "aggiornamento.json"
 NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+_GIT: str | None = None
+
+
+def git_exe() -> str | None:
+    """Il comando git. Se Git è stato appena installato (dall'installer) Windows aggiorna il PATH solo dal login
+    successivo: BIG-BOB aperto dall'icona non lo vedrebbe, quindi lo cerco anche nei percorsi soliti e nel PATH
+    salvato nel registro."""
+    global _GIT
+    if _GIT and (Path(_GIT).exists() or shutil.which(_GIT)):
+        return _GIT
+    found = shutil.which("git")
+    if not found and sys.platform == "win32":
+        cands = [Path(os.environ.get(v, "")) / "Git" / "cmd" / "git.exe"
+                 for v in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)")]
+        cands.append(Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Git" / "cmd" / "git.exe")
+        try:
+            import winreg
+            for root, key in ((winreg.HKEY_CURRENT_USER, "Environment"),
+                              (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment")):
+                try:
+                    with winreg.OpenKey(root, key) as k:
+                        path = os.path.expandvars(winreg.QueryValueEx(k, "Path")[0])
+                    cands += [Path(d) / "git.exe" for d in path.split(";") if d]
+                except OSError:
+                    continue
+        except ImportError:
+            pass
+        found = next((str(c) for c in cands if str(c) and c.exists()), None)
+    _GIT = found
+    return found
+
+
 def _git(*args, timeout: float = 30) -> subprocess.CompletedProcess:
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
-    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+    exe = git_exe() or "git"
+    return subprocess.run([exe, *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=timeout, env=env, creationflags=NOWIN)
 
 
 def git_available() -> bool:
-    return shutil.which("git") is not None
+    return git_exe() is not None
 
 
 def installed_version() -> str:
@@ -64,7 +97,8 @@ def check() -> dict:
                 out["errore"] = ("Accesso a GitHub non ancora fatto: apri una volta «Aggiorna BIG-BOB» dal menu Start "
                                  "e accedi nel browser.")
             else:
-                out["errore"] = "Controllo aggiornamenti non riuscito (connessione?)."
+                out["errore"] = "Controllo aggiornamenti non riuscito: GitHub non risponde (connessione?)."
+                out["rete"] = True
             return out
         head = _git("rev-parse", "-q", "--verify", "HEAD")
         if head.returncode != 0:
@@ -83,7 +117,8 @@ def check() -> dict:
         out["modifiche_locali"] = [x[3:] for x in st.stdout.splitlines() if x.strip()][:10]
         out["versione"] = installed_version()
     except subprocess.TimeoutExpired:
-        out["errore"] = "Controllo aggiornamenti troppo lento: riprovo al prossimo avvio."
+        out["errore"] = "Controllo aggiornamenti troppo lento (connessione?)."
+        out["rete"] = True
     except Exception as e:  # noqa: BLE001
         out["errore"] = f"Controllo aggiornamenti non riuscito: {e}"
     return out

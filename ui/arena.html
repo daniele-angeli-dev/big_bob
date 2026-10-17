@@ -340,7 +340,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <label class="opt"><input type="checkbox" id="oVoce"> Leggi la mossa ad alta voce</label>
     <label class="opt"><input type="checkbox" id="oImpara"> Impara dalle sorprese tra i round</label>
     <label class="opt"><input type="checkbox" id="oTerm"> Apri anche il terminale di Claude Code all'avvio (serve solo per i comandi)</label>
-    <label class="opt"><input type="checkbox" id="oUpd"> Controlla gli aggiornamenti all'avvio</label>
     <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (al primo avvio di ogni giorno)</label>
     <label class="opt" for="oThink">Tetto ragionamento live (token) <input class="inp" id="oThink" type="number" min="0" step="500" style="width:90px;height:34px;flex-grow:0"></label>
     <div class="sec">VERSIONE</div>
@@ -628,7 +627,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('apiKey').value = ''; $('apiKey').placeholder = v.api_key_impostata ? 'chiave salvata · scrivi per cambiarla' : 'sk-ant-…';
     $('modello').value = v.modello_live || 'sonnet';
     $('oVoce').checked = v.voce !== false; $('oImpara').checked = v.apprendimento_live !== false;
-    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oUpd').checked = v.controlla_aggiornamenti !== false; $('oMeta').checked = v.meta_originsmeta !== false;
+    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false;
     $('oThink').value = v.max_thinking_live != null ? v.max_thinking_live : 4000;
     $('verTxt').textContent = 'Versione ' + (ev.versione || '–') + (ev.claude_trovato ? '' : ' · Claude Code non trovato');
     syncApi();
@@ -642,7 +641,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     e.preventDefault();
     var vals = { connessione: connValue(), modello_live: $('modello').value, voce: $('oVoce').checked,
       apprendimento_live: $('oImpara').checked, apri_claude_code_all_avvio: $('oTerm').checked,
-      controlla_aggiornamenti: $('oUpd').checked, meta_originsmeta: $('oMeta').checked, max_thinking_live: parseInt($('oThink').value || '0', 10) };
+      meta_originsmeta: $('oMeta').checked, max_thinking_live: parseInt($('oThink').value || '0', 10) };
     var k = $('apiKey').value.trim(); if (k) vals.api_key = k;
     hide(); call('save_settings', vals);
   };

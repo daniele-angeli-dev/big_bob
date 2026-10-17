@@ -420,23 +420,38 @@ class Controller:
             self.emit({"type": "update_done", **res})
             if res.get("ok"):
                 self.say(f"BIG-BOB aggiornato ({res.get('da')} → {res.get('a')}).", "dim")
-        if store.load("config").get("controlla_aggiornamenti", True):
-            time.sleep(3)  # lascia partire prima la finestra e Claude Code
-            self._check_updates(manual=False)
+        # a ogni avvio, sempre: prima la finestra e Claude Code, poi il controllo; se la rete non è ancora pronta
+        # (PC appena acceso) riprova un paio di volte; poi ricontrolla ogni 3 ore finché BIG-BOB resta aperto
+        time.sleep(3)
+        for attempt in range(3):
+            res = self._check_updates(manual=False, startup=True)
+            if not (res or {}).get("rete"):
+                break
+            time.sleep(20)
+        while not self._stop.wait(3 * 3600):
+            if not self.busy:
+                self._check_updates(manual=False)
 
     def check_updates(self) -> None:
         threading.Thread(target=self._check_updates, kwargs={"manual": True}, daemon=True).start()
 
-    def _check_updates(self, manual: bool) -> None:
+    def _check_updates(self, manual: bool, startup: bool = False) -> dict:
         from origins import updates
-        if manual:
+        if manual or startup:
             self.status("Controllo aggiornamenti…")
         res = updates.check()
         log.info("controllo aggiornamenti: %s", res)
-        if res["disponibile"] or manual or (res.get("errore") and "GitHub" in res["errore"]):
+        if res["disponibile"]:
+            # all'avvio la finestra delle novità si apre da sola (fuori partita); più tardi basta la barra
+            in_match = store.FILES["match"].exists() and bool(store.load("match"))
+            self.emit({"type": "update", **res, "manual": manual or (startup and not in_match and not self.busy)})
+        else:
+            # errore → barra rossa con il motivo; tutto a posto → la barra (se c'era) sparisce
             self.emit({"type": "update", **res, "manual": manual})
-        if manual:
-            self.status("")
+        if manual or startup:
+            self.status(f"BIG-BOB è aggiornato · versione {res['versione']}" if not res["disponibile"]
+                        and not res.get("errore") else "")
+        return res
 
     def apply_update(self) -> None:
         from origins import updates
@@ -502,7 +517,7 @@ class Controller:
 
     # ------------------------------------------------ impostazioni e collegamento a Claude
     SETTINGS_KEYS = ("modello_live", "connessione", "voce", "apprendimento_live", "apri_claude_code_all_avvio",
-                     "controlla_aggiornamenti", "max_thinking_live", "modalita", "meta_originsmeta")
+                     "max_thinking_live", "modalita", "meta_originsmeta")
 
     def get_settings(self) -> None:
         from origins import updates
@@ -518,7 +533,7 @@ class Controller:
         import configura
         cfg_before = store.load("config")
         extra = {k: vals[k] for k in ("voce", "apprendimento_live", "apri_claude_code_all_avvio",
-                                      "controlla_aggiornamenti", "meta_originsmeta") if k in vals}
+                                      "meta_originsmeta") if k in vals}
         if "max_thinking_live" in vals:
             try:
                 extra["max_thinking_live"] = max(0, int(vals["max_thinking_live"]))
