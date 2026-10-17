@@ -1,0 +1,20 @@
+# Configurazione del cervello comune. pubblica.py crea da questo file "wrangler.toml" con l'id del tuo database.
+name = "bigbob-cervello"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+CONFERMA_GIOCATORI = "2"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bigbob-cervello"
+database_id = "__DATABASE_ID__"
+
+# Ricalcolo del riassunto ogni ora (oltre a quello dopo i contributi).
+[triggers]
+crons = ["17 * * * *"]
+
+[observability]
+enabled = true

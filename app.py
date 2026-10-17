@@ -225,6 +225,12 @@ class Api:
     def sync_meta(self):
         self._c.sync_meta()
 
+    def sync_brain(self):
+        self._c.sync_brain()
+
+    def brain_consent(self, ok=True):
+        self._c.brain_consent(bool(ok))
+
     def apply_update(self):
         self._c.apply_update()
 

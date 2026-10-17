@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP, Image  # noqa: E402
 
-from origins import combat, deckproj, evaluate, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
+from origins import cervello, combat, deckproj, evaluate, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
 from origins.store import canonical, load, now, save  # noqa: E402
 
 mcp = FastMCP("origins")
@@ -408,11 +408,17 @@ def _lessons_summary(m: dict) -> str:
     cards = (m.get("mia_mano", []) + m.get("miei_giocati", []) + m.get("avv_giocati", []) + m.get("avv_scartati", [])
              + [m.get("avv_leggendaria") or "", m.get("leggendaria_mia") or ""] + (m.get("location") or []))
     rel = lessons.relevant(cards)
-    if not rel:
-        return ""
     rows = [f"- {x['id']} {'✅' if x['stato'] == 'confermata' else '❓'} {x['lezione']} (vista {x.get('volte', 1)}×)"
             for x in rel]
-    return "\n\nLEZIONI GIÀ IMPARATE (tienine conto; ❓ = ipotesi):\n" + "\n".join(rows)
+    try:  # lezioni del cervello comune che non hai ancora (🌐 = di altri giocatori)
+        comm = cervello.lessons_view(cards, limit=2 if rel else 3)
+    except Exception:  # noqa: BLE001
+        comm = []
+    rows += [f"- 🌐{x['id']} {'✅' if x['stato'] == 'confermata' else '❓'} {x['testo']} "
+             f"({x.get('sostengono', 1)} giocatori)" for x in comm]
+    if not rows:
+        return ""
+    return "\n\nLEZIONI GIÀ IMPARATE (tienine conto; ❓ = ipotesi; 🌐 = cervello comune):\n" + "\n".join(rows)
 
 
 def _odds_summary(m: dict, top: int = 6) -> str:
@@ -658,8 +664,22 @@ def rules_get(categoria: str = "", stato: str = "") -> str:
     corsie, vittoria, leggendaria, parole chiave, location, altro) e stato (domanda, ipotesi,
     probabile, confermata, smentita). Le 'domanda' sono le cose che non sappiamo ancora."""
     rs = rules.get(categoria, stato)
-    return _j([{k: r.get(k) for k in ("id", "categoria", "stato", "testo", "fonti")} | {"prove": len(r.get("prove", []))}
-               for r in rs])
+    out = [{k: r.get(k) for k in ("id", "categoria", "stato", "testo", "fonti")} | {"prove": len(r.get("prove", []))}
+           for r in rs]
+    try:
+        notes, extra = cervello.rules_view(rules.load())
+    except Exception:  # noqa: BLE001
+        notes, extra = {}, []
+    for r in out:
+        if r["id"] in notes:
+            r["cervello_comune"] = notes[r["id"]]
+    extra = [c for c in extra if (not categoria or c.get("categoria", "").lower() == categoria.lower())
+             and (not stato or c.get("stato") == stato)]
+    for c in extra[:60]:
+        out.append({"id": c["id"], "categoria": c.get("categoria"), "stato": c.get("stato"), "testo": c.get("testo"),
+                    "fonti": ["cervello comune"], "giocatori": c.get("giocatori"), "conferme": c.get("conferme"),
+                    "smentite": c.get("smentite"), "prove_esempio": c.get("prove", [])[:2]})
+    return _j(out)
 
 
 @mcp.tool()
@@ -831,7 +851,47 @@ def lessons_get(carte: list[str] | None = None, tipo: str = "", stato: str = "")
         ls = [x for x in ls if x.get("tipo") == tipo]
     if stato:
         ls = [x for x in ls if x.get("stato") == stato]
-    return _j([{k: x.get(k) for k in ("id", "tipo", "stato", "lezione", "carte", "volte")} for x in ls])
+    out = [{k: x.get(k) for k in ("id", "tipo", "stato", "lezione", "carte", "volte")} for x in ls]
+    try:
+        comm = cervello.lessons_view(carte if carte else None, limit=20)
+    except Exception:  # noqa: BLE001
+        comm = []
+    for x in comm:
+        if (tipo and x.get("tipo") != tipo) or (stato and x.get("stato") != stato):
+            continue
+        out.append({"id": x["id"], "tipo": x.get("tipo"), "stato": x.get("stato"), "lezione": x.get("testo"),
+                    "carte": x.get("carte"), "volte": x.get("volte"), "giocatori": x.get("sostengono"),
+                    "fonte": "cervello comune"})
+    return _j(out)
+
+
+@mcp.tool()
+def cervello_comune(argomento: str = "") -> str:
+    """Il cervello comune: ciò che hanno imparato tutti i giocatori di BIG-BOB (anonimo). argomento:
+    "" = riassunto (giocatori, winrate per leggendaria, matchup, mazzi avversari più visti); "regole"; "lezioni";
+    "carte" (testi concordi tra più giocatori); "mazzi" (carte più viste per leggendaria avversaria).
+    Le regole e le lezioni comuni compaiono già in rules_get / lessons_get / update_match con id C… / CL…:
+    una regola 'confermata' nel cervello comune è stata confermata da più giocatori diversi."""
+    k = cervello.knowledge()
+    if not k:
+        return _j({"stato": cervello.summary_line(), "nota": "nessun dato scaricato (server non configurato, uso "
+                                                          "spento o ancora nessuna sincronizzazione)"})
+    a = argomento.lower().strip()
+    head = {"giocatori": k.get("giocatori"), "aggiornato": k.get("creato"), "soglia_conferma": k.get("soglia_conferma"),
+            "nota": "chi registra le partite sono i giocatori di BIG-BOB: confronta tra loro, non con il 50%"}
+    if a.startswith("regol"):
+        return _j({**head, "regole": k.get("regole", [])[:120]})
+    if a.startswith("lezion"):
+        return _j({**head, "lezioni": k.get("lezioni", [])[:120]})
+    if a.startswith("cart") or a.startswith("loc"):
+        return _j({**head, "carte": k.get("carte", [])[:200], "location": k.get("location", [])[:80]})
+    if a.startswith("mazz"):
+        return _j({**head, "mazzi_avversari": k.get("mazzi_avversari", [])})
+    return _j({**head, "partite": k.get("partite"), "giorni": k.get("giorni_partite"),
+               "leggendarie": k.get("leggendarie", [])[:30], "matchup": k.get("matchup", [])[:60],
+               "mazzi_avversari": [{x: d.get(x) for x in ("leggendaria", "partite", "giocatori", "winrate_contro")}
+                                   for d in k.get("mazzi_avversari", [])[:30]],
+               "regole": len(k.get("regole", [])), "lezioni": len(k.get("lezioni", []))})
 
 
 @mcp.tool()

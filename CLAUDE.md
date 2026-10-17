@@ -33,7 +33,8 @@ Rispondi sempre in **italiano**. I nomi di carte e location restano in inglese, 
 - Le fonti: intervista a Daniele (`/intervista-regole`), partite registrate (`/impara-regole`),
   esperimenti contro il bot (`/esperimento`), video (`/impara-video`), schermate di tutorial (`/scansiona`).
 - Confermata solo con: conferma di Daniele, testo ufficiale del gioco, video ufficiale, oppure
-  2+ osservazioni indipendenti.
+  2+ osservazioni indipendenti (anche di giocatori diversi: una regola ✅ confermata nel cervello comune conta,
+  scrivi `fonte="cervello comune"`).
 - **Durante le partite**: se vedi qualcosa che contraddice una regola o risponde a una domanda aperta,
   registralo con `rules_upsert` (`fonte="partita"`, `prova` con turno e carte) e segnalalo in mezza riga.
   Vale anche in modalità ranked.
@@ -192,6 +193,17 @@ Tre fonti, da tenere distinte quando parli di diffusione:
      e con più partite registrate). `originsmeta_sync` li riscarica subito.
 3. **Liste incollate a mano** con `/importa-meta` (fonte "community").
 Quando un numero si basa su poche partite, dillo: "campione piccolo (N partite)".
+
+## Cervello comune
+Tutti i BIG-BOB mettono in comune, in forma anonima, regole, lezioni, testi di carte verificati e partite
+(server su Cloudflare, `cloud/`). Ciò che sanno gli altri arriva da solo:
+- `rules_get` annota le tue regole con `cervello_comune` (stato e numero di giocatori) e aggiunge quelle che non hai
+  con id `C…`; `lessons_get` e le LEZIONI di `update_match` includono quelle degli altri con id `CL…` (🌐).
+- Sono di altri giocatori: pesale come indizi forti quando sono ✅ confermate (2+ giocatori), come ipotesi altrimenti.
+  Per farne una regola tua usa `rules_upsert` (testo tuo, `fonte="cervello comune"`); gli id C/CL non si modificano.
+- Se una tua regola è smentita dagli altri, controllala alla prima occasione invece di cambiarla subito.
+- `cervello_comune` dà winrate per leggendaria, matchup e mazzi avversari più visti tra i giocatori di BIG-BOB
+  (fonte diversa da OriginsMeta: tienile distinte, come nella sezione Meta).
 
 ## Patch
 Usa `record_patch`/`upsert_cards(patch=...)` **solo per cambiamenti verso la versione attuale**.

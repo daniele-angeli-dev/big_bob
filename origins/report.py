@@ -725,7 +725,50 @@ def studio_body() -> str:
     else:
         box = ("<div class='note'>Nessuna registrazione da studiare. Premi REGISTRA durante una partita: a fine partita la "
                "trovi qui e BIG-BOB la studia con un clic.</div>")
-    return "<h2 style='margin-top:6px'>Studio delle registrazioni</h2>" + box + "<h2>Cosa ho imparato</h2>" + learned_body()
+    return ("<h2 style='margin-top:6px'>Studio delle registrazioni</h2>" + box + "<h2>Cosa ho imparato</h2>" + learned_body()
+            + brain_body())
+
+
+def brain_body() -> str:
+    """Cosa sa il cervello comune (gli altri giocatori di BIG-BOB) che qui non c'è ancora."""
+    from origins import cervello, lessons, rules
+    st = cervello.status()
+    if not st["attivo"]:
+        return ""
+    e = html.escape
+    out = ["<h2>🌐 Cervello comune</h2>",
+           f"<div class='note'>{e(cervello.summary_line())}"
+           f"{' · aggiornato ' + e(st['aggiornato']) if st['aggiornato'] else ''}. Regole e lezioni scoperte dagli altri "
+           "giocatori di BIG-BOB: le usa anche il coach in partita. "
+           f"{'Contribuisci in forma anonima.' if st['contribuisci'] else 'Non stai inviando i tuoi dati.'} "
+           "<button type='button' class='back' style='margin:0 0 0 8px' data-api='sync_brain' "
+           "data-done='SINCRONIZZAZIONE AVVIATA'>SINCRONIZZA ORA</button></div>"]
+    if not st["usa"]:
+        out.append("<div class='empty'>L'uso della conoscenza comune è spento nelle impostazioni.</div>")
+        return "".join(out)
+    icon = {"confermata": "✅", "probabile": "🟡", "ipotesi": "❓", "domanda": "⬜", "smentita": "❌", "contestata": "⚠"}
+    notes, extra = cervello.rules_view(rules.load())
+    extra = [r for r in extra if r.get("stato") not in ("domanda",)]
+    if extra:
+        rows = "".join(f"<tr><td>{icon.get(r['stato'], '?')} {e(r['stato'])}</td><td>{e(r['testo'])}</td>"
+                       f"<td class='num'>{r.get('giocatori', 0)}</td></tr>" for r in extra[:40])
+        out.append("<h3>Regole che non hai ancora</h3><table><thead><tr><th>Stato</th><th>Regola</th>"
+                   f"<th class='num'>Giocatori</th></tr></thead><tbody>{rows}</tbody></table>")
+    diff = [(r, notes[r["id"]]) for r in rules.load() if r["id"] in notes and notes[r["id"]]["stato"] != r.get("stato")]
+    if diff:
+        rows = "".join(f"<tr><td>{e(r['id'])}</td><td>{e(r['testo'])}</td><td>{icon.get(r.get('stato'), '?')} {e(r.get('stato', ''))}</td>"
+                       f"<td>{icon.get(c['stato'], '?')} {e(c['stato'])} ({c.get('giocatori', 0)})</td></tr>" for r, c in diff[:30])
+        out.append("<h3>Dove gli altri la vedono diversamente</h3><table><thead><tr><th>Id</th><th>Regola</th>"
+                   f"<th>Per te</th><th>Per gli altri</th></tr></thead><tbody>{rows}</tbody></table>")
+    ls = cervello.lessons_view(None, limit=30, local=lessons.load())
+    if ls:
+        rows = "".join(f"<tr><td>{icon.get(x['stato'], '?')}</td><td>{e(x['testo'])}</td><td>{e(', '.join(x.get('carte') or []))}</td>"
+                       f"<td class='num'>{x.get('sostengono', 0)}</td></tr>" for x in ls)
+        out.append("<h3>Lezioni degli altri giocatori</h3><table><thead><tr><th></th><th>Lezione</th><th>Carte</th>"
+                   f"<th class='num'>Giocatori</th></tr></thead><tbody>{rows}</tbody></table>")
+    if len(out) == 2:
+        out.append("<div class='empty'>Niente di nuovo rispetto a ciò che sai già.</div>")
+    return "".join(out)
 
 
 def library_html(tab: str = "mazzi", deck: str = "") -> Path:

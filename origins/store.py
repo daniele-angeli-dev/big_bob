@@ -33,7 +33,8 @@ DEFAULTS = {
                "max_thinking_live": 4000, "apprendimento_live": True, "voce": True,
                "apri_claude_code_all_avvio": False, "connessione": "abbonamento",
                "controlla_aggiornamenti": True, "meta_originsmeta": True, "progetto_mazzo": "",
-               "osservatore": True, "barra_vantaggio": True},
+               "osservatore": True, "barra_vantaggio": True, "cervello_url": "", "cervello_contribuisci": True,
+               "cervello_usa": True},
 }
 
 

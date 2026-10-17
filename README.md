@@ -65,6 +65,26 @@ Scarica solo pagine pubbliche, una al secondo, e riscarica un mazzo solo se è n
 `python -m origins.originsmeta --forza --salva-pagine` salva le pagine in `logs/originsmeta/` da mandarmi.
 Le regole confermate nell'intervista vengono con BIG-BOB: anche un'installazione nuova parte con il regolamento.
 
+## Cervello comune (tutti i BIG-BOB imparano insieme)
+Ogni BIG-BOB invia, in forma anonima, ciò che impara e riceve ciò che hanno imparato gli altri:
+- **si invia**: regole del regolamento (con stato e prove), lezioni, testi di carte e location verificati sullo schermo,
+  partite finite (leggendarie, risultato, round, le tue carte, le carte avversarie viste). Niente nomi, account, email,
+  schermate, percorsi o chiavi: chi invia è un codice casuale (`data/cervello_stato.json`) di cui il server salva
+  solo un hash. Si invia solo ciò che è cambiato, a ogni avvio (al massimo ogni 3 ore) e a fine partita/studio;
+- **si riceve**: regole e lezioni con quanti giocatori le hanno confermate (una regola diventa ✅ quando la confermano
+  2 giocatori diversi), testi di carte concordi, mazzi avversari più visti, winrate per leggendaria e matchup.
+  Restano separati in `data/cervello.json`: il tuo regolamento e le tue lezioni non vengono toccati. Claude li vede
+  con id `C…`/`CL…` e nello Studio c'è la sezione *Cervello comune*. Si uniscono ai tuoi dati solo i testi delle
+  carte prese dal sito (mai quelle che hai verificato tu) e i mazzi avversari (pesano nelle probabilità).
+- Al primo collegamento BIG-BOB chiede il consenso; poi ⚙ → *Cervello comune* per spegnere invio o ricezione.
+
+**Il server (solo per chi lo gestisce)**: `pubblica_cervello.bat` lo pubblica sul tuo account Cloudflare (piano
+gratuito): installa lo strumento di Cloudflare, ti fa accedere dal browser, crea il database, genera la chiave di
+amministrazione (resta in `config.json`) e scrive l'indirizzo nelle impostazioni. Si rilancia per aggiornarlo.
+Moderazione: `python -m origins.cervello admin panoramica` (ultimi giocatori, regole e lezioni),
+`admin regola C12 --nascondi`, `admin regola C12 --testo "…"`, `admin regola C12 --unisci-in C3`,
+`admin nascondi carta "Marian"`, `admin banna <hash>`, `admin ricalcola`. Dettagli in `cloud/README.md`.
+
 ## Impostazioni (icona a ingranaggio)
 - **Collegamento a Claude**: abbonamento Claude (Claude Code con il tuo account, consigliato) oppure chiave API Anthropic
   (a consumo; la chiave resta solo nel tuo `config.json`). Con l'abbonamento BIG-BOB ignora eventuali chiavi API
@@ -72,6 +92,7 @@ Le regole confermate nell'intervista vengono con BIG-BOB: anche un'installazione
   *Prova collegamento* verifica che risponda.
 - **Modello per le risposte live**: Sonnet (veloce, consigliato), Opus (più preciso ma rischia i 40 s), Haiku (velocissimo).
 - Voce, apprendimento tra i round, Claude Code all'avvio, controllo aggiornamenti, tetto di ragionamento.
+- **Cervello comune**: contribuisci (invio anonimo) e usa la conoscenza degli altri, con *Sincronizza ora*.
 
 ## Avvio: un'icona
 Clicca l'icona **BIG-BOB** (desktop, menu Start, o fissala sulla barra delle applicazioni: tasto destro → Aggiungi alla
@@ -227,7 +248,8 @@ Cartella `data/` (JSON leggibili, puoi farne backup o modificarli a mano):
 `cards.json`, `locations.json`, `decks.json` (tuoi mazzi), `meta.json` (archetipi avversari),
 `patches.json`, `matches_log.json`, `rules.json` (regolamento, con versione leggibile `regole.md`),
 `lessons.json` (lezioni imparate, versione leggibile `lezioni.md`),
-`strategia.md` (idee da video e analisi). Schermate, registrazioni e video sono in `captures/`.
+`strategia.md` (idee da video e analisi), `cervello.json` (conoscenza comune scaricata) e `cervello_stato.json`
+(codice anonimo e cosa è già stato inviato). Schermate, registrazioni e video sono in `captures/`.
 
 ## Configurazione (`config.json`)
 - `modello_live`: modello per la finestra (`sonnet` = più veloce; `opus` = più preciso ma più lento: rischia di superare i 40 s)

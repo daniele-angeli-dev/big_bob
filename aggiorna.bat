@@ -33,6 +33,7 @@ python tests\test_sim.py
 python tests\test_originsmeta.py
 python tests\test_imparato.py
 python tests\test_deckproj.py
+python tests\test_cervello.py
 python collegamenti.py installa
 echo.
 echo Fatto. I tuoi dati (data, config.json, logs, captures) non sono stati toccati.

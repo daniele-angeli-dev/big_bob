@@ -340,7 +340,7 @@ class Controller:
         if store.load("config").get("voce", True):
             self.voice.warm()
         threading.Thread(target=self._startup_updates, daemon=True).start()
-        threading.Thread(target=self._startup_meta, daemon=True, name="bb-originsmeta").start()
+        threading.Thread(target=self._startup_data, daemon=True, name="bb-dati").start()
         try:
             screen.cleanup_empty_recordings()
         except Exception:  # noqa: BLE001
@@ -387,7 +387,8 @@ class Controller:
                    "budget_seconds": BUDGET_SECONDS,
                    "decks": self._deck_names(), "lab": deckproj.summary(),
                    "consumi": usage.summary() if usage.visible() else None,
-                   "tutorial": not cfg.get("tutorial_visto", False)})
+                   "tutorial": not cfg.get("tutorial_visto", False),
+                   "cervello_avviso": self._brain_notice(cfg)})
         self._emit_hud(force=True)
 
     @staticmethod
@@ -535,6 +536,13 @@ class Controller:
             quit_()
 
     # ------------------------------------------------ meta, carte e location da OriginsMeta
+    def _startup_data(self) -> None:
+        """All'avvio, in ordine (scrivono negli stessi file): prima OriginsMeta, poi il cervello comune."""
+        try:
+            self._startup_meta()
+        finally:
+            self._startup_brain()
+
     def _startup_meta(self) -> None:
         from origins import originsmeta
         if os.environ.get("BIGBOB_NO_SYNC"):  # test automatici: niente rete
@@ -581,25 +589,93 @@ class Controller:
         finally:
             self._meta_running = False
 
+    # ------------------------------------------------ cervello comune (conoscenza condivisa tra i BIG-BOB)
+    @staticmethod
+    def _brain_notice(cfg: dict) -> bool:
+        from origins import cervello
+        return cervello.enabled() and not cfg.get("cervello_avviso_visto", False)
+
+    def _startup_brain(self) -> None:
+        from origins import cervello
+        if os.environ.get("BIGBOB_NO_SYNC") or not cervello.enabled():
+            return
+        time.sleep(5)
+        self._sync_brain(force=False, manual=False)
+
+    def sync_brain(self) -> None:
+        threading.Thread(target=self._sync_brain, kwargs={"force": True, "manual": True}, daemon=True).start()
+
+    def _brain_soon(self) -> None:
+        """Dopo fine partita / studio / creazione: invia subito ciò che è stato imparato."""
+        from origins import cervello
+        if os.environ.get("BIGBOB_NO_SYNC") or not cervello.enabled():
+            return
+        threading.Timer(3, self._sync_brain, kwargs={"force": True, "manual": False}).start()
+
+    def _sync_brain(self, force: bool, manual: bool) -> None:
+        from origins import cervello
+        if getattr(self, "_brain_running", False):
+            return
+        self._brain_running = True
+        try:
+            if manual:
+                self.status("Sincronizzo il cervello comune…")
+            rep = cervello.sync(force=force)
+            log.info("cervello comune: %s", rep)
+            if rep.get("saltato"):
+                if manual:
+                    self.say(f"Cervello comune: {rep['saltato']}.", "dim")
+                return
+            ric = rep.get("ricezione") or {}
+            news = ric.get("carte_aggiunte") or ric.get("carte_aggiornate")
+            if manual or news:
+                self.say(cervello.summary_line(rep) + (f" · carte aggiornate dal cervello comune: "
+                                                      f"{(ric.get('carte_aggiunte') or 0) + (ric.get('carte_aggiornate') or 0)}"
+                                                      if news else ""), "lesson")
+            if manual:
+                self.status("Cervello comune sincronizzato")
+        except Exception as e:  # noqa: BLE001
+            log.exception("cervello comune")
+            if manual:
+                self.say(f"Cervello comune non raggiungibile: {e}", "warn")
+        finally:
+            self._brain_running = False
+
+    def brain_consent(self, ok: bool) -> None:
+        cfg = store.load("config")
+        cfg["cervello_avviso_visto"] = True
+        cfg["cervello_contribuisci"] = bool(ok)
+        store.save("config", cfg)
+        self.emit_state()
+        if ok:
+            self.status("Grazie: contribuisci al cervello comune")
+            self.sync_brain()
+        else:
+            self.say("Va bene: non invio niente. Ricevi comunque ciò che imparano gli altri (puoi spegnerlo nelle "
+                     "impostazioni).", "dim")
+
     # ------------------------------------------------ impostazioni e collegamento a Claude
     SETTINGS_KEYS = ("modello_live", "connessione", "voce", "apprendimento_live", "apri_claude_code_all_avvio",
-                     "max_thinking_live", "modalita", "meta_originsmeta", "osservatore", "barra_vantaggio")
+                     "max_thinking_live", "modalita", "meta_originsmeta", "osservatore", "barra_vantaggio",
+                     "cervello_contribuisci", "cervello_usa")
 
     def get_settings(self) -> None:
-        from origins import updates
+        from origins import cervello, updates
         cfg = store.load("config")
         vals = {k: cfg.get(k) for k in self.SETTINGS_KEYS}
         vals.setdefault("connessione", "abbonamento")
         vals["connessione"] = vals["connessione"] or "abbonamento"
         vals["api_key_impostata"] = bool(cfg.get("api_key"))
         self.emit({"type": "settings", "valori": vals, "versione": updates.installed_version(),
-                   "claude_trovato": bool(self.claude)})
+                   "claude_trovato": bool(self.claude),
+                   "cervello": {"attivo": cervello.enabled(), "riga": cervello.summary_line()}})
 
     def save_settings(self, vals: dict) -> None:
         import configura
         cfg_before = store.load("config")
         extra = {k: vals[k] for k in ("voce", "apprendimento_live", "apri_claude_code_all_avvio",
-                                      "meta_originsmeta", "osservatore", "barra_vantaggio") if k in vals}
+                                      "meta_originsmeta", "osservatore", "barra_vantaggio", "cervello_contribuisci",
+                                      "cervello_usa") if k in vals}
         if "max_thinking_live" in vals:
             try:
                 extra["max_thinking_live"] = max(0, int(vals["max_thinking_live"]))
@@ -697,6 +773,7 @@ class Controller:
         cfg = store.load("config")
         cfg["tutorial_visto"] = True
         store.save("config", cfg)
+        self.emit_state()
 
     def open_stats(self) -> None:
         self.open_library("statistiche")
@@ -763,6 +840,7 @@ class Controller:
             self.say(f"Studio delle registrazioni interrotto: {e}", "warn")
         finally:
             self.studying = False
+            self._brain_soon()
 
     def open_replay(self) -> None:
         from origins import report
@@ -1080,6 +1158,8 @@ class Controller:
                 log.exception("aggiornamento laboratorio")
             if kind == "live" and (learn or store.load("config").get("barra_vantaggio", True)):
                 self._learn(learn)
+            if kind in ("fine", "crea"):
+                self._brain_soon()
             self._session_free.set()
 
     def _learn(self, learn: bool = True) -> None:

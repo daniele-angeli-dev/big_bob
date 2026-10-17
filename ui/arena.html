@@ -311,6 +311,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <div class="bbtns"><button type="button" class="no" data-close>ANNULLA</button><button class="ok" type="submit">CREA</button></div>
   </form>
 </div>
+<div class="modal hidden" id="mBrain" role="dialog" aria-modal="true" aria-labelledby="mBrainT">
+  <div class="box">
+    <h2 id="mBrainT">CERVELLO COMUNE</h2>
+    <p class="hint" style="font-size:14px;line-height:1.45">Tutti i BIG-BOB imparano insieme: le regole scoperte, le lezioni, i testi delle carte verificati e i risultati delle partite vengono messi in comune, così ognuno riceve ciò che hanno capito gli altri.</p>
+    <p class="hint" style="font-size:14px;line-height:1.45">L'invio è anonimo: niente nomi, account, schermate o chiavi. Puoi spegnerlo quando vuoi nelle impostazioni, alla voce Cervello comune.</p>
+    <div class="bbtns"><button type="button" class="no" id="brainNo">NON INVIARE I MIEI DATI</button><button type="button" class="ok" id="brainOk">VA BENE</button></div>
+  </div>
+</div>
 <div class="modal hidden" id="mUpd" role="dialog" aria-modal="true" aria-labelledby="mUpdT">
   <div class="box">
     <h2 id="mUpdT">AGGIORNAMENTI</h2>
@@ -368,6 +376,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (al primo avvio di ogni giorno)</label>
     <label class="opt" for="oThink">Tetto ragionamento live (token) <input class="inp" id="oThink" type="number" min="0" step="500" style="width:90px;height:34px;flex-grow:0"></label>
     <div class="btnrow" style="align-items:center"><span class="hint">Spiegazione dei tasti</span><button type="button" class="btn2" id="btnTut">RIVEDI IL TUTORIAL</button></div>
+    <div class="sec">CERVELLO COMUNE</div>
+    <label class="opt"><input type="checkbox" id="oShare"> Contribuisci in forma anonima: regole, lezioni, testi delle carte verificati e risultati delle partite (niente nomi né schermate)</label>
+    <label class="opt"><input type="checkbox" id="oUse"> Usa ciò che hanno imparato gli altri giocatori (regole, lezioni, mazzi avversari più visti)</label>
+    <div class="btnrow" style="align-items:center"><span class="hint" id="brainTxt">–</span><button type="button" class="btn2" id="btnBrain">SINCRONIZZA ORA</button></div>
     <div class="sec">VERSIONE</div>
     <div class="btnrow" style="align-items:center"><span class="hint" id="verTxt">–</span><button type="button" class="btn2" id="btnCheck">CONTROLLA AGGIORNAMENTI</button></div>
     <div class="btnrow" style="align-items:center"><span class="hint">Mazzi, statistiche e carte da originsmeta.com</span><button type="button" class="btn2" id="btnMeta">AGGIORNA META ORA</button></div>
@@ -509,7 +521,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   /* ---------- tutorial (prima volta; si rivede dalle impostazioni) ---------- */
   var TUT = [
     [null, 'BENVENUTO IN BIG-BOB', 'Ti mostro in un minuto a cosa servono i tasti. Puoi saltare quando vuoi e rivederlo dalle impostazioni.'],
-    ['btnSet', 'IMPOSTAZIONI', 'Collegamento a Claude e modello, opzioni (voce, osservatore, barra di vantaggio), aggiornamenti e questo tutorial.'],
+    ['btnSet', 'IMPOSTAZIONI', 'Collegamento a Claude e modello, opzioni (voce, osservatore, barra di vantaggio), cervello comune, aggiornamenti e questo tutorial.'],
     ['btnTerm', 'TERMINALE', 'Apre Claude Code per i comandi avanzati: /mazzo, /scansiona, /lezioni, /postpartita…'],
     ['btnVoice', 'AUDIO', 'Se è acceso, BIG-BOB legge la mossa ad alta voce.'],
     ['btnLearn', 'LIBRO', 'I tuoi mazzi con le statistiche, le statistiche generali e lo Studio: cosa ha imparato BIG-BOB e lo studio delle registrazioni.'],
@@ -556,7 +568,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     if ($('tut').classList.contains('hidden')) return;
     if (e.key === 'Escape') tutEnd(); else if (e.key === 'ArrowRight') $('tutNext').click(); else if (e.key === 'ArrowLeft' && tutI > 0) tutShow(tutI - 1);
   });
-  var tutAsked = false;
+  var tutAsked = false, brainAsked = false;
 
   /* ---------- timer ---------- */
   var STEPS = { get_screen: 'Guardo lo schermo…', update_match: 'Aggiorno la partita e calcolo le probabilità…',
@@ -627,6 +639,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     if (!!s.busy !== $('btnF8').disabled) setBusy(!!s.busy);
     showUsage(s.consumi);
     if (s.tutorial && !tutAsked){ tutAsked = true; setTimeout(function(){ if (!open) tutShow(0); }, 700); }
+    else if (s.cervello_avviso && !brainAsked){ brainAsked = true;
+      setTimeout(function(){ if (!open && $('tut').classList.contains('hidden')) show('mBrain', 'brainOk'); else brainAsked = false; }, 900); }
   }
 
   /* ---------- eventi da Python ---------- */
@@ -741,6 +755,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('oVoce').checked = v.voce !== false; $('oImpara').checked = v.apprendimento_live !== false;
     $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false; $('oObs').checked = v.osservatore !== false; $('oEval').checked = v.barra_vantaggio !== false;
     $('oThink').value = v.max_thinking_live != null ? v.max_thinking_live : 4000;
+    $('oShare').checked = v.cervello_contribuisci !== false; $('oUse').checked = v.cervello_usa !== false;
+    var cb = ev.cervello || {};
+    $('brainTxt').textContent = cb.riga || '–'; $('btnBrain').disabled = !cb.attivo;
+    $('oShare').disabled = $('oUse').disabled = !cb.attivo;
     $('verTxt').textContent = 'Versione ' + (ev.versione || '–') + (ev.claude_trovato ? '' : ' · Claude Code non trovato');
     syncApi();
   }
@@ -749,11 +767,15 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   $('btnTest').onclick = function(){ $('testRes').className = 'testres'; $('testRes').textContent = 'Provo il collegamento…'; call('claude_test'); };
   $('btnCheck').onclick = function(){ hide(); updModal('checking'); call('check_updates'); };
   $('btnMeta').onclick = function(){ hide(); call('sync_meta'); };
+  $('btnBrain').onclick = function(){ hide(); call('sync_brain'); };
+  $('brainOk').onclick = function(){ hide(); call('brain_consent', true); };
+  $('brainNo').onclick = function(){ hide(); call('brain_consent', false); };
   $('fSet').onsubmit = function(e){
     e.preventDefault();
     var vals = { connessione: connValue(), modello_live: $('modello').value, voce: $('oVoce').checked,
       apprendimento_live: $('oImpara').checked, apri_claude_code_all_avvio: $('oTerm').checked,
-      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10) };
+      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10),
+      cervello_contribuisci: $('oShare').checked, cervello_usa: $('oUse').checked };
     var k = $('apiKey').value.trim(); if (k) vals.api_key = k;
     hide(); call('save_settings', vals);
   };
