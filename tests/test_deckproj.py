@@ -154,13 +154,25 @@ assert any(e["type"] == "say" and "Versione 5" in e["text"] and "Carta 15 ×2" i
 
 # le pagine si aprono dentro l'app (finestra di BIG-BOB), non nel browser
 opened = []
-ui.open_page = lambda path, title, frag="": opened.append((Path(path).name, frag)) or True
+ui.show_html = lambda html_, title: opened.append(html_) or True
 c.open_lab()
 c.open_learned()
 c.open_stats()
 c.open_library("mazzi")
-assert opened == [("biblioteca.html", "mazzo=sniper-lab"), ("biblioteca.html", "imparato"),
-                  ("biblioteca.html", "statistiche"), ("biblioteca.html", "mazzi")], opened
+import re as _re
+tabs = [(_re.search(r"data-tab='(\w+)'", x).group(1), _re.search(r"data-deck='([^']*)'", x).group(1)) for x in opened]
+assert tabs == [("mazzi", "sniper-lab"), ("imparato", ""), ("statistiche", ""), ("mazzi", "")], tabs
+assert all("<html" in x and "file:" not in x for x in opened), "dati passati direttamente alla finestra, niente file"
+# il replay incorpora le schermate (la finestra non legge file)
+jd = tmp / "partita"; jd.mkdir()
+from PIL import Image as _Im
+_Im.new("RGB", (1920, 1080), (40, 20, 80)).save(jd / "01.png")
+(jd / "diario.md").write_text("# Partita\n\n## #1 · 10:00 · Analisi round · schermata 01.png\nStrumenti: x\n\nrisposta", encoding="utf-8")
+c.journal_dir = jd
+opened.clear()
+c.open_replay()
+assert "data:image/jpeg;base64," in opened[0] and "src='01.png'" not in opened[0]
+assert len(opened[0]) < 120_000, "schermata incorporata come anteprima leggera"
 
 # la finestra del libro: tre schede, un riquadro per ogni mazzo salvato, scheda di dettaglio per ciascuno
 h = report.library_html("mazzi", "Sniper Lab").read_text(encoding="utf-8")

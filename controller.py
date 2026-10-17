@@ -574,14 +574,38 @@ class Controller:
     # ------------------------------------------------ pagine locali
     def _open(self, path: Path, title: str = "BIG-BOB", frag: str = "") -> None:
         """Dentro l'app (finestra di BIG-BOB) se la finestra lo permette; altrimenti nel browser (finestra classica)."""
-        opener = getattr(self.ui, "open_page", None)
-        if opener is not None:
+        shower = getattr(self.ui, "show_html", None)
+        if shower is not None:
             try:
-                if opener(path, title, frag) if frag else opener(path, title):
+                if shower(self._inline_page(Path(path)), title):
                     return
             except Exception:  # noqa: BLE001
                 log.exception("pagina interna non aperta: uso il browser")
         self._open_external(path)
+
+    @staticmethod
+    def _inline_page(path: Path) -> str:
+        """Il contenuto della pagina, con le immagini (schermate del replay) incorporate: la finestra non legge file."""
+        import base64
+        text = path.read_text(encoding="utf-8")
+
+        def embed(m):
+            f = path.parent / m.group(2)
+            if not f.exists():
+                return m.group(0)
+            data, mime = f.read_bytes(), "image/png"
+            try:  # anteprima JPEG leggera: la finestra accetta pagine fino a circa 2 MB
+                import io
+                from PIL import Image
+                im = Image.open(io.BytesIO(data)).convert("RGB")
+                im.thumbnail((560, 560))
+                buf = io.BytesIO()
+                im.save(buf, "JPEG", quality=60, optimize=True)
+                data, mime = buf.getvalue(), "image/jpeg"
+            except Exception:  # noqa: BLE001
+                pass
+            return f"{m.group(1)}data:{mime};base64,{base64.b64encode(data).decode()}{m.group(3)}"
+        return re.sub(r"(src=['\"])([^'\":]+\.png)(['\"])", embed, text)
 
     @staticmethod
     def _open_external(path: Path) -> None:

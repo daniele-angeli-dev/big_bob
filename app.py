@@ -8,7 +8,6 @@ Tasti: F8 analizza · F9 cattura per scansione · F10 mostra/nasconde.
 from __future__ import annotations
 
 import json
-import time
 import logging
 import os
 import sys
@@ -76,16 +75,20 @@ class WebUI:
     def is_visible(self) -> bool:
         return self._visible
 
-    def open_page(self, path, title: str = "BIG-BOB", frag: str = "") -> bool:
-        """Apre una pagina di BIG-BOB (statistiche, cosa ho imparato, laboratorio, replay) in una sua finestra
-        dentro l'app, non nel browser. La finestra si riusa: aprire un'altra pagina la sostituisce."""
+    def show_html(self, html: str, title: str = "BIG-BOB") -> bool:
+        """Mostra una pagina di BIG-BOB (mazzi, cosa ho imparato, statistiche, replay) in una sua finestra dentro
+        l'app: i dati arrivano direttamente alla finestra, senza file e senza browser. La finestra si riusa."""
         import webview
-        # ?t=… obbliga a ricaricare la pagina appena rigenerata anche se cambia solo la scheda (#…)
-        uri = Path(path).resolve().as_uri() + f"?t={int(time.time() * 1000)}" + (f"#{frag}" if frag else "")
+        url = None
+        if len(html.encode("utf-8")) > 1_800_000:  # Windows accetta pagine dirette fino a ~2 MB: oltre passo da un file
+            f = ROOT / "logs" / "pagina.html"
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(html, encoding="utf-8")
+            url = f.resolve().as_uri()
         w = getattr(self, "_page_window", None)
         if w is not None:
             try:
-                w.load_url(uri)
+                w.load_url(url) if url else w.load_html(html)
                 w.set_title(title)
                 w.show()
                 w.restore()
@@ -98,7 +101,8 @@ class WebUI:
             width, height = min(width, scr.width - 60), min(height, scr.height - 80)
         except Exception:  # noqa: BLE001
             pass
-        w = webview.create_window(title, url=uri, width=width, height=height, min_size=(420, 480),
+        w = webview.create_window(title, **({"url": url} if url else {"html": html}), width=width, height=height,
+                                  min_size=(420, 480),
                                   on_top=True, resizable=True, background_color="#24104F", text_select=True,
                                   focus=True)
 
