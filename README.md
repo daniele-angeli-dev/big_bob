@@ -1,12 +1,32 @@
 # BIG-BOB · assistente per Origins TCG
 
-BIG-BOB è il tuo coach personale per Origins TCG, gira sul tuo PC con Claude Code (abbonamento Max, nessun costo extra).
+BIG-BOB è il tuo coach personale per Origins TCG, gira sul tuo PC con Claude Code (con il tuo abbonamento Claude Pro o
+Max, oppure con una chiave API a consumo).
 
 - **Overlay** sempre sopra il gioco con chat: premi **F8** e Claude guarda la partita e risponde in pochi secondi.
 - **Database carte, location e regole** costruito dalle tue schermate (F9 + `/scansiona`), con storico delle modifiche per patch.
 - **Probabilità esatte** di pescata (ipergeometrica sul tuo mazzo da 25) e **probabilità sulla mano avversaria**, pesate sugli archetipi che incontri.
 - **Meta personale**: ogni partita registra il mazzo avversario; `/meta` ti dice cosa gira e come batterlo.
 - **Deckbuilding** con `/mazzo` e aggiornamento dopo ogni patch con `/patch`.
+
+## Novità
+Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
+
+**17/10/2026**
+- Claude Code si installa da solo (installer e primo avvio di BIG-BOB) e, se è installato ma fuori dal PATH, BIG-BOB lo
+  trova e aggiunge la cartella al PATH: a un nuovo giocatore resta solo l'accesso con il proprio account Claude.
+- **Cervello comune**: tutti i BIG-BOB mettono in comune, in forma anonima, regole, lezioni, testi delle carte e partite;
+  una regola diventa ✅ quando la confermano 2 giocatori. Consenso al primo avvio, interruttori in ⚙.
+- Osservatore (vede magie scartate e creature morte tra un F8 e l'altro), contatori di mazzo e mano per entrambi,
+  barra di vantaggio stile scacchi, pagina Origin con i mazzi del meta, Studio con «Studia registrazioni»,
+  tutorial al primo avvio, contatore dei consumi con la chiave API, risposte più veloci ed economiche.
+- Libro con le schede MAZZI · STATISTICHE · STUDIO, tutto dentro la finestra; controllo aggiornamenti a ogni avvio.
+
+**16/10/2026**
+- Modalità CREAZIONE MAZZO: BIG-BOB crea un mazzo dal meta e lo migliora versione per versione con le partite di test.
+- Carte, location e meta scaricati da OriginsMeta una volta al giorno; regole dell'intervista incluse.
+- Pagina «Cosa ho imparato», caricamento mentre pensa, slot numerati da 1, finestra al centro dello schermo,
+  aggiornamenti con finestra dedicata, installer .exe con icone e collegamento a Claude.
 
 ## Requisiti
 - Windows con **Python 3.10+** (python.org, spunta "Add python.exe to PATH" durante l'installazione)

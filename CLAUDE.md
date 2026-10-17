@@ -220,3 +220,10 @@ BIG-BOB allinea da solo il database a OriginsMeta: aggiunge carte e location man
 ## Scansione (`/scansiona`)
 Le immagini catturate con F9 sono in `captures/scan/`. Leggile, estrai carte/location/regole,
 salvale, archivia le immagini elaborate. Dettagli nel comando.
+
+## Manutenzione del codice (quando modifichi BIG-BOB)
+- Il repository è pubblico: mai chiavi, dati di Daniele (`data/`, `config.json`, `logs/`, `captures/`) o segreti nei commit.
+- A ogni modifica pubblicata aggiorna `README.md`: le sezioni che descrivono ciò che è cambiato e, in cima, **Novità**
+  (una riga per modifica sotto la data del giorno, la più recente in alto, in parole semplici). Poi aggiorna la guida
+  del Project (`claude/big-bob-guida.md`) con il README.
+
