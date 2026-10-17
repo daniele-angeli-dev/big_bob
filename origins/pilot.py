@@ -66,6 +66,35 @@ def describe(actions: list[dict]) -> str:
     return " ; ".join(parts) or "niente"
 
 
+def dpi_aware() -> None:
+    """Coordinate in pixel reali anche per questo thread (le catture di mss sono in pixel reali): senza, con la scala
+    dello schermo al 125-150% il mouse finirebbe nel punto sbagliato."""
+    if not WIN:
+        return
+    import ctypes
+    try:
+        ctypes.windll.user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))  # PER_MONITOR_AWARE_V2
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def selftest(region) -> dict:
+    """Porta il mouse al centro del gioco e lo rimette dov'era: {'ok', 'dettaglio'}. Non clicca."""
+    m = Mouse()
+    if not WIN:
+        return {"ok": True, "dettaglio": "fuori da Windows"}
+    import ctypes
+    start = m.pos()
+    target = to_screen((50, 50), region)
+    ctypes.windll.user32.SetCursorPos(*target)
+    time.sleep(0.05)
+    got = m.pos()
+    if start:
+        ctypes.windll.user32.SetCursorPos(*start)
+    ok = bool(got) and abs(got[0] - target[0]) <= 3 and abs(got[1] - target[1]) <= 3
+    return {"ok": ok, "dettaglio": f"mandato a {target}, arrivato a {got}"}
+
+
 class Interrotto(Exception):
     """Daniele ha mosso il mouse (o ha premuto F12): il pilota si ferma."""
 
@@ -78,6 +107,7 @@ class Mouse:
     def __init__(self, stop=lambda: False):
         self.stop = stop
         self.last: tuple[int, int] | None = None
+        dpi_aware()
 
     def pos(self) -> tuple[int, int] | None:
         if not WIN:
@@ -100,7 +130,11 @@ class Mouse:
         if WIN:
             import ctypes
             ctypes.windll.user32.SetCursorPos(int(x), int(y))
-        self.last = (int(x), int(y))
+            # rileggo dove Windows l'ha messo davvero: con scale dello schermo diverse il punto può non coincidere,
+            # e non deve sembrare che Daniele abbia mosso il mouse
+            self.last = self.pos() or (int(x), int(y))
+        else:
+            self.last = (int(x), int(y))
 
     def button(self, down: bool) -> None:
         if WIN:

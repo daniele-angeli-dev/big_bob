@@ -137,6 +137,20 @@ check(not c.pilot_on, "spegnere AUTO spegne il pilota")
 c.pilot_on = True
 c.toggle_mode()  # allenamento → ranked
 check(not c.pilot_on, "passare a ranked spegne il pilota")
+asked = []
+c._ask = lambda prompt, **k: asked.append(prompt)
+c._take_obs_frames = lambda: []
+cfg = store.load("config")
+cfg["modalita"] = "allenamento"
+store.save("config", cfg)
+c.pilot_on, c.auto_on = True, True
+c._do_analyze(True)
+check("[F8" in asked[-1] and "[AUTO" not in asked[-1] and "PILOTA AUTOMATICO ATTIVO" in asked[-1],
+      "con il pilota anche l'analisi automatica è completa (niente risposta '—' a schermata ferma)")
+c.pilot_on = False
+c._do_analyze(True)
+check("[AUTO" in asked[-1] and "PILOTA" not in asked[-1], "senza pilota resta il prompt AUTO")
+check(pilot.selftest((0, 0, 100, 100))["ok"], "prova del mouse (fuori da Windows non fa nulla)")
 p = controller.parse_live("▶ Marian al centro\n🤖 trascina 1,2 > 3,4")
 check(p["mossa"] == "Marian al centro" and not any("🤖" in x or "trascina" in x for x in p["altro"]),
       "la riga 🤖 non finisce nella card")

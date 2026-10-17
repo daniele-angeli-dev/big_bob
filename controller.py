@@ -310,7 +310,8 @@ MARKERS = {"▶": "mossa", "⚠": "minacce", "🎴": "pescate", "👁": "avv_man
 
 PROMPT_PILOTA = (
     "\n[PILOTA AUTOMATICO ATTIVO] In questa partita giochi TU al posto di Daniele: le tue azioni vengono eseguite con "
-    "il mouse. Dopo le righe della risposta live aggiungi come ULTIMA riga una riga che inizia con 🤖 con le azioni "
+    "il mouse. Dopo le righe della risposta live aggiungi SEMPRE come ULTIMA riga (non conta nelle 5 righe, e serve "
+    "anche se rispondi in breve) una riga che inizia con 🤖 con le azioni "
     "sulla schermata allegata (l'ultima immagine), separate da ' ; ': 'trascina X1,Y1 > X2,Y2' per portare una carta "
     "dalla mano allo spazio del campo, 'clicca X,Y' per pulsanti (fine turno / conferma, Keep, carte da cambiare nel "
     "mulligan). X e Y sono in PERCENTUALE della larghezza e dell'altezza della schermata allegata (0-100, una cifra "
@@ -1142,11 +1143,34 @@ class Controller:
                          "rischio; contro il bot del gioco il rischio è minore.", "warn")
                 cfg["pilota_avviso_visto"] = True
                 store.save("config", cfg)
+            threading.Thread(target=self._pilot_selftest, daemon=True, name="bb-pilota-prova").start()
             if not self.busy:
                 self.analyze(auto=True)
         else:
             self._pilot_stop = True
         self.emit_state()
+
+    def _pilot_selftest(self) -> None:
+        """All'accensione: controlla che il gioco si trovi, che il mouse vada dove BIG-BOB lo mette e che i comandi
+        possano arrivare al gioco. I problemi li scrive in chat, invece di lasciare il pilota fermo senza spiegazioni."""
+        from origins import pilot, winutil
+        if not pilot.WIN:
+            return
+        title = store.load("config").get("titolo_finestra", "Origins")
+        gw = screen.game_window(title)
+        if not gw:
+            self.say(f"Pilota: non trovo la finestra del gioco (cerco '{title}' nel titolo). Apri Origins in finestra o "
+                     "a schermo intero e riaccendi il pilota.", "warn")
+            return
+        hwnd, region = gw
+        if winutil.is_elevated(hwnd) and not winutil.is_elevated(None):
+            self.say("Pilota: Origins gira come amministratore e BIG-BOB no, quindi Windows blocca i clic di BIG-BOB "
+                     "sul gioco. Avvia BIG-BOB come amministratore (tasto destro › Esegui come amministratore).", "warn")
+        res = pilot.selftest(region)
+        log.info("pilota, prova del mouse: %s", res)
+        if not res.get("ok"):
+            self.say(f"Pilota: il mouse non va dove lo mando ({res.get('dettaglio')}). Dimmelo: è un problema di scala "
+                     "dello schermo che correggo.", "warn")
 
     def stop_pilot(self) -> None:
         if getattr(self, "pilot_on", False):
@@ -1164,11 +1188,16 @@ class Controller:
         if not actions:
             if actions is None:
                 log.info("pilota: nessuna riga 🤖 nella risposta")
+                self._journal("🤖 Pilota: la risposta non conteneva la riga 🤖")
+                self.say("Pilota: la risposta non conteneva azioni, riprovo tra poco.", "dim")
+            else:
+                self.status("🤖 niente da fare in questo momento")
             return
         turn = (store.load("match") or {}).get("turno") if store.FILES["match"].exists() else None
         n = self._pilot_rounds.get(turn, 0)
         if n >= pilot.MAX_PER_ROUND:
             self._journal(f"🤖 Pilota: già {n} giocate nel round {turn}, non ne faccio altre")
+            self.status(f"🤖 già {n} giocate in questo round: aspetto il prossimo")
             return
         self._pilot_rounds[turn] = n + 1
         region = getattr(self, "_shot_region", None)
@@ -1179,13 +1208,13 @@ class Controller:
         title = store.load("config").get("titolo_finestra", "Origins")
         gw = screen.game_window(title)
         if not region or not gw or not pilot.WIN:
-            self._journal("🤖 Pilota: finestra del gioco non trovata, nessuna azione")
-            self.status("Pilota: finestra del gioco non trovata")
+            self._journal(f"🤖 Pilota: finestra del gioco non trovata (titolo '{title}'), nessuna azione")
+            self.say(f"Pilota: non trovo la finestra del gioco (cerco '{title}' nel titolo), quindi non clicco.", "warn")
             return
         hwnd, now = gw
         if any(abs(a - b) > 8 for a, b in zip(now, region)):
             self._journal(f"🤖 Pilota: il gioco si è spostato ({region} → {now}), nessuna azione")
-            self.status("Pilota: la finestra del gioco si è spostata, aspetto il prossimo round")
+            self.say("Pilota: la finestra del gioco si è spostata dopo la schermata, riprovo al prossimo controllo.", "dim")
             return
         self._pilot_stop = False
         pts = pilot.points(actions, region)
@@ -1195,17 +1224,20 @@ class Controller:
             if hide:
                 self.ui.hide()
                 time.sleep(0.15)
-            winutil.activate(hwnd)
-            time.sleep(0.15)
+            time.sleep(0.05)
+            if not winutil.activate(hwnd):
+                log.info("pilota: il gioco non è venuto in primo piano, provo lo stesso")
             done = pilot.run(actions, region, pilot.Mouse(stop=lambda: self._pilot_stop))
             self._journal("🤖 Pilota: " + pilot.describe(actions) + "\n" + "\n".join(f"- {d}" for d in done))
+            self.status(f"🤖 fatto: {len(done)} azioni")
         except pilot.Interrotto as e:
             self.pilot_on = False
             self._journal(f"🤖 Pilota interrotto: {e}")
             self.say(f"Pilota automatico spento: {e}. Riprendi tu.", "warn")
             self.emit_state()
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             log.exception("pilota automatico")
+            self.say(f"Pilota: errore nell'eseguire le azioni ({e}). Dettagli in logs/bigbob.log.", "warn")
         finally:
             if hide:
                 self.ui.show()
@@ -1254,8 +1286,11 @@ class Controller:
     def _do_analyze(self, auto: bool) -> None:
         if auto and not self.auto_on:
             return  # AUTO spento mentre questa analisi era in coda: niente cattura, niente finestra che lampeggia
-        prompt = (PROMPT_AUTO if auto else PROMPT_TURNO).format(mode=self._mode())
-        if getattr(self, "pilot_on", False) and self._mode() != "ranked":
+        piloting = getattr(self, "pilot_on", False) and self._mode() != "ranked"
+        # con il pilota serve sempre l'analisi completa: il prompt AUTO permette di rispondere "—" (niente da fare),
+        # e a schermata ferma il pilota non giocherebbe mai
+        prompt = (PROMPT_AUTO if auto and not piloting else PROMPT_TURNO).format(mode=self._mode())
+        if piloting:
             prompt += PROMPT_PILOTA
         frames = self._take_obs_frames()
         if frames:
@@ -1837,6 +1872,10 @@ class Controller:
                 if ref_auto is None:
                     ref_auto = sig
                 elif d(sig, ref_auto) > 6 and not self.busy and now_t - self.last_call > 8:
+                    self.analyze(auto=True)
+                    ref_auto = sig
+                elif getattr(self, "pilot_on", False) and not self.busy and now_t - self.last_call > 25:
+                    # pilota: a schermata ferma lo schermo non "cambia", ma il round va giocato lo stesso
                     self.analyze(auto=True)
                     ref_auto = sig
             else:

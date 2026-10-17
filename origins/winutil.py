@@ -54,6 +54,35 @@ def exclude_from_capture(title: str = "BIG-BOB", on: bool = True) -> bool:
         return False
 
 
+def is_elevated(hwnd=None) -> bool:
+    """True se il processo (della finestra hwnd, o questo se None) gira come amministratore."""
+    if not WIN:
+        return False
+    import ctypes
+    from ctypes import wintypes
+    k, a, u = ctypes.windll.kernel32, ctypes.windll.advapi32, ctypes.windll.user32
+    try:
+        if hwnd:
+            pid = wintypes.DWORD()
+            u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            proc = k.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not proc:
+                return True  # non posso nemmeno guardarlo: di solito vuol dire che è amministratore
+        else:
+            proc = k.GetCurrentProcess()
+        tok = wintypes.HANDLE()
+        if not a.OpenProcessToken(proc, 0x0008, ctypes.byref(tok)):  # TOKEN_QUERY
+            return bool(hwnd)
+        elev, size = wintypes.DWORD(), wintypes.DWORD()
+        a.GetTokenInformation(tok, 20, ctypes.byref(elev), ctypes.sizeof(elev), ctypes.byref(size))  # TokenElevation
+        k.CloseHandle(tok)
+        if hwnd:
+            k.CloseHandle(proc)
+        return bool(elev.value)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def activate(hwnd) -> bool:
     """Porta in primo piano una finestra (il gioco, prima che il pilota automatico clicchi). True se ora è davanti."""
     if not WIN or not hwnd:

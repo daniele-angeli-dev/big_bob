@@ -13,6 +13,12 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Pilota automatico, prima correzione**: all'accensione chiedeva un'analisi "AUTO", che a schermata ferma risponde
+  "niente da fare", e poi restava in attesa di un cambio di schermata che durante la fase di gioco non arriva: per
+  questo sembrava non fare nulla. Ora con il pilota ogni analisi è completa, e se per 25 secondi non succede niente
+  riguarda lo schermo da solo. All'accensione controlla che trovi il gioco, che il mouse vada dove lo manda (anche con
+  la scala dello schermo al 125-150%) e che Windows non blocchi i clic perché Origins gira come amministratore; ogni
+  problema lo scrive in chat invece di restare fermo in silenzio.
 - **Nuova icona**: un bersaglio giallo con una freccetta nel centro, nei colori di BIG-BOB (anche in alto a sinistra
   nella finestra, nelle pagine dell'installatore e nella barra di Windows; nelle misure piccole resta solo il bersaglio, così si legge bene). Se dopo l'aggiornamento
   il collegamento sul desktop mostra ancora la vecchia icona, Windows la aggiorna al riavvio.
