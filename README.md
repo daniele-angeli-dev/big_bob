@@ -13,6 +13,11 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Cronologia delle partite** nel libro (scheda PARTITE): ogni partita con risultato, mazzi e tipo di avversario; con
+  un clic, richiesta per richiesta, la schermata inviata (si ingrandisce), la mossa suggerita, cosa hai giocato davvero
+  (con «consiglio seguito» / «giocata diversa»), cosa ha giocato l'avversario e le barrier dopo. Sotto ogni mossa puoi
+  **chiedere a BIG-BOB** perché te l'ha suggerita e se era giusta, oppure fare domande su tutta la partita.
+  RIVEDI LA PARTITA a fine partita apre direttamente qui.
 - **Mazzo avversario riconosciuto**: dalle carte che gioca, confrontate con i mazzi del meta (OriginsMeta, le tue
   partite, il cervello comune), BIG-BOB dice quale lista sta usando e che tipo di mazzo è — Aggro, Midrange (aggro o
   control), Control, Combo, con i sottotipi Swarm, Tempo, Big, Ramp, Discard — e come giocarci contro. Si vede nella

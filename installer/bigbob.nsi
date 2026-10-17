@@ -463,6 +463,12 @@ Section "BIG-BOB" SecMain
   ${If} $2 != 0
     StrCpy $TESTFAIL "$TESTFAIL mazzo-avversario"
   ${EndIf}
+  StrCpy $0 "Collaudo: cronologia delle partite"
+  StrCpy $1 '"$PY" "$INSTDIR\tests\test_history.py"'
+  Call Esegui
+  ${If} $2 != 0
+    StrCpy $TESTFAIL "$TESTFAIL cronologia"
+  ${EndIf}
   ${If} $TESTFAIL != ""
     MessageBox MB_OK|MB_ICONEXCLAMATION "Alcuni collaudi non sono passati:$TESTFAIL.$\r$\nBIG-BOB è installato lo stesso: mandami l'elenco dei dettagli (tasto destro › Copia i dettagli negli appunti)."
   ${EndIf}

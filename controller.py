@@ -29,6 +29,17 @@ log = logging.getLogger("bigbob")
 ROUND_SECONDS = 90
 BUDGET_SECONDS = 40  # tempo massimo per la risposta: il resto serve a leggere e giocare
 
+PROMPT_STORIA = (
+    "[CRONOLOGIA] Daniele sta rivedendo una partita finita nel libro (scheda PARTITE) e ti fa una domanda. È analisi "
+    "post-partita: i consigli di mossa sono permessi anche se la partita era ranked.\n\n{contesto}\n\n"
+    "Domanda di Daniele: {domanda}\n\n"
+    "Rispondi in italiano, testo semplice (niente markdown), al massimo 10 righe. Spiega il ragionamento dietro la mossa "
+    "suggerita usando i numeri che avevi (barrier, mana, carte probabili) e, ora che sai com'è andata, di' onestamente se "
+    "era la mossa giusta e cosa avresti fatto di diverso. Se serve, usa get_card, rules_get, lessons_get o "
+    "simulate_combat (non inventare dati di carte). Se dalla domanda emerge qualcosa di nuovo e utile, registralo con "
+    "record_lesson (fonte \"Daniele\" se è lui a insegnartelo)."
+)
+
 PROMPT_TURNO = (
     "[F8 · analisi round] La schermata del round è allegata: NON chiamare get_screen. Leggila e chiama UNA "
     "volta update_match con lo stato completo (mano, campo, scarti, mana, vita delle barrier e quali sono "
@@ -335,6 +346,7 @@ class Controller:
         self._obs_lock = threading.Lock()
         self._obs_n = 0
         self._match_active = False
+        self._history_lock = threading.Lock()
 
     # ------------------------------------------------ avvio
     def start(self) -> None:
@@ -800,12 +812,12 @@ class Controller:
         except Exception:  # noqa: BLE001
             webbrowser.open(path.as_uri())
 
-    def open_library(self, tab: str = "mazzi", deck: str = "") -> None:
-        """La finestra del libro: MAZZI · COSA HO IMPARATO · STATISTICHE (dentro l'app)."""
+    def open_library(self, tab: str = "mazzi", deck: str = "", match: str = "") -> None:
+        """La finestra del libro: MAZZI · PARTITE · STATISTICHE · STUDIO (dentro l'app)."""
         from origins import report
         try:
-            path = report.library_html(tab, deck)
-            frag = f"mazzo={store.slug(deck)}" if deck else tab
+            path = report.library_html(tab, deck, match)
+            frag = f"mazzo={store.slug(deck)}" if deck else (f"partita={match}" if match else tab)
             self._open(path, "BIG-BOB · Mazzi e statistiche", frag)
         except Exception as e:  # noqa: BLE001
             log.exception("libreria")
@@ -885,16 +897,76 @@ class Controller:
             self._brain_soon()
 
     def open_replay(self) -> None:
-        from origins import report
-        d = self.journal_dir or max((ROOT / "logs" / "partite").glob("*/"), default=None)
-        if d is None or not (Path(d) / "diario.md").exists():
+        """RIVEDI LA PARTITA: la partita nella scheda PARTITE del libro (schermate, mosse suggerite e giocate)."""
+        from origins import history
+        d = self.journal_dir
+        name = d.name if d is not None and (Path(d) / "diario.md").exists() else history.latest_id()
+        if not name:
             self.say("Nessuna partita da rivedere.", "dim")
             return
+        self.open_library("partite", match=name)
+
+    def history_ask(self, pid: str, n: int, question: str) -> str:
+        """Domanda dalla cronologia (libro → PARTITE) su una mossa suggerita o sull'intera partita: risponde una
+        sessione a parte (non disturba la partita in corso), con il contesto della partita e la schermata."""
+        import base64
+        from origins import history
+        question = (question or "").strip()[:800]
+        if not question:
+            return "Scrivi una domanda."
+        if not self.claude:
+            return "Claude Code non è collegato: controlla le impostazioni."
         try:
-            self._open(report.replay_html(Path(d)), "BIG-BOB · Rivedi la partita")
+            ctx, shot = history.question_context(pid, int(n or 0))
         except Exception as e:  # noqa: BLE001
-            log.exception("replay")
-            self.say(f"Replay non generato: {e}", "warn")
+            return f"Non trovo questa partita: {e}"
+        content: list[dict] = []
+        if shot is not None:
+            try:
+                data = history.image_data(shot.relative_to(history.LOGS).as_posix(), 1400)
+                if data:
+                    mime, b64 = data[5:].split(";base64,", 1)
+                    content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}})
+            except Exception:  # noqa: BLE001
+                log.exception("schermata per la domanda")
+        content.append({"type": "text", "text": PROMPT_STORIA.format(contesto=ctx, domanda=question)})
+        with self._history_lock:
+            sess = self.history_session = getattr(self, "history_session", None) or ClaudeSession(self.claude, ROOT,
+                                                                                                  live=False)
+            final, texts = "", []
+            try:
+                for ev in sess.ask(content, timeout=300):
+                    if ev.get("type") == "assistant":
+                        for block in ev.get("message", {}).get("content", []):
+                            if block.get("type") == "text" and block.get("text", "").strip():
+                                texts.append(block["text"])
+                    elif ev.get("type") == "result":
+                        usage.add_from_result(ev, sess)
+                        final = (ev.get("result") or (texts[-1] if texts else "")).strip()
+            except Exception as e:  # noqa: BLE001
+                log.exception("domanda dalla cronologia")
+                return f"Non sono riuscito a rispondere: {e}"
+        if usage.visible():
+            self.emit({"type": "usage", **usage.summary()})
+        return final or "Nessuna risposta."
+
+    @staticmethod
+    def history_image(rel: str, size: int = 520) -> str | None:
+        from origins import history
+        try:
+            return history.image_data(rel, size)
+        except Exception:  # noqa: BLE001
+            log.exception("immagine della cronologia")
+            return None
+
+    def _link_journal(self) -> None:
+        """Dopo FINE: scrive nella partita appena salvata in quale diario sono schermate e risposte."""
+        if self.journal_dir is None:
+            return
+        ms = store.load("matches")
+        if ms and not ms[-1].get("diario"):
+            ms[-1]["diario"] = self.journal_dir.name
+            store.save("matches", ms)
 
     def set_voice(self, on: bool) -> None:
         cfg = store.load("config")
@@ -1200,6 +1272,11 @@ class Controller:
                 log.exception("aggiornamento laboratorio")
             if kind == "live" and (learn or store.load("config").get("barra_vantaggio", True)):
                 self._learn(learn)
+            if kind == "fine":
+                try:
+                    self._link_journal()
+                except Exception:  # noqa: BLE001
+                    log.exception("collegamento del diario alla partita")
             if kind in ("fine", "crea"):
                 self._brain_soon()
             self._session_free.set()

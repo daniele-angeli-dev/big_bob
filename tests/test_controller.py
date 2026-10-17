@@ -175,6 +175,21 @@ wait(ui, c.analyze)
 diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
 assert "Osservatore: 3 fotogrammi allegati" in diario and c.obs_frames == [], "allegati all'F8 e poi azzerati"
 
+# cronologia: domanda su una mossa dal libro (sessione a parte, con la schermata)
+from origins import history  # noqa: E402
+history.LOGS = tmp / "logs"
+pid = history.latest_id()
+assert pid, "il diario della partita di prova deve comparire nella cronologia"
+c.history_session = FakeSession("fake", tmp)
+ans = c.history_ask(pid, 0, "Dove l'ho persa?")
+assert ans.startswith("Risposta libera"), ans
+req = next((r for r in history.journals()[0]["richieste"] if r.get("schermata")), None)
+if req:
+    ans = c.history_ask(pid, req["n"], "Perché questa mossa?")
+    assert "img=True" in ans, ans
+assert "Non trovo" in c.history_ask("inesistente", 1, "?")
+c.history_session.close()
+
 # Claude Code mancante: BIG-BOB lo installa da solo e apre l'accesso
 import configura  # noqa: E402
 calls = []

@@ -164,16 +164,21 @@ import re as _re
 tabs = [(_re.search(r"data-tab='(\w+)'", x).group(1), _re.search(r"data-deck='([^']*)'", x).group(1)) for x in opened]
 assert tabs == [("mazzi", "sniper-lab"), ("studio", ""), ("statistiche", ""), ("mazzi", "")], tabs
 assert all("<html" in x and "file:" not in x for x in opened), "dati passati direttamente alla finestra, niente file"
-# il replay incorpora le schermate (la finestra non legge file)
-jd = tmp / "partita"; jd.mkdir()
+# RIVEDI LA PARTITA apre la partita nella scheda PARTITE; le schermate arrivano su richiesta come anteprime leggere
+from origins import history as _hist
+_hist.LOGS = tmp / "logs"
+jd = _hist.journals_dir() / "20261017-100000"; jd.mkdir(parents=True)
 from PIL import Image as _Im
 _Im.new("RGB", (1920, 1080), (40, 20, 80)).save(jd / "01.png")
-(jd / "diario.md").write_text("# Partita\n\n## #1 · 10:00 · Analisi round · schermata 01.png\nStrumenti: x\n\nrisposta", encoding="utf-8")
+(jd / "diario.md").write_text("# Partita del 17/10/2026 10:00\nMazzo: Sniper Lab\n\n## #1 · 10:00:05 · Analisi round · "
+                              "schermata 01.png\nStrumenti: x\n\nrisposta", encoding="utf-8")
 c.journal_dir = jd
 opened.clear()
 c.open_replay()
-assert "data:image/jpeg;base64," in opened[0] and "src='01.png'" not in opened[0]
-assert len(opened[0]) < 120_000, "schermata incorporata come anteprima leggera"
+assert "data-tab='partite'" in opened[0] and "data-match='20261017-100000'" in opened[0], "si apre sulla partita"
+assert "src='01.png'" not in opened[0] and len(opened[0]) < 300_000, "le schermate non sono incorporate tutte"
+img = c.history_image("partite/20261017-100000/01.png")
+assert img.startswith("data:image/jpeg;base64,") and len(img) < 120_000, "schermata come anteprima leggera"
 
 # la finestra del libro: tre schede, un riquadro per ogni mazzo salvato, scheda di dettaglio per ciascuno
 h = report.library_html("mazzi", "Sniper Lab").read_text(encoding="utf-8")

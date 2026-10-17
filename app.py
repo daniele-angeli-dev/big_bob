@@ -219,8 +219,14 @@ class Api:
     def open_lab(self):
         self._c.open_lab()
 
-    def open_library(self, tab="mazzi", deck=""):
-        self._c.open_library(tab or "mazzi", deck or "")
+    def open_library(self, tab="mazzi", deck="", match=""):
+        self._c.open_library(tab or "mazzi", deck or "", match or "")
+
+    def history_image(self, rel, size=520):
+        return self._c.history_image(rel, size)
+
+    def history_ask(self, pid, n=0, question=""):
+        return self._c.history_ask(pid, n, question)
 
     def open_origin(self):
         self._c.open_origin()

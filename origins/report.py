@@ -694,7 +694,8 @@ LIB_JS = """
     var h = decodeURIComponent((location.hash || '').slice(1)), def = document.body.dataset.tab || 'mazzi';
     if (h === 'imparato') h = 'studio';
     if (h.indexOf('mazzo=') === 0) openDeck(h.slice(6));
-    else showTab(['mazzi', 'statistiche', 'studio'].indexOf(h) >= 0 ? h : def);
+    else if (h.indexOf('partita=') === 0){ showTab('partite'); document.body.dataset.match = h.slice(8); }
+    else showTab(['mazzi', 'partite', 'statistiche', 'studio'].indexOf(h) >= 0 ? h : def);
     var dd = document.body.dataset.deck; if (!h && dd) openDeck(dd);
   }
 })();
@@ -771,11 +772,12 @@ def brain_body() -> str:
     return "".join(out)
 
 
-def library_html(tab: str = "mazzi", deck: str = "") -> Path:
-    """La finestra del libro: MAZZI · STATISTICHE · STUDIO in un'unica pagina con le schede."""
-    tab = "studio" if tab == "imparato" else tab
-    panels = [("mazzi", "MAZZI", decks_body), ("statistiche", "STATISTICHE", stats_body),
-              ("studio", "STUDIO", studio_body)]
+def library_html(tab: str = "mazzi", deck: str = "", match: str = "") -> Path:
+    """La finestra del libro: MAZZI · PARTITE · STATISTICHE · STUDIO in un'unica pagina con le schede."""
+    from origins import history
+    tab = "studio" if tab == "imparato" else ("partite" if match else tab)
+    panels = [("mazzi", "MAZZI", decks_body), ("partite", "PARTITE", history.body),
+              ("statistiche", "STATISTICHE", stats_body), ("studio", "STUDIO", studio_body)]
     tabs = "".join(f"<button type='button' role='tab' data-tab='{k}' aria-controls='t-{k}' "
                    f"aria-selected='{'true' if k == tab else 'false'}'>{label}</button>" for k, label, _ in panels)
     body = [f"<div class='libhead'><h1>BIG-BOB</h1><nav class='tabs' role='tablist' aria-label='Sezioni'>{tabs}</nav></div>"]
@@ -785,9 +787,11 @@ def library_html(tab: str = "mazzi", deck: str = "") -> Path:
         except Exception as ex:  # noqa: BLE001  (una sezione rotta non deve nascondere le altre)
             content = f"<div class='empty'>Sezione non disponibile: {html.escape(str(ex))}</div>"
         body.append(f"<section class='panel' id='t-{k}' role='tabpanel' {'hidden' if k != tab else ''}>{content}</section>")
-    body.append(f"<script>{LIB_JS}</script>")
+    body.append(f"<script>{LIB_JS}</script><script>{history.JS}</script>")
     page = _page("BIG-BOB · mazzi e statistiche", "".join(body))
-    page = page.replace("<body>", f"<body data-tab='{html.escape(tab)}' data-deck='{html.escape(store.slug(deck) if deck else '')}'>", 1)
+    page = page.replace("</style>", history.CSS + "</style>", 1)
+    page = page.replace("<body>", f"<body data-tab='{html.escape(tab)}' data-deck='{html.escape(store.slug(deck) if deck else '')}' "
+                                  f"data-match='{html.escape(match)}'>", 1)
     out = LOGS / "biblioteca.html"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")

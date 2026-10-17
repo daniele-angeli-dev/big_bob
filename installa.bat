@@ -12,6 +12,7 @@ python tests\test_imparato.py
 python tests\test_deckproj.py
 python tests\test_cervello.py
 python tests\test_archetype.py
+python tests\test_history.py
 python collegamenti.py installa
 echo.
 echo Fatto. Da ora avvii BIG-BOB dall'icona sul desktop o dal menu Start.

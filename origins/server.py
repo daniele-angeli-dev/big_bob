@@ -346,6 +346,14 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
     if note:
         m.setdefault("note", []).append(f"R{m.get('turno')}: {note}")
     m["aggiornato"] = now()
+    # fotografia del round: serve alla cronologia (cosa è stato giocato tra una richiesta e l'altra)
+    import time as _t
+    snap = {"ora": _t.strftime("%H:%M:%S"), "turno": m.get("turno")}
+    for k in ("miei_giocati", "miei_scartati", "avv_giocati", "avv_scartati", "mia_mano", "barrier_mie", "barrier_avv",
+              "distrutte_da_me", "distrutte_a_me", "avv_mano", "mana"):
+        v = m.get(k)
+        snap[k] = list(v) if isinstance(v, list) else v
+    m["storico"] = (m.get("storico") or [])[-59:] + [snap]
     save("match", m)
     view = _match_view(m)
     if my_deck_left is not None:
