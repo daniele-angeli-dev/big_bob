@@ -140,6 +140,23 @@ def new_recording() -> Path:
     return d
 
 
+def cleanup_empty_recordings(min_age_s: float = 120) -> int:
+    """Toglie le registrazioni vuote (avviate e fermate senza fotogrammi, o lasciate da vecchi collaudi)."""
+    import shutil
+    n = 0
+    if not RECORDINGS.exists():
+        return 0
+    for d in RECORDINGS.iterdir():
+        try:
+            if d.is_dir() and not any(d.glob("*.png")) and not (d / "ELABORATA").exists() \
+                    and time.time() - d.stat().st_mtime > min_age_s:
+                shutil.rmtree(d, ignore_errors=True)
+                n += 1
+        except OSError:
+            continue
+    return n
+
+
 def list_recordings() -> list[dict]:
     out = []
     for d in sorted(p for p in RECORDINGS.iterdir() if p.is_dir()):

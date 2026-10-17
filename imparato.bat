@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-python -m origins.report imparato > nul
-start "" "logs\imparato.html"
+python -m origins.report biblioteca imparato > nul
+start "" "logs\biblioteca.html"

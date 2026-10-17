@@ -8,6 +8,7 @@ Tasti: F8 analizza · F9 cattura per scansione · F10 mostra/nasconde.
 from __future__ import annotations
 
 import json
+import time
 import logging
 import os
 import sys
@@ -75,11 +76,12 @@ class WebUI:
     def is_visible(self) -> bool:
         return self._visible
 
-    def open_page(self, path, title: str = "BIG-BOB") -> bool:
+    def open_page(self, path, title: str = "BIG-BOB", frag: str = "") -> bool:
         """Apre una pagina di BIG-BOB (statistiche, cosa ho imparato, laboratorio, replay) in una sua finestra
         dentro l'app, non nel browser. La finestra si riusa: aprire un'altra pagina la sostituisce."""
         import webview
-        uri = Path(path).resolve().as_uri()
+        # ?t=… obbliga a ricaricare la pagina appena rigenerata anche se cambia solo la scheda (#…)
+        uri = Path(path).resolve().as_uri() + f"?t={int(time.time() * 1000)}" + (f"#{frag}" if frag else "")
         w = getattr(self, "_page_window", None)
         if w is not None:
             try:
@@ -176,6 +178,9 @@ class Api:
 
     def open_lab(self):
         self._c.open_lab()
+
+    def open_library(self, tab="mazzi", deck=""):
+        self._c.open_library(tab or "mazzi", deck or "")
 
     def open_learned(self):
         self._c.open_learned()

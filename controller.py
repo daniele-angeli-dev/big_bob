@@ -277,6 +277,10 @@ class Controller:
             self.voice.warm()
         threading.Thread(target=self._startup_updates, daemon=True).start()
         threading.Thread(target=self._startup_meta, daemon=True, name="bb-originsmeta").start()
+        try:
+            screen.cleanup_empty_recordings()
+        except Exception:  # noqa: BLE001
+            log.exception("pulizia registrazioni vuote")
         if not self.claude:
             self.say("Non trovo il comando 'claude'. Installa Claude Code e fai il login (vedi README).", "warn")
         else:
@@ -388,16 +392,11 @@ class Controller:
         self.emit_state()
 
     def open_lab(self) -> None:
-        from origins import report
         p = deckproj.active()
         if not p:
             self.say("Nessun mazzo in creazione: premi CREA MAZZO.", "dim")
             return
-        try:
-            self._open(report.lab_html(p["nome"]), f"BIG-BOB · {p['nome']}")
-        except Exception as e:  # noqa: BLE001
-            log.exception("pagina laboratorio")
-            self.say(f"Pagina non generata: {e}", "warn")
+        self.open_library("mazzi", deckproj.deck_name(p))
 
     def _lab_after(self, kind: str) -> None:
         """Dopo la creazione o la fine di una partita di test: aggiorna il pannello e offre i pulsanti giusti."""
@@ -558,12 +557,12 @@ class Controller:
         self.emit({"type": "claude_test", "ok": ok, "msg": msg})
 
     # ------------------------------------------------ pagine locali
-    def _open(self, path: Path, title: str = "BIG-BOB") -> None:
+    def _open(self, path: Path, title: str = "BIG-BOB", frag: str = "") -> None:
         """Dentro l'app (finestra di BIG-BOB) se la finestra lo permette; altrimenti nel browser (finestra classica)."""
         opener = getattr(self.ui, "open_page", None)
         if opener is not None:
             try:
-                if opener(path, title):
+                if opener(path, title, frag) if frag else opener(path, title):
                     return
             except Exception:  # noqa: BLE001
                 log.exception("pagina interna non aperta: uso il browser")
@@ -578,21 +577,22 @@ class Controller:
         except Exception:  # noqa: BLE001
             webbrowser.open(path.as_uri())
 
-    def open_stats(self) -> None:
+    def open_library(self, tab: str = "mazzi", deck: str = "") -> None:
+        """La finestra del libro: MAZZI · COSA HO IMPARATO · STATISTICHE (dentro l'app)."""
         from origins import report
         try:
-            self._open(report.stats_html(), "BIG-BOB · Statistiche")
+            path = report.library_html(tab, deck)
+            frag = f"mazzo={store.slug(deck)}" if deck else tab
+            self._open(path, "BIG-BOB · Mazzi e statistiche", frag)
         except Exception as e:  # noqa: BLE001
-            log.exception("statistiche")
-            self.say(f"Statistiche non generate: {e}", "warn")
+            log.exception("libreria")
+            self.say(f"Pagina non generata: {e}", "warn")
+
+    def open_stats(self) -> None:
+        self.open_library("statistiche")
 
     def open_learned(self) -> None:
-        from origins import report
-        try:
-            self._open(report.learned_html(), "BIG-BOB · Cosa ho imparato")
-        except Exception as e:  # noqa: BLE001
-            log.exception("pagina cosa ho imparato")
-            self.say(f"Pagina non generata: {e}", "warn")
+        self.open_library("imparato")
 
     def open_replay(self) -> None:
         from origins import report

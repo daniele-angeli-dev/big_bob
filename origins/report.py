@@ -73,6 +73,29 @@ tr.weak td{background:#5A1630}
 .deck{display:flex;flex-wrap:wrap;gap:6px}.deck span{background:var(--panel);border-radius:6px;padding:5px 9px;font-size:14px}
 .deck span.lg{background:var(--yellow);color:var(--bg);font-weight:700}
 @media (max-width:720px){.ver{grid-template-columns:1fr}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* libreria: schede MAZZI / COSA HO IMPARATO / STATISTICHE */
+.libhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{border:2px solid var(--line);background:transparent;color:var(--dim);font:inherit;font-weight:700;letter-spacing:1px;
+  padding:8px 14px;border-radius:8px;cursor:pointer;font-size:14px}
+.tabs button[aria-selected="true"]{background:var(--yellow);border-color:var(--yellow);color:var(--bg)}
+.tabs button:focus-visible,.dtile:focus-visible,.back:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.panel[hidden],.deckd[hidden],#dlist[hidden]{display:none}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.toolbar input,.toolbar select{background:var(--panel);border:2px solid var(--line);color:#fff;border-radius:8px;padding:8px 10px;font:inherit;font-size:14px}
+.toolbar input{flex:1 1 220px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.dtile{text-align:left;background:var(--panel);border:2px solid transparent;border-radius:10px;padding:12px 14px;color:#fff;font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+.dtile:hover{border-color:var(--teal)}
+.dtile .nm{font-size:17px;font-weight:700}
+.dtile .lg{color:var(--yellow);font-size:13px}
+.dtile .rec{display:flex;align-items:baseline;gap:8px;font-size:13px;color:var(--dim)}
+.dtile .rec b{font-family:Impact,sans-serif;font-weight:400;font-size:26px;color:#fff}
+.dtile .tag{align-self:flex-start;background:var(--teal);color:var(--bg);font-size:11px;font-weight:700;letter-spacing:.8px;border-radius:5px;padding:2px 7px}
+.wrbar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}.wrbar i{display:block;height:100%;background:var(--teal)}
+.back{background:transparent;border:2px solid var(--line);color:var(--dim);border-radius:8px;padding:6px 12px;font:inherit;font-weight:700;cursor:pointer;margin:12px 0}
+.deckd h2:first-of-type{margin-top:6px}
 @media (max-width:720px){.round{grid-template-columns:1fr}.bar{grid-template-columns:110px 1fr 90px}}
 """
 
@@ -105,7 +128,7 @@ def _times() -> list[float]:
     return out
 
 
-def stats_html() -> Path:
+def stats_body() -> str:
     log = store.load("matches")
     games = [m for m in log if m.get("risultato")]
     wins = [m for m in games if str(m["risultato"]).lower().startswith("v")]
@@ -139,8 +162,7 @@ def stats_html() -> Path:
         (f"{followed[1] / followed[0] * 100:.0f}%" if followed[0] else "–", "…E ANDATI BENE"),
         (str(sum(1 for x in ls if x.get("stato") == "confermata")), "LEZIONI CONFERMATE"),
     ]
-    body = ["<h1>BIG-BOB · STATISTICHE</h1>",
-            f"<p class='sub'>{len(games)} partite registrate · aggiornato {store.now()}</p>",
+    body = [f"<p class='sub'>{len(games)} partite registrate · aggiornato {store.now()}</p>",
             "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles)
             + "</div>",
             "<h2>Winrate per mio mazzo</h2>", _bars([(k, v[0], v[1]) for k, v in by_deck.items()]),
@@ -153,9 +175,13 @@ def stats_html() -> Path:
             f"<td>{html.escape(str(m.get('risultato', '')))}</td></tr>" for m in reversed(games[-30:]))
         body.append("<h2>Ultime partite</h2><table><thead><tr><th>Data</th><th>Mazzo</th><th>Avversario</th>"
                     f"<th>Risultato</th></tr></thead><tbody>{rows}</tbody></table>")
+    return "".join(body)
+
+
+def stats_html() -> Path:
     out = LOGS / "statistiche.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(_page("BIG-BOB · statistiche", "".join(body)), encoding="utf-8")
+    out.write_text(_page("BIG-BOB · statistiche", "<h1>BIG-BOB · STATISTICHE</h1>" + stats_body()), encoding="utf-8")
     return out
 
 
@@ -293,6 +319,8 @@ def _sessions() -> list[dict]:
     except Exception:  # noqa: BLE001
         recs = []
     for r in recs:
+        if not r.get("fotogrammi"):  # registrazione vuota: niente da studiare
+            continue
         done = Path(r["cartella"]) / "ELABORATA"
         if not done.exists():
             t = _ts(r["nome"]) or 0
@@ -311,7 +339,7 @@ def _sessions() -> list[dict]:
     return ss
 
 
-def learned_html() -> Path:
+def learned_body() -> str:
     events = sorted(_learn_events(), key=lambda e: e["t"], reverse=True)
     sessions = _sessions()
     groups: dict[int, list[dict]] = defaultdict(list)
@@ -388,8 +416,7 @@ def learned_html() -> Path:
     tiles = [(str(len(ls)), "LEZIONI"), (str(cnt(ls, "confermata")), "CONFERMATE ✅"), (str(cnt(ls, "ipotesi")), "DA VERIFICARE ❓"),
              (str(cnt(ls, "smentita")), "SMENTITE ❌"), (f"{cnt(rs, 'confermata')}/{len(rs)}", "REGOLE CONFERMATE"),
              (str(cnt(rs, "domanda")), "DOMANDE APERTE"), (str(len(store.load("cards"))), "CARTE NEL DATABASE")]
-    body = ["<h1>COSA HO IMPARATO</h1>",
-            f"<p class='sub'>Le novità di BIG-BOB partita per partita e registrazione per registrazione · aggiornato {store.now()}</p>",
+    body = [f"<p class='sub'>Le novità di BIG-BOB partita per partita e registrazione per registrazione · aggiornato {store.now()}</p>",
             "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles) + "</div>",
             "<h2>Partita per partita</h2>",
             "".join(out_blocks) or "<div class='empty'>Ancora niente: gioca una partita (o studia una registrazione con "
@@ -409,18 +436,19 @@ def learned_html() -> Path:
         body.append("<h2>Ancora da scoprire</h2><table><tbody>" + "".join(
             f"<tr><td class='st'>{rules.STATI.get(r['stato'], '')} {html.escape(r['id'])}</td><td>{html.escape(r['testo'])}</td></tr>"
             for r in qs) + "</tbody></table>")
+    return "".join(body)
+
+
+def learned_html() -> Path:
     out = LOGS / "imparato.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(_page("BIG-BOB · cosa ho imparato", "".join(body)), encoding="utf-8")
+    out.write_text(_page("BIG-BOB · cosa ho imparato", "<h1>COSA HO IMPARATO</h1>" + learned_body()), encoding="utf-8")
     return out
 
 
 # ---------------------------------------------------------------- laboratorio (creazione mazzo)
 
-def lab_html(name: str = "") -> Path:
-    p = deckproj.get(name)
-    if p is None:
-        raise ValueError("nessun progetto di mazzo")
+def lab_body(p: dict, heading: bool = True) -> str:
     st = deckproj.status(p)
     cur = st["statistiche_versione_attuale"]
     e = html.escape
@@ -432,7 +460,7 @@ def lab_html(name: str = "") -> Path:
              (str(st["partite_mancanti"]), "PARTITE MANCANTI"),
              (f"{conf['p_migliore']}%" if conf.get("p_migliore") is not None else "–",
               f"MIGLIORE DELLA v{conf['contro_versione']}" if conf else "CONFRONTO")]
-    body = [f"<h1>LABORATORIO · {e(p['nome'].upper())}</h1>",
+    body = [f"<h1>LABORATORIO · {e(p['nome'].upper())}</h1>" if heading else "",
             f"<p class='sub'>{e(p.get('obiettivo') or 'Mazzo creato da BIG-BOB')} · creato {e(p['creato'])} · "
             f"{e(p.get('stato') or '')} · aggiornato {store.now()}</p>",
             "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles)
@@ -502,14 +530,179 @@ def lab_html(name: str = "") -> Path:
     body.append("<p class='sub' style='margin-top:18px'>Con poche partite il winrate oscilla molto: la barra mostra "
                 "l'intervallo in cui sta probabilmente il valore vero (95%). Per questo BIG-BOB guarda anche le carte, "
                 "i matchup e le lezioni prima di cambiare il mazzo.</p>")
+    return "".join(body)
+
+
+def lab_html(name: str = "") -> Path:
+    p = deckproj.get(name)
+    if p is None:
+        raise ValueError("nessun progetto di mazzo")
     out = LOGS / "laboratorio.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(_page(f"BIG-BOB · laboratorio {p['nome']}", "".join(body)), encoding="utf-8")
+    out.write_text(_page(f"BIG-BOB · laboratorio {p['nome']}", lab_body(p)), encoding="utf-8")
+    return out
+
+
+# ---------------------------------------------------------------- libreria: mazzi, cosa ho imparato, statistiche
+
+def _cards_table(st: dict, weak: list[str]) -> str:
+    e = html.escape
+    weak_cards = {w.split(":")[0] for w in weak}
+    fmt = lambda x, suf="": "–" if x is None else f"{x}{suf}"  # noqa: E731
+    rows = []
+    for c, s_ in sorted(st["carte"].items(), key=lambda kv: (not kv[1]["leggendaria"], kv[1]["costo"] or 0, kv[0])):
+        rows.append(f"<tr class='{'weak' if c in weak_cards else ''}'><td>{'★ ' if s_['leggendaria'] else ''}{e(c)}</td>"
+                    f"<td>{fmt(s_['costo'])}</td><td>{s_['pescata']}</td><td>{s_['giocata']}</td>"
+                    f"<td>{fmt(s_['winrate_giocata'], '%')}</td><td>{fmt(s_['winrate_non_giocata'], '%')}</td>"
+                    f"<td>{fmt(s_['round_medio'])}</td></tr>")
+    return ("<table><thead><tr><th>Carta</th><th>Costo</th><th>Pescata</th><th>Giocata</th><th>Winrate se giocata</th>"
+            f"<th>Winrate se non giocata</th><th>Round medio</th></tr></thead><tbody>{''.join(rows)}</tbody></table>")
+
+
+def deck_body(d: dict) -> str:
+    """Scheda di un mazzo salvato (non del laboratorio): risultati, carte, matchup, ultime partite."""
+    e = html.escape
+    ms = deckproj.deck_matches(d["nome"])
+    st = deckproj.stats_from_matches(ms, d["leggendaria"], d["carte"])
+    weak = deckproj.weaknesses(st)
+    tiles = [(str(st["partite"]), "PARTITE"), (f"{st['vinte']}V {st['perse']}S", "RISULTATI"),
+             (f"{st['winrate']}%" if st["winrate"] is not None else "–",
+              f"WINRATE (±{st['margine']})" if st["margine"] else "WINRATE"),
+             (str(st["ultima"] or "–")[:10], "ULTIMA PARTITA")]
+    body = [f"<p class='sub'>Salvato {e(str(d.get('salvato') or '–'))}"
+            + (f" · patch {e(d['patch'])}" if d.get("patch") else "") + (f" · {e(d['note'])}" if d.get("note") else "")
+            + "</p>",
+            "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles) + "</div>",
+            "<h2>Carte</h2><div class='deck'>" + f"<span class='lg'>★ {e(d['leggendaria'])}</span>"
+            + "".join(f"<span>{e(c)} ×2</span>" for c in d["carte"]) + "</div>"]
+    if not ms:
+        body.append("<div class='empty' style='margin-top:14px'>Ancora nessuna partita con questo mazzo: sceglilo con NUOVA "
+                    "e le statistiche si riempiono da sole.</div>")
+        return "".join(body)
+    if st["intervallo_95"]:
+        lo, hi = st["intervallo_95"]
+        body.append("<h2>Winrate e affidabilità</h2>"
+                    f"<div class='ci' title='intervallo al 95%: {lo}–{hi}%'><div class='fifty'></div>"
+                    f"<div class='rng' style='left:{lo}%;width:{max(hi - lo, 1)}%'></div>"
+                    f"<div class='pt' style='left:{st['winrate']}%'></div></div>"
+                    f"<div class='cival'>{st['winrate']}% · il valore vero sta probabilmente tra {lo}% e {hi}% "
+                    f"({st['partite']} partite)</div>")
+    body.append("<h2>Punti deboli</h2>" + ("<ul>" + "".join(f"<li>{e(w)}</li>" for w in weak) + "</ul>" if weak else
+                "<div class='empty'>Nessun punto debole evidente dai numeri"
+                + (" (ancora poche partite)" if st["partite"] < 5 else "") + ".</div>"))
+    note = ""
+    if st["partite_con_carte"] < st["partite"]:
+        note = (f"<p class='sub'>Dati carta per carta su {st['partite_con_carte']} partite su {st['partite']}: le partite "
+                "più vecchie hanno solo il risultato.</p>")
+    body.append("<h2>Carte giocate</h2>" + note + _cards_table(st, weak))
+    body.append("<h2>Contro le leggendarie</h2>"
+                + _bars([(k, v["vinte"], v["partite"]) for k, v in st["contro"].items()]))
+    rows = "".join(f"<tr><td>{e(str(m.get('fine', '')))}</td><td>{e(str(m.get('avv_leggendaria') or ''))}</td>"
+                   f"<td>{e(str(m.get('risultato', '')))}</td><td>{e(str(m.get('note_finali') or ''))[:140]}</td></tr>"
+                   for m in reversed(ms[-25:]))
+    body.append("<h2>Ultime partite</h2><table><thead><tr><th>Data</th><th>Avversario</th><th>Risultato</th><th>Note</th>"
+                f"</tr></thead><tbody>{rows}</tbody></table>")
+    return "".join(body)
+
+
+def decks_body() -> str:
+    e = html.escape
+    decks = store.load("decks")
+    projects = {store.slug(deckproj.deck_name(p)): p for p in deckproj.load()}
+    if not decks:
+        return ("<div class='empty' style='margin-top:14px'>Ancora nessun mazzo salvato. Crealo con CREA MAZZO (modalità "
+                "creazione) o con /mazzo in Claude Code, oppure scrivi le carte quando premi NUOVA.</div>")
+    tiles, details = [], []
+    for d in decks:
+        sid = store.slug(d["nome"])
+        p = projects.get(sid)
+        ms = deckproj.deck_matches(d["nome"])
+        n, w = len(ms), sum(1 for m in ms if str(m.get("risultato", "")).lower().startswith("v"))
+        wr = round(w / n * 100) if n else None
+        last = max((m.get("fine") or "" for m in ms), default="")
+        tag = f"<span class='tag'>IN CREAZIONE · v{deckproj.current(p)['v']}</span>" if p and p.get("stato") != "concluso" \
+            else (f"<span class='tag'>LABORATORIO · v{deckproj.current(p)['v']}</span>" if p else "")
+        tiles.append(
+            f"<button type='button' class='dtile' data-id='{e(sid)}' data-name='{e(d['nome'].lower())} {e(d['leggendaria'].lower())}' "
+            f"data-games='{n}' data-wr='{wr if wr is not None else -1}' data-last='{e(last)}' aria-controls='d-{e(sid)}'>"
+            f"{tag}<span class='nm'>{e(d['nome'])}</span><span class='lg'>★ {e(d['leggendaria'])}</span>"
+            f"<span class='rec'><b>{(str(wr) + '%') if wr is not None else '–'}</b>"
+            f"{n} partite · {w}V {n - w}S{(' · ' + e(last[:10])) if last else ''}</span>"
+            f"<span class='wrbar' aria-hidden='true'><i style='width:{wr or 0}%'></i></span></button>")
+        content = lab_body(p, heading=False) if p else deck_body(d)
+        details.append(f"<section class='deckd' id='d-{e(sid)}' hidden><button type='button' class='back' data-back>← TUTTI I MAZZI</button>"
+                       f"<h2 style='font-size:24px;letter-spacing:1px;color:var(--yellow);text-transform:none;margin:6px 0 4px'>"
+                       f"{e(d['nome'])}</h2>{content}</section>")
+    toolbar = ("<div class='toolbar'><label class='sr' for='dq'>Cerca</label>"
+               "<input id='dq' type='search' placeholder='Cerca un mazzo o una leggendaria…'>"
+               "<label class='sr' for='ds'>Ordina</label><select id='ds'><option value='games'>Più giocati</option>"
+               "<option value='wr'>Winrate più alto</option><option value='last'>Giocati di recente</option>"
+               "<option value='name'>Nome</option></select></div>")
+    return (f"<div id='dlist'>{toolbar}<div class='dgrid' id='dgrid'>{''.join(tiles)}</div></div>" + "".join(details))
+
+
+LIB_JS = """
+(function(){
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs button'));
+  function showTab(t){
+    tabs.forEach(function(b){ var on = b.dataset.tab === t; b.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById('t-' + b.dataset.tab).hidden = !on; });
+  }
+  function listView(){ document.getElementById('dlist').hidden = false;
+    Array.prototype.forEach.call(document.querySelectorAll('.deckd'), function(x){ x.hidden = true; }); }
+  function openDeck(id){
+    var sec = document.getElementById('d-' + id); if (!sec) { listView(); return; }
+    showTab('mazzi'); document.getElementById('dlist').hidden = true;
+    Array.prototype.forEach.call(document.querySelectorAll('.deckd'), function(x){ x.hidden = x !== sec; });
+    window.scrollTo(0, 0);
+  }
+  tabs.forEach(function(b){ b.addEventListener('click', function(){ showTab(b.dataset.tab); if (b.dataset.tab === 'mazzi') listView(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('.dtile'), function(t){ t.addEventListener('click', function(){ openDeck(t.dataset.id); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-back]'), function(b){ b.addEventListener('click', function(){ listView(); window.scrollTo(0, 0); }); });
+  var q = document.getElementById('dq'), sel = document.getElementById('ds'), grid = document.getElementById('dgrid');
+  if (q) q.addEventListener('input', function(){ var v = q.value.trim().toLowerCase();
+    Array.prototype.forEach.call(grid.children, function(t){ t.hidden = v && t.dataset.name.indexOf(v) < 0; }); });
+  if (sel) sel.addEventListener('change', function(){
+    var k = sel.value, items = Array.prototype.slice.call(grid.children);
+    items.sort(function(a, b){
+      if (k === 'name') return a.dataset.name.localeCompare(b.dataset.name);
+      if (k === 'last') return (b.dataset.last || '').localeCompare(a.dataset.last || '');
+      return parseFloat(b.dataset[k]) - parseFloat(a.dataset[k]); });
+    items.forEach(function(t){ grid.appendChild(t); }); });
+  var h = decodeURIComponent((location.hash || '').slice(1)), def = document.body.dataset.tab || 'mazzi';
+  if (h.indexOf('mazzo=') === 0) openDeck(h.slice(6));
+  else showTab(['mazzi', 'imparato', 'statistiche'].indexOf(h) >= 0 ? h : def);
+  var dd = document.body.dataset.deck; if (!h && dd) openDeck(dd);
+})();
+"""
+
+
+def library_html(tab: str = "mazzi", deck: str = "") -> Path:
+    """La finestra del libro: MAZZI · COSA HO IMPARATO · STATISTICHE in un'unica pagina con le schede."""
+    panels = [("mazzi", "MAZZI", decks_body), ("imparato", "COSA HO IMPARATO", learned_body),
+              ("statistiche", "STATISTICHE", stats_body)]
+    tabs = "".join(f"<button type='button' role='tab' data-tab='{k}' aria-controls='t-{k}' "
+                   f"aria-selected='{'true' if k == tab else 'false'}'>{label}</button>" for k, label, _ in panels)
+    body = [f"<div class='libhead'><h1>BIG-BOB</h1><nav class='tabs' role='tablist' aria-label='Sezioni'>{tabs}</nav></div>"]
+    for k, _, fn in panels:
+        try:
+            content = fn()
+        except Exception as ex:  # noqa: BLE001  (una sezione rotta non deve nascondere le altre)
+            content = f"<div class='empty'>Sezione non disponibile: {html.escape(str(ex))}</div>"
+        body.append(f"<section class='panel' id='t-{k}' role='tabpanel' {'hidden' if k != tab else ''}>{content}</section>")
+    body.append(f"<script>{LIB_JS}</script>")
+    page = _page("BIG-BOB · mazzi e statistiche", "".join(body))
+    page = page.replace("<body>", f"<body data-tab='{html.escape(tab)}' data-deck='{html.escape(store.slug(deck) if deck else '')}'>", 1)
+    out = LOGS / "biblioteca.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(page, encoding="utf-8")
     return out
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "laboratorio":
+    if len(sys.argv) > 1 and sys.argv[1] == "biblioteca":
+        print(library_html(sys.argv[2] if len(sys.argv) > 2 else "mazzi"))
+    elif len(sys.argv) > 1 and sys.argv[1] == "laboratorio":
         print(lab_html(sys.argv[2] if len(sys.argv) > 2 else ""))
     elif len(sys.argv) > 1 and sys.argv[1] == "imparato":
         print(learned_html())

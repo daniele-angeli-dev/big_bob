@@ -163,11 +163,17 @@ mossa sparisce e si fermano anche **REGISTRA** e **AUTO**.
 La finestra mostra solo la **richiesta attuale**: a ogni F8 o domanda la risposta precedente sparisce, e mossa, chip e
 messaggi scorrono insieme con la rotellina. Le risposte passate restano nel diario e in **RIVEDI LA PARTITA**.
 
-**Cosa ho imparato** (si apre in una finestra di BIG-BOB, non nel browser: pulsante a forma di libro nella finestra, pulsante a fine partita, o menu Start → *Cosa ha imparato
-BIG-BOB*): per ogni partita e registrazione dice **se** BIG-BOB ha imparato qualcosa e **cosa** — lezioni nuove, rafforzate,
-confermate o smentite, regole nuove o cambiate (con il prima/dopo), carte e location lette dallo schermo — più gli
-aggiornamenti dal sito, il riepilogo di tutte le lezioni in uso e le regole ancora da scoprire. Le registrazioni non ancora
-studiate compaiono con l'invito a lanciare `/impara-regole`.
+**Il libro: MAZZI · COSA HO IMPARATO · STATISTICHE** (pulsante a forma di libro; % apre direttamente le statistiche).
+Si apre in una finestra di BIG-BOB, non nel browser, con tre schede:
+- **MAZZI**: tutti i mazzi salvati con winrate, partite e ultima partita; cerca e ordina (più giocati, winrate, recenti,
+  nome). Cliccandone uno: carte, winrate con il suo margine, punti deboli, statistiche carta per carta (pescata, giocata,
+  winrate quando giocata e no, round medio), risultati contro ogni leggendaria e ultime partite. I mazzi del laboratorio
+  mostrano anche la storia delle versioni. I dati carta per carta si raccolgono dalle partite giocate da ottobre 2026 in poi.
+- **COSA HO IMPARATO**: per ogni partita e registrazione dice **se** BIG-BOB ha imparato qualcosa e **cosa** (lezioni nuove,
+  rafforzate, confermate o smentite, regole nuove o cambiate, carte e location lette dallo schermo), più gli aggiornamenti
+  dal sito e le regole ancora da scoprire. Le registrazioni non ancora studiate invitano a lanciare `/impara-regole`.
+- **STATISTICHE**: winrate per mazzo, avversario e location, tempi di risposta, consigli seguiti.
+A fine partita i pulsanti COSA HO IMPARATO e STATISTICHE aprono la scheda giusta; dal menu Start ci sono le stesse pagine.
 
 Ogni partita ha un **diario** in `logs/partite/<data>/diario.md`: per ogni richiesta salva la schermata, gli strumenti
 usati con i tempi, i token generati, la risposta e le tue segnalazioni ✕.

@@ -154,10 +154,29 @@ assert any(e["type"] == "say" and "Versione 5" in e["text"] and "Carta 15 ×2" i
 
 # le pagine si aprono dentro l'app (finestra di BIG-BOB), non nel browser
 opened = []
-ui.open_page = lambda path, title: opened.append((Path(path).name, title)) or True
+ui.open_page = lambda path, title, frag="": opened.append((Path(path).name, frag)) or True
 c.open_lab()
 c.open_learned()
-assert opened == [("laboratorio.html", "BIG-BOB · Sniper Lab"), ("imparato.html", "BIG-BOB · Cosa ho imparato")], opened
+c.open_stats()
+c.open_library("mazzi")
+assert opened == [("biblioteca.html", "mazzo=sniper-lab"), ("biblioteca.html", "imparato"),
+                  ("biblioteca.html", "statistiche"), ("biblioteca.html", "mazzi")], opened
+
+# la finestra del libro: tre schede, un riquadro per ogni mazzo salvato, scheda di dettaglio per ciascuno
+h = report.library_html("mazzi", "Sniper Lab").read_text(encoding="utf-8")
+for t in ("MAZZI", "COSA HO IMPARATO", "STATISTICHE"):
+    assert f">{t}</button>" in h, t
+assert "data-deck='sniper-lab'" in h and "id='t-imparato'" in h and "id='t-statistiche'" in h
+assert h.count("class='dtile'") == len(store.load("decks")) == 2
+assert "IN CREAZIONE · v5" in h, "il mazzo del laboratorio ha la sua etichetta"
+assert "id='d-sniper-lab'" in h and "id='d-altro'" in h and "← TUTTI I MAZZI" in h
+altro = h.split("id='d-altro'")[1].split("</section>")[0]
+assert "Carte giocate" in altro and "Ultime partite" in altro and "Contro le leggendarie" in altro
+sniper = h.split("id='d-sniper-lab'")[1]
+assert "Versioni" in sniper and "LABORATORIO ·" not in sniper.split("</section>")[0][:400], "niente doppio titolo"
+assert "data-games='1'" in h and "<script>" in h
+store.save("decks", [])
+assert "Ancora nessun mazzo salvato" in report.library_html().read_text(encoding="utf-8")
 # creare un mazzo: sessione a parte senza tetto al ragionamento; il limite dei 40 s solo in partita
 lab_s = controller.ClaudeSession("claude", ROOT, live=False)
 live_s = controller.ClaudeSession("claude", ROOT)

@@ -21,6 +21,7 @@ for k, p in store.FILES.items():
 store.DATA = tmp
 screen.SCAN = tmp / "scan"
 screen.SCAN.mkdir()
+screen.RECORDINGS = tmp / "registrazioni"  # le registrazioni del test non devono finire tra quelle vere
 shot = tmp / "shot.png"
 Image.new("RGB", (32, 20), "purple").save(shot)
 

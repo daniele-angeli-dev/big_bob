@@ -212,10 +212,23 @@ def matches_of(p: dict, v: int | None = None) -> list[dict]:
 
 
 def version_stats(p: dict, ver: dict) -> dict:
-    ms = matches_of(p, ver["v"])
+    st = stats_from_matches(matches_of(p, ver["v"]), ver["leggendaria"], ver["carte"],
+                            ver.get("partite_obiettivo") or PARTITE_DEFAULT)
+    st["v"] = ver["v"]
+    return st
+
+
+def deck_matches(deck_name: str) -> list[dict]:
+    """Tutte le partite finite giocate con un mazzo salvato (qualsiasi versione)."""
+    s = store.slug(deck_name)
+    return [m for m in store.load("matches") if m.get("risultato") and store.slug(m.get("mio_mazzo") or "") == s]
+
+
+def stats_from_matches(ms: list[dict], leggendaria: str, carte: list[str], target: int | None = None) -> dict:
+    """Statistiche di un mazzo su un insieme di partite: risultati, carte, matchup (per qualsiasi mazzo salvato)."""
     n, w = len(ms), sum(1 for m in ms if _win(m))
     lo, hi = wilson(w, n)
-    deck = [ver["leggendaria"]] + ver["carte"]
+    deck = [leggendaria] + list(carte)
     cards = {}
     for c in deck:
         drawn = played = win_played = win_not = n_not = 0
@@ -240,7 +253,7 @@ def version_stats(p: dict, ver: dict) -> dict:
                     "winrate_giocata": round(win_played / played * 100) if played else None,
                     "winrate_non_giocata": round(win_not / n_not * 100) if n_not else None,
                     "round_medio": round(sum(rounds) / len(rounds), 1) if rounds else None,
-                    "leggendaria": c == ver["leggendaria"]}
+                    "leggendaria": c == leggendaria}
     opp: dict = defaultdict(lambda: [0, 0])
     for m in ms:
         k = m.get("avv_leggendaria") or "?"
@@ -248,8 +261,10 @@ def version_stats(p: dict, ver: dict) -> dict:
         opp[k][1] += 1
     adv = [r for m in ms for r in m.get("rounds") or []]
     followed = [r for r in adv if r.get("consiglio_seguito")]
-    target = ver.get("partite_obiettivo") or PARTITE_DEFAULT
-    return {"v": ver["v"], "partite": n, "vinte": w, "perse": n - w,
+    target = target or PARTITE_DEFAULT
+    tracked = sum(1 for m in ms if "viste_in_mano" in m or "prima_giocata" in m)
+    return {"v": None, "partite": n, "vinte": w, "perse": n - w, "partite_con_carte": tracked,
+            "ultima": max((m.get("fine") or "" for m in ms), default="") or None,
             "winrate": round(w / n * 100) if n else None,
             "intervallo_95": [round(lo * 100), round(hi * 100)] if n else None,
             "margine": round(1.96 * math.sqrt(0.25 / n) * 100) if n else None,

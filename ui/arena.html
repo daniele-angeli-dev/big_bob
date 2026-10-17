@@ -195,7 +195,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <button class="wbtn" id="btnSet" aria-label="Impostazioni" title="Impostazioni: collegamento a Claude, modello, opzioni"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="8" cy="8" r="2.4"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg></button>
       <button class="wbtn" id="btnTerm" aria-label="Apri Claude Code per i comandi" title="Apri Claude Code (/scansiona, /mazzo, /lezioni…)" style="font-family:var(--body);font-size:13px">&gt;_</button>
       <button class="wbtn vbtn" id="btnVoice" aria-pressed="false" aria-label="Voce: legge la mossa ad alta voce" title="Voce: legge la mossa ad alta voce"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"></path><path class="wave" d="M11 5.5c1 .8 1 4.2 0 5M12.8 3.8c2 1.8 2 6.6 0 8.4"></path></svg></button>
-      <button class="wbtn" id="btnLearn" aria-label="Cosa ho imparato" title="Cosa ho imparato: lezioni e regole nuove partita per partita"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5C6.5 2.4 4.3 2 2 2.2v10.2c2.3-.2 4.5.2 6 1.3 1.5-1.1 3.7-1.5 6-1.3V2.2c-2.3-.2-4.5.2-6 1.3z"></path><path d="M8 3.5v10.2"></path></svg></button>
+      <button class="wbtn" id="btnLearn" aria-label="Mazzi, cosa ho imparato e statistiche" title="Mazzi, cosa ho imparato e statistiche"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5C6.5 2.4 4.3 2 2 2.2v10.2c2.3-.2 4.5.2 6 1.3 1.5-1.1 3.7-1.5 6-1.3V2.2c-2.3-.2-4.5.2-6 1.3z"></path><path d="M8 3.5v10.2"></path></svg></button>
       <button class="wbtn" id="btnStats" aria-label="Statistiche" title="Statistiche">%</button>
       <button class="wbtn" id="btnHide" aria-label="Nascondi (F10 per riaprire)" title="Nascondi · F10 per riaprire">–</button>
       <button class="wbtn" id="btnQuit" aria-label="Chiudi BIG-BOB" title="Chiudi BIG-BOB">×</button>
@@ -676,7 +676,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   $('btnHide').onclick = function(){ call('toggle_visibility'); };
   $('btnQuit').onclick = function(){ call('quit'); };
   $('btnStats').onclick = function(){ call('open_stats'); };
-  $('btnLearn').onclick = function(){ call('open_learned'); };
+  $('btnLearn').onclick = function(){ call('open_library', 'mazzi'); };
   $('btnTerm').onclick = function(){ call('open_terminal'); };
   $('form').onsubmit = function(e){ e.preventDefault(); var v = $('q').value.trim(); if (!v) return; $('q').value = ''; call('chat', v); };
 
