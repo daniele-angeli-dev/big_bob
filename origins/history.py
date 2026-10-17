@@ -264,8 +264,12 @@ def _detail(pid, m, j, rs, when, deck, opp, typ, long) -> str:
              f"{(' · modalità ' + e(j['modalita'])) if j and j.get('modalita') else ''}</p>"]
     if m and m.get("note_finali"):
         parts.append(f"<div class='note'>{e(m['note_finali'])}</div>")
-    parts.append("<div class='askall'>" + _ask_box(pid, 0, "Chiedi qualcosa su tutta la partita: dove l'ho persa? "
-                                                           "Cosa dovevo fare diversamente?") + "</div>")
+    qa = load_qa(pid)
+    parts.append("<div class='askall'><div class='askhint'>Parla con BIG-BOB di questa partita: spiegagli le tue scelte, "
+                 "correggilo quando sbaglia, raccontagli cosa non vedeva. È da qui che impara di più.</div>"
+                 + _ask_box(pid, 0, "Chiedi o spiega qualcosa su tutta la partita…",
+                            ["Dove l'ho persa?", "Cosa dovevo fare diversamente?", "Cosa hai imparato da questa partita?"],
+                            [x for x in qa if x.get("n") == 0]) + "</div>")
     if not j:
         parts.append("<div class='empty'>Il diario di questa partita non c'è più (o è stata giocata prima della "
                      "cronologia): restano solo risultato e carte.</div>")
@@ -302,7 +306,13 @@ def _detail(pid, m, j, rs, when, deck, opp, typ, long) -> str:
             label = "Risposta completa" if r["mossa"] else "Risposta"
             info.append(f"<details{' open' if not r['mossa'] else ''}><summary>{label}</summary>"
                         f"<pre>{e(r['risposta'])}</pre></details>")
-        info.append(_ask_box(pid, r["n"], "Perché questa mossa? Cosa sarebbe successo con un'altra?"))
+        chips = ["Perché questa mossa?", "Era la mossa giusta?"]
+        if r.get("seguito") in ("no", "in parte") and r.get("giocate"):
+            chips.insert(0, f"Ho giocato {', '.join(r['giocate'])} invece perché ")
+        elif r["mossa"]:
+            chips.append("Io avrei giocato diversamente: ")
+        info.append(_ask_box(pid, r["n"], "Chiedi o spiega: perché questa mossa? Io avrei fatto…", chips,
+                             [x for x in qa if x.get("n") == r["n"]]))
         parts.append(f"<article class='rq'><div class='rq-img'>{shot}{obs}</div><div class='rq-txt'>{''.join(info)}</div></article>")
     for x in (j or {}).get("segnalazioni", []):
         parts.append(f"<div class='flag'>{e(x)}</div>")
@@ -312,11 +322,28 @@ def _detail(pid, m, j, rs, when, deck, opp, typ, long) -> str:
     return "".join(parts)
 
 
-def _ask_box(pid: str, n: int, placeholder: str) -> str:
+def _qa_html(x: dict) -> str:
     e = html.escape
-    return (f"<form class='ask' data-mid='{e(pid)}' data-n='{n}'><label class='sr' for='q-{e(pid)}-{n}'>Domanda</label>"
+    lines = []
+    for line in (x.get("risposta") or "").splitlines():
+        if line.strip().startswith("❓"):
+            lines.append(f"<span class='bobq'>{e(line.strip())}</span>")
+        else:
+            lines.append(e(line))
+    learned = "".join(f"<div class='lrn'>📚 {e(t)}</div>" for t in x.get("imparato") or [])
+    return (f"<div class='qa'><div class='qq'>Tu · {e(x.get('ora', ''))}: {e(x.get('domanda', ''))}</div>"
+            f"<div>{'<br>'.join(lines)}</div>{learned}</div>")
+
+
+def _ask_box(pid: str, n: int, placeholder: str, chips: list[str] | None = None, qa: list[dict] | None = None) -> str:
+    e = html.escape
+    chip = "".join(f"<button type='button' class='chip' data-q=\"{e(c)}\">{e(c.rstrip())}</button>" for c in chips or [])
+    return (f"<form class='ask' data-mid='{e(pid)}' data-n='{n}'>"
+            f"<div class='ans' aria-live='polite'>{''.join(_qa_html(x) for x in qa or [])}</div>"
+            f"{('<div class=chips>' + chip + '</div>') if chip else ''}"
+            f"<label class='sr' for='q-{e(pid)}-{n}'>Domanda</label>"
             f"<input id='q-{e(pid)}-{n}' type='text' autocomplete='off' placeholder=\"{e(placeholder)}\">"
-            "<button type='submit'>CHIEDI</button><div class='ans' aria-live='polite'></div></form>")
+            "<button type='submit' class='go'>INVIA</button></form>")
 
 
 CSS = """
@@ -355,9 +382,15 @@ CSS = """
 .ask input{flex:1 1 200px;min-width:0;background:var(--bg);border:2px solid var(--line);color:#fff;border-radius:8px;
   padding:7px 10px;font:inherit;font-size:14px}
 .ask input:focus{outline:none;border-color:var(--teal)}
-.ask button{background:var(--teal);color:var(--bg);border:0;border-radius:8px;padding:7px 14px;font:inherit;font-weight:700;
-  letter-spacing:1px;cursor:pointer}.ask button:disabled{opacity:.5;cursor:wait}
-.ans{flex-basis:100%;display:flex;flex-direction:column;gap:6px}
+.ask .go{background:var(--teal);color:var(--bg);border:0;border-radius:8px;padding:7px 14px;font:inherit;font-weight:700;
+  letter-spacing:1px;cursor:pointer}.ask .go:disabled{opacity:.5;cursor:wait}
+.ans{flex-basis:100%;display:flex;flex-direction:column;gap:6px}.ans:empty{display:none}
+.chips{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:transparent;border:1px solid var(--line);color:var(--dim);border-radius:14px;padding:3px 10px;font:inherit;
+  font-size:12px;cursor:pointer}.chip:hover{border-color:var(--teal);color:#fff}
+.bobq{display:inline-block;margin-top:4px;color:var(--yellow);font-weight:700}
+.lrn{margin-top:6px;font-size:12px;color:#7DEDE2;background:#14405A;border-radius:5px;padding:3px 8px}
+.askhint{font-size:13px;color:var(--dim);margin-bottom:4px}
 .ans .qa{background:var(--bg);border-left:4px solid var(--teal);border-radius:6px;padding:8px 10px;font-size:14px;line-height:1.45;white-space:pre-wrap}
 .ans .qq{color:var(--dim);font-size:13px}.ans .wait{color:var(--dim);font-size:13px;font-style:italic}
 .askall{background:var(--panel);border-radius:10px;padding:10px 12px;margin-bottom:12px}
@@ -401,18 +434,35 @@ JS = """
       t.hidden = !((!v || t.dataset.name.indexOf(v) >= 0) && (!rv || t.dataset.res === rv)); });
   }
   q.addEventListener('input', filter); r.addEventListener('change', filter);
+  function render(w, r){
+    var text = (r && typeof r === 'object') ? (r.risposta || '') : (r || ''), learned = (r && r.imparato) || [];
+    w.className = ''; w.textContent = '';
+    (text || 'Nessuna risposta.').split('\\n').forEach(function(line, i){
+      if (i) w.appendChild(document.createElement('br'));
+      if (line.trim().indexOf('❓') === 0){ var s = document.createElement('span'); s.className = 'bobq'; s.textContent = line.trim(); w.appendChild(s); }
+      else w.appendChild(document.createTextNode(line)); });
+    learned.forEach(function(t){ var d = document.createElement('div'); d.className = 'lrn'; d.textContent = '📚 ' + t; w.parentNode.appendChild(d); });
+    return text.indexOf('❓') >= 0;
+  }
   Array.prototype.forEach.call(document.querySelectorAll('form.ask'), function(f){
+    var inp = f.querySelector('input'), btn = f.querySelector('.go'), out = f.querySelector('.ans');
+    Array.prototype.forEach.call(f.querySelectorAll('.chip'), function(c){
+      c.addEventListener('click', function(){
+        var q = c.dataset.q;
+        if (/\\s$/.test(q)) { inp.value = q; inp.focus(); inp.setSelectionRange(q.length, q.length); }  // da completare
+        else { inp.value = q; f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit')); }
+      }); });
     f.addEventListener('submit', function(ev){
       ev.preventDefault();
-      var inp = f.querySelector('input'), btn = f.querySelector('button'), out = f.querySelector('.ans');
-      var q = inp.value.trim() || inp.placeholder, a = api();
-      if (!a || !a.history_ask){ out.textContent = 'Apri questa pagina da BIG-BOB (icona del libro) per fare domande.'; return; }
+      var q = inp.value.trim(), a = api();
+      if (!q) { inp.focus(); return; }
+      if (!a || !a.history_ask){ out.textContent = 'Apri questa pagina da BIG-BOB (icona del libro) per parlare con BIG-BOB.'; return; }
       var box = document.createElement('div'); box.className = 'qa';
       var qq = document.createElement('div'); qq.className = 'qq'; qq.textContent = 'Tu: ' + q; box.appendChild(qq);
       var w = document.createElement('div'); w.className = 'wait'; w.textContent = 'BIG-BOB ci pensa…'; box.appendChild(w);
       out.appendChild(box); btn.disabled = true; inp.value = '';
       a.history_ask(f.dataset.mid, parseInt(f.dataset.n, 10), q).then(function(r){
-        w.className = ''; w.textContent = r || 'Nessuna risposta.'; }, function(err){
+        if (render(w, r)) inp.placeholder = 'Rispondi a BIG-BOB…'; }, function(err){
         w.textContent = 'Non sono riuscito a rispondere: ' + (err && err.message || err); }).then(function(){ btn.disabled = false; inp.focus(); });
     });
   });
@@ -440,6 +490,35 @@ def image_data(rel: str, size: int = 520) -> str | None:
         data = p.read_bytes()
         return f"data:image/{'png' if p.suffix.lower() == '.png' else 'jpeg'};base64,{base64.b64encode(data).decode()}"
     return "data:image/jpeg;base64," + base64.b64encode(data).decode()
+
+
+# ============================================================================ conversazioni salvate
+
+def _qa_file(pid: str) -> Path | None:
+    if not re.fullmatch(r"[\w-]+", pid or ""):
+        return None
+    d = journals_dir() / pid
+    return d / "domande.json" if d.is_dir() else None
+
+
+def load_qa(pid: str) -> list[dict]:
+    import json
+    f = _qa_file(pid)
+    try:
+        return json.loads(f.read_text(encoding="utf-8")) if f and f.exists() else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def save_qa(pid: str, n: int, domanda: str, risposta: str, imparato: list[str]) -> None:
+    import json
+    f = _qa_file(pid)
+    if f is None:
+        return
+    qa = load_qa(pid)
+    qa.append({"n": int(n), "ora": datetime.now().strftime("%d/%m %H:%M"), "domanda": domanda, "risposta": risposta,
+               "imparato": imparato})
+    f.write_text(json.dumps(qa[-300:], ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def find(pid: str) -> tuple[dict | None, dict | None]:

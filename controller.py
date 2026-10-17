@@ -30,14 +30,29 @@ ROUND_SECONDS = 90
 BUDGET_SECONDS = 40  # tempo massimo per la risposta: il resto serve a leggere e giocare
 
 PROMPT_STORIA = (
-    "[CRONOLOGIA] Daniele sta rivedendo una partita finita nel libro (scheda PARTITE) e ti fa una domanda. È analisi "
-    "post-partita: i consigli di mossa sono permessi anche se la partita era ranked.\n\n{contesto}\n\n"
-    "Domanda di Daniele: {domanda}\n\n"
-    "Rispondi in italiano, testo semplice (niente markdown), al massimo 10 righe. Spiega il ragionamento dietro la mossa "
-    "suggerita usando i numeri che avevi (barrier, mana, carte probabili) e, ora che sai com'è andata, di' onestamente se "
-    "era la mossa giusta e cosa avresti fatto di diverso. Se serve, usa get_card, rules_get, lessons_get o "
-    "simulate_combat (non inventare dati di carte). Se dalla domanda emerge qualcosa di nuovo e utile, registralo con "
-    "record_lesson (fonte \"Daniele\" se è lui a insegnartelo)."
+    "[CRONOLOGIA] Daniele sta rivedendo una partita finita nel libro (scheda PARTITE) e parla con te. È analisi "
+    "post-partita: i consigli di mossa sono permessi anche se la partita era ranked. È anche il momento in cui impari di "
+    "più: Daniele è il giocatore e sa cose che tu non vedevi (le sue intenzioni, come funzionano davvero carte e regole, "
+    "cosa ha fatto l'avversario).\n\n{contesto}\n\nDaniele: {domanda}\n\n"
+    "Come rispondere (testo semplice, niente markdown, al massimo 10 righe):\n"
+    "1. Rispondi: spiega il ragionamento con i numeri di allora (barrier, mana, carte probabili) e, ora che sai com'è "
+    "andata, di' onestamente se il consiglio era giusto e cosa avresti fatto di diverso. Se serve usa get_card, "
+    "rules_get, lessons_get o simulate_combat; non inventare dati di carte.\n"
+    "2. Impara: se Daniele ti spiega una sua scelta, ti corregge, ti dice come funziona una carta o una regola, o cosa "
+    "aveva in mente l'avversario, registralo SUBITO: record_lesson con fonte \"Daniele\" (diventa confermata; tipo "
+    "errore_coach se il tuo consiglio era sbagliato, mossa_vincente se la sua giocata era migliore, altrimenti "
+    "interazione / mossa_avversaria / strategia), una frase pratica e generale con le carte coinvolte; rules_upsert "
+    "(fonte \"Daniele\") per una regola del gioco; upsert_cards se il testo di una carta era sbagliato. Se conferma o "
+    "smentisce una lezione esistente usa lesson_review. Non registrare ciò che sai già.\n"
+    "3. Chiudi con UNA domanda breve a Daniele, su una riga che inizia con «❓», per capire qualcosa che non sai di "
+    "questa situazione (perché ha scelto un'altra giocata, cosa temeva, se una carta ha fatto ciò che ti aspettavi…). "
+    "Se non c'è niente da chiedere, non chiedere."
+)
+
+PROMPT_STORIA_SEGUITO = (
+    "[CRONOLOGIA · seguito] Daniele continua a parlarti della stessa {cosa}: {domanda}\n"
+    "Stesse regole: rispondi in breve, registra subito ciò che ti insegna (record_lesson / rules_upsert / upsert_cards "
+    "con fonte \"Daniele\") e chiudi con una ❓ solo se c'è ancora qualcosa da capire."
 )
 
 PROMPT_TURNO = (
@@ -906,49 +921,92 @@ class Controller:
             return
         self.open_library("partite", match=name)
 
-    def history_ask(self, pid: str, n: int, question: str) -> str:
-        """Domanda dalla cronologia (libro → PARTITE) su una mossa suggerita o sull'intera partita: risponde una
-        sessione a parte (non disturba la partita in corso), con il contesto della partita e la schermata."""
-        import base64
+    def history_ask(self, pid: str, n: int, question: str) -> dict:
+        """Conversazione dalla cronologia (libro → PARTITE) su una mossa o sull'intera partita: risponde una sessione
+        a parte (non disturba la partita in corso) che registra le lezioni che il giocatore le insegna.
+        Restituisce {'risposta', 'imparato': [..]} e salva lo scambio nel diario della partita."""
         from origins import history
-        question = (question or "").strip()[:800]
+        question = (question or "").strip()[:1500]
+        n = int(n or 0)
         if not question:
-            return "Scrivi una domanda."
+            return {"risposta": "Scrivi una domanda.", "imparato": []}
         if not self.claude:
-            return "Claude Code non è collegato: controlla le impostazioni."
-        try:
-            ctx, shot = history.question_context(pid, int(n or 0))
-        except Exception as e:  # noqa: BLE001
-            return f"Non trovo questa partita: {e}"
-        content: list[dict] = []
-        if shot is not None:
-            try:
-                data = history.image_data(shot.relative_to(history.LOGS).as_posix(), 1400)
-                if data:
-                    mime, b64 = data[5:].split(";base64,", 1)
-                    content.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}})
-            except Exception:  # noqa: BLE001
-                log.exception("schermata per la domanda")
-        content.append({"type": "text", "text": PROMPT_STORIA.format(contesto=ctx, domanda=question)})
+            return {"risposta": "Claude Code non è collegato: controlla le impostazioni.", "imparato": []}
         with self._history_lock:
-            sess = self.history_session = getattr(self, "history_session", None) or ClaudeSession(self.claude, ROOT,
-                                                                                                  live=False)
-            final, texts = "", []
+            follow = getattr(self, "_history_last", None) == (pid, n) and getattr(self, "history_session", None)
+            content: list[dict] = []
+            if follow:
+                content.append({"type": "text", "text": PROMPT_STORIA_SEGUITO.format(
+                    cosa="partita" if n == 0 else f"richiesta #{n}", domanda=question)})
+            else:
+                try:
+                    ctx, shot = history.question_context(pid, n)
+                except Exception as e:  # noqa: BLE001
+                    return {"risposta": f"Non trovo questa partita: {e}", "imparato": []}
+                if shot is not None:
+                    try:
+                        data = history.image_data(shot.relative_to(history.LOGS).as_posix(), 1400)
+                        if data:
+                            mime, b64 = data[5:].split(";base64,", 1)
+                            content.append({"type": "image", "source": {"type": "base64", "media_type": mime,
+                                                                         "data": b64}})
+                    except Exception:  # noqa: BLE001
+                        log.exception("schermata per la domanda")
+                prev = [x for x in history.load_qa(pid) if x.get("n") == n][-3:]
+                if prev:  # conversazione ripresa: ricorda gli ultimi scambi su questo punto
+                    ctx += "\n\nGià detto su questo punto:\n" + "\n".join(
+                        f"- Daniele: {x['domanda']}\n  Tu: {x['risposta'][:400]}" for x in prev)
+                content.append({"type": "text", "text": PROMPT_STORIA.format(contesto=ctx, domanda=question)})
+            sess = getattr(self, "history_session", None)
+            if sess is None:
+                sess = self.history_session = ClaudeSession(self.claude, ROOT, live=False)
+            elif getattr(self, "_history_last", (None,))[0] != pid:
+                sess.reset()  # partita diversa: contesto nuovo (e meno costoso)
+            self._history_last = (pid, n)
+            final, texts, learned = "", [], []
             try:
                 for ev in sess.ask(content, timeout=300):
                     if ev.get("type") == "assistant":
                         for block in ev.get("message", {}).get("content", []):
                             if block.get("type") == "text" and block.get("text", "").strip():
                                 texts.append(block["text"])
+                            elif block.get("type") == "tool_use":
+                                item = self._learned_item(block)
+                                if item:
+                                    learned.append(item)
                     elif ev.get("type") == "result":
                         usage.add_from_result(ev, sess)
                         final = (ev.get("result") or (texts[-1] if texts else "")).strip()
             except Exception as e:  # noqa: BLE001
                 log.exception("domanda dalla cronologia")
-                return f"Non sono riuscito a rispondere: {e}"
+                self._history_last = None
+                return {"risposta": f"Non sono riuscito a rispondere: {e}", "imparato": learned}
+        final = final or "Nessuna risposta."
+        try:
+            history.save_qa(pid, n, question, final, learned)
+        except Exception:  # noqa: BLE001
+            log.exception("salvataggio della conversazione")
+        if learned:
+            self._brain_soon()  # ciò che il giocatore ha insegnato va anche al cervello comune
         if usage.visible():
             self.emit({"type": "usage", **usage.summary()})
-        return final or "Nessuna risposta."
+        return {"risposta": final, "imparato": learned}
+
+    @staticmethod
+    def _learned_item(block: dict) -> str | None:
+        """Una riga leggibile per ciò che Claude ha registrato (lezione, regola, carta)."""
+        name = block.get("name", "").replace("mcp__origins__", "")
+        inp = block.get("input") or {}
+        if name == "record_lesson":
+            return "Lezione: " + str(inp.get("lezione", ""))[:200]
+        if name == "rules_upsert":
+            return ("Regola " + str(inp.get("id") or "nuova") + ": " + str(inp.get("testo") or inp.get("stato") or ""))[:200]
+        if name == "lesson_review":
+            return f"Lezione {inp.get('id', '')} → {inp.get('stato') or 'rivista'}"
+        if name in ("upsert_cards", "upsert_locations"):
+            names = ", ".join(str(c.get("nome", "")) for c in (inp.get("cards") or inp.get("locations") or [])[:4])
+            return "Corretto: " + names
+        return None
 
     @staticmethod
     def history_image(rel: str, size: int = 520) -> str | None:
@@ -1074,7 +1132,7 @@ class Controller:
             self._study_after_match = False
             threading.Timer(5, self.study_recordings).start()
         if self.journal_dir is not None:
-            self.emit({"type": "action", "label": "RIVEDI LA PARTITA", "call": "open_replay"})
+            self.emit({"type": "action", "label": "RIVEDI E PARLANE CON BIG-BOB", "call": "open_replay"})
             self.emit({"type": "action", "label": "STATISTICHE", "call": "open_stats"})
         self.emit({"type": "action", "label": "COSA HO IMPARATO", "call": "open_learned"})
 

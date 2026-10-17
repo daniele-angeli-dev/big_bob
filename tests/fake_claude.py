@@ -20,11 +20,17 @@ for line in sys.stdin:
         continue
     print(json.dumps({"type": "assistant", "session_id": sid, "message": {"content": [
         {"type": "tool_use", "name": "mcp__origins__update_match", "input": {}}]}}), flush=True)
+    if "[CRONOLOGIA" in text and "ti insegno" in text.lower():
+        print(json.dumps({"type": "assistant", "session_id": sid, "message": {"content": [
+            {"type": "tool_use", "name": "mcp__origins__record_lesson",
+             "input": {"lezione": "Contro Dracula tieni Garlic per il centro", "tipo": "strategia",
+                       "fonte": "Daniele"}}]}}), flush=True)
     if "analisi round" in text:
         ans = ("▶ Little John a destra, Marian al centro\nperché: chiudi la destra\n"
                "⚠ Brides of Dracula 41% · centro\n🎴 Marian 12%\nnota libera img=" + str(has_img))
     else:
-        ans = "Risposta libera img=" + str(has_img) + (" segnalazioni=si" if "ha segnalato" in text else "")
+        ans = "Risposta libera img=" + str(has_img) + (" segnalazioni=si" if "ha segnalato" in text else "") \
+            + (" seguito=si" if "[CRONOLOGIA · seguito]" in text else "") + ("\n❓ Perché?" if "[CRONOLOGIA]" in text else "")
     print(json.dumps({"type": "assistant", "session_id": sid, "message": {"content": [{"type": "text", "text": ans}]}}), flush=True)
     print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": ans, "session_id": sid,
                       "usage": {"output_tokens": 42}}), flush=True)

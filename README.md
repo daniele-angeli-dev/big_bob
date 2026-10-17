@@ -15,9 +15,12 @@ Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra 
 **17/10/2026**
 - **Cronologia delle partite** nel libro (scheda PARTITE): ogni partita con risultato, mazzi e tipo di avversario; con
   un clic, richiesta per richiesta, la schermata inviata (si ingrandisce), la mossa suggerita, cosa hai giocato davvero
-  (con «consiglio seguito» / «giocata diversa»), cosa ha giocato l'avversario e le barrier dopo. Sotto ogni mossa puoi
-  **chiedere a BIG-BOB** perché te l'ha suggerita e se era giusta, oppure fare domande su tutta la partita.
-  RIVEDI LA PARTITA a fine partita apre direttamente qui.
+  (con «consiglio seguito» / «giocata diversa»), cosa ha giocato l'avversario e le barrier dopo.
+- **Parla con BIG-BOB delle tue partite** (è da qui che impara di più): sotto ogni mossa e per tutta la partita chiedi
+  perché ti ha suggerito una mossa e se era giusta, oppure spiegagli le tue scelte («ho giocato Marian invece perché…»)
+  e correggilo. BIG-BOB risponde, ti fa a sua volta una domanda (❓) per capire ciò che non vedeva, e registra subito
+  quello che gli insegni come lezione confermata (o regola, o testo di carta corretto), mostrandotelo con 📚. Le
+  conversazioni restano salvate con la partita; a fine partita il pulsante RIVEDI E PARLANE CON BIG-BOB porta qui.
 - **Mazzo avversario riconosciuto**: dalle carte che gioca, confrontate con i mazzi del meta (OriginsMeta, le tue
   partite, il cervello comune), BIG-BOB dice quale lista sta usando e che tipo di mazzo è — Aggro, Midrange (aggro o
   control), Control, Combo, con i sottotipi Swarm, Tempo, Big, Ramp, Discard — e come giocarci contro. Si vede nella
