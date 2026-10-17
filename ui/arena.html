@@ -69,9 +69,23 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .lanes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .lane{display:flex;flex-direction:column;gap:5px;min-width:0}
 .ln{font-weight:700;font-size:12px;letter-spacing:1px;color:var(--dim)}
-.bar{height:12px;background:var(--bg);transform:skewX(-15deg);overflow:hidden}
-.bar i{display:block;height:12px;transition:width .4s ease}
-.bar.avv i{background:var(--orange)} .bar.me i{background:var(--teal)} .bar.me.risk i{background:var(--yellow)}
+.lane{position:relative}
+.bar{position:relative;height:12px;background:var(--bg);transform:skewX(-15deg);overflow:hidden}
+/* due strati: la scia chiara resta un attimo dov'era la vita, poi raggiunge il valore nuovo (si vede quanto si è perso) */
+.bar i{position:absolute;left:0;top:0;bottom:0;width:0}
+.bar i.fill{transition:width .7s cubic-bezier(.2,.8,.2,1),background-color .4s}
+.bar i.gh{background:#fff;opacity:.5;transition:width .6s ease .55s}
+.bar.avv i.fill{background:var(--orange)} .bar.me i.fill{background:var(--teal)} .bar.me.risk i.fill{background:var(--yellow)}
+.bar.up i.fill{animation:barglow .9s ease}
+@keyframes barglow{0%,100%{filter:none}35%{filter:brightness(1.7)}}
+.bar.hit{animation:barshake .35s ease}
+@keyframes barshake{0%,100%{translate:0}25%{translate:-3px}50%{translate:3px}75%{translate:-2px}}
+.dlt{position:absolute;right:2px;font-weight:800;font-size:13px;pointer-events:none;animation:dltup 1.6s ease forwards;text-shadow:0 1px 2px #000}
+.dlt.neg{color:#FF6B81} .dlt.pos{color:#7CF2C8} .dlt.brk{color:var(--yellow)}
+@keyframes dltup{0%{opacity:0;transform:translateY(6px)}15%{opacity:1;transform:translateY(0)}75%{opacity:1}100%{opacity:0;transform:translateY(-14px)}}
+.bump{animation:bump .5s ease}
+@keyframes bump{0%,100%{transform:scale(1)}40%{transform:scale(1.35)}}
+@media (prefers-reduced-motion: reduce){.bar i.fill,.bar i.gh{transition:none}.bar.up i.fill,.bar.hit,.dlt,.bump{animation:none}.dlt{display:none}}
 .loc{font-size:12px;font-weight:700;color:var(--yellow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:-3px;cursor:help}
 .bv{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bv.avv{color:var(--orange-t)} .bv.me{color:var(--teal-t)} .bv.risk{color:var(--yellow)}
@@ -109,6 +123,7 @@ body.inmatch .score .l{font-size:11px}
 .counts b{color:#fff;font-size:14px}
 .counts .me b{color:var(--teal-t)}.counts .op b{color:var(--orange-t)}
 .counts .est{opacity:.7;font-weight:600}
+.counts b{display:inline-block}
 #hFirst.est{opacity:.7}
 .score .n{font-family:var(--display);font-size:26px}
 .score .l{font-weight:700;font-size:12px;letter-spacing:2px;color:var(--dim)}
@@ -453,10 +468,12 @@ body.inmatch .score .l{font-size:11px}
   function fmt(b){ return (b && b.v != null) ? (b.v + '/' + b.max) : '–'; }
   function renderHud(m){
     document.body.classList.toggle('inmatch', !!m);
-    if (!m){ $('hudEmpty').classList.remove('hidden'); $('hudBody').classList.add('hidden'); return; }
+    if (!m){ $('hudEmpty').classList.remove('hidden'); $('hudBody').classList.add('hidden');
+      (laneEls || []).forEach(function(L){ L.a.v = L.m.v = null; });  // nuova partita: niente animazione dai valori vecchi
+      return; }
     $('hudEmpty').classList.add('hidden'); $('hudBody').classList.remove('hidden');
-    $('hRound').textContent = 'ROUND ' + (m.round != null ? m.round : '–');
-    $('hMana').textContent = m.mana != null ? m.mana : '–';
+    setNum($('hRound'), 'ROUND ' + (m.round != null ? m.round : '–'));
+    setNum($('hMana'), m.mana != null ? m.mana : '–');
     var f = (m.rivela_prima || '').toLowerCase();
     $('hFirst').textContent = f ? (f.indexOf('avv') === 0 ? 'AVV' : 'TU') : '–';
     $('hFirst').className = m.rivela_prima_dedotta ? 'est' : '';
@@ -481,7 +498,11 @@ body.inmatch .score .l{font-size:11px}
       el.appendChild(document.createTextNode(who + ' · MAZZO '));
       var b1 = document.createElement('b'); b1.textContent = deck != null ? deck : '–'; if (est) b1.className = 'est'; b1.title = est ? 'stimato (' + (how || 'carte uscite') + ')' : 'letto dallo schermo in questo round'; el.appendChild(b1);
       el.appendChild(document.createTextNode(' · MANO '));
-      var b2 = document.createElement('b'); b2.textContent = hand != null ? hand : '–'; if (hest) b2.className = 'est'; b2.title = hest ? 'stimato (' + (hhow || '') + ')' : 'letto dallo schermo in questo round'; el.appendChild(b2);
+      if (deck != null && el.dataset.deck !== undefined && el.dataset.deck !== String(deck) && !reduceMotion) b1.classList.add('bump');
+      el.dataset.deck = deck != null ? String(deck) : '';
+      var b2 = document.createElement('b'); b2.textContent = hand != null ? hand : '–';
+      if (hand != null && el.dataset.hand !== undefined && el.dataset.hand !== String(hand) && !reduceMotion) b2.classList.add('bump');
+      el.dataset.hand = hand != null ? String(hand) : ''; if (hest) b2.className = 'est'; b2.title = hest ? 'stimato (' + (hhow || '') + ')' : 'letto dallo schermo in questo round'; el.appendChild(b2);
     }
     cnt($('hCntMe'), 'TU', c.mio_mazzo, c.mio_mazzo_stimato, c.mia_mano, c.mio_mazzo_come, c.mia_mano_stimata, c.mia_mano_come);
     cnt($('hCntOpp'), 'AVV', c.avv_mazzo, c.avv_mazzo_stimato, c.avv_mano, c.avv_mazzo_come, c.avv_mano_stimata, c.avv_mano_come);
@@ -500,22 +521,91 @@ body.inmatch .score .l{font-size:11px}
       $('hOppDeck').title = 'Mazzo avversario stimato da ' + (od.viste || 0) + ' carte viste confrontate con i mazzi del meta'
         + (od.mazzo ? '. Lista più simile: ' + od.mazzo : '');
     }
-    $('hMine').textContent = m.distrutte_da_me != null ? m.distrutte_da_me : 0;
-    $('hOpp').textContent = m.distrutte_a_me != null ? m.distrutte_a_me : 0;
-    var box = $('hLanes'); box.innerHTML = '';
+    setNum($('hMine'), m.distrutte_da_me != null ? m.distrutte_da_me : 0);
+    setNum($('hOpp'), m.distrutte_a_me != null ? m.distrutte_a_me : 0);
+    buildLanes();
+    var anyLoc = (m.location || []).some(function(x){ return !!x; });
     for (var i = 0; i < 3; i++){
-      var a = (m.avv || [])[i] || {}, me = (m.mie || [])[i] || {};
-      var risk = me.v != null && me.v / me.max <= 0.4;
-      var lane = el('div','lane');
-      lane.appendChild(el('div','ln', LANES[i]));
-      var loc = (m.location || [])[i], anyLoc = (m.location || []).some(function(x){ return !!x; });
-      if (anyLoc){ var lo = el('div','loc', loc ? loc.nome : '\u00a0'); lo.title = loc ? (loc.testo || '') : 'location non ancora rivelata'; lane.appendChild(lo); }
-      var ba = el('div','bar avv'), ia = el('i'); ia.style.width = (a.v != null ? Math.max(0, Math.min(100, a.v / a.max * 100)) : 0) + '%'; ba.appendChild(ia); lane.appendChild(ba);
-      lane.appendChild(el('div','bv avv', 'AVV ' + fmt(a) + (a.rinf ? ' RINF.' : '')));
-      var bm = el('div','bar me' + (risk ? ' risk' : '')), im = el('i'); im.style.width = (me.v != null ? Math.max(0, Math.min(100, me.v / me.max * 100)) : 0) + '%'; bm.appendChild(im); lane.appendChild(bm);
-      lane.appendChild(el('div','bv ' + (risk ? 'risk' : 'me'), 'TU ' + fmt(me) + (risk ? ' · RISCHIO' : (me.rinf ? ' RINF.' : ''))));
-      box.appendChild(lane);
+      // let: ogni corsia tiene i suoi valori anche nelle etichette animate (con var tutte vedrebbero l'ultima)
+      let a = (m.avv || [])[i] || {}, me = (m.mie || [])[i] || {}, L = laneEls[i];
+      let risk = me.v != null && me.v / me.max <= 0.4;
+      let loc = (m.location || [])[i];
+      L.loc.classList.toggle('hidden', !anyLoc);
+      L.loc.textContent = loc ? loc.nome : '\u00a0'; L.loc.title = loc ? (loc.testo || '') : 'location non ancora rivelata';
+      L.bm.className = 'bar me' + (risk ? ' risk' : '');
+      animBar(L, 'a', a, function(v){ return 'AVV ' + v + (a.max ? '/' + a.max : '') + (a.rinf ? ' RINF.' : ''); }, 'bv avv');
+      animBar(L, 'm', me, function(v){ return 'TU ' + v + (me.max ? '/' + me.max : '') + (risk ? ' · RISCHIO' : (me.rinf ? ' RINF.' : '')); },
+              'bv ' + (risk ? 'risk' : 'me'));
     }
+  }
+
+  // ---- barrier animate: le barre scendono o salgono dal valore di prima invece di cambiare di colpo
+  var laneEls = null, reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function buildLanes(){
+    if (laneEls) return;
+    var box = $('hLanes'); box.innerHTML = ''; laneEls = [];
+    for (var i = 0; i < 3; i++){
+      var lane = el('div','lane'), L = {lane: lane};
+      lane.appendChild(el('div','ln', LANES[i]));
+      L.loc = el('div','loc hidden', '\u00a0'); lane.appendChild(L.loc);
+      ['a','m'].forEach(function(k){
+        var bar = el('div', k === 'a' ? 'bar avv' : 'bar me'), gh = el('i','gh'), fill = el('i','fill');
+        bar.appendChild(gh); bar.appendChild(fill); lane.appendChild(bar);
+        var txt = el('div', k === 'a' ? 'bv avv' : 'bv me', k === 'a' ? 'AVV –' : 'TU –'); lane.appendChild(txt);
+        L[k] = {bar: bar, gh: gh, fill: fill, txt: txt, v: null, max: null};
+      });
+      L.bm = L.m.bar;
+      box.appendChild(lane); laneEls.push(L);
+    }
+  }
+  function pctOf(b){ return b.v != null && b.max ? Math.max(0, Math.min(100, b.v / b.max * 100)) : 0; }
+  function animBar(L, k, b, label, cls){
+    var s = L[k], ov = s.v, om = s.max, nv = b.v, nm = b.max;
+    s.txt.className = cls;
+    if (nv == null){ s.fill.style.width = s.gh.style.width = '0%'; s.txt.textContent = label('–'); s.v = null; return; }
+    var first = ov == null;
+    s.v = nv; s.max = nm;
+    if (first || reduceMotion){ s.fill.style.width = s.gh.style.width = pctOf(b) + '%'; s.txt.textContent = label(nv); return; }
+    if (ov === nv && om === nm){ s.txt.textContent = label(nv); return; }
+    var broke = om && nm > om && !b.rinf;  // distrutta e rigenerata a 40: prima va a zero, poi si riempie
+    var d = nv - ov;
+    if (broke){
+      s.fill.style.width = '0%'; s.gh.style.width = '0%';
+      setTimeout(function(){ restart(s.bar, 'up'); s.fill.style.width = s.gh.style.width = pctOf(b) + '%'; }, 750);
+      floatDelta(L, k, 'DISTRUTTA', 'brk');
+    } else if (d < 0){
+      s.fill.style.width = pctOf(b) + '%';           // la vita scende subito, la scia chiara la segue dopo
+      s.gh.style.width = pctOf(b) + '%';
+      restart(s.bar, 'hit');
+      floatDelta(L, k, String(d), 'neg');
+    } else {
+      s.gh.style.width = pctOf(b) + '%';
+      s.fill.style.width = pctOf(b) + '%';
+      restart(s.bar, 'up');
+      floatDelta(L, k, '+' + d, 'pos');
+    }
+    tween(s.txt, broke ? 0 : ov, nv, label, broke ? 750 : 0);
+  }
+  function restart(node, cls){ node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls);
+    setTimeout(function(){ node.classList.remove(cls); }, 1000); }
+  function floatDelta(L, k, text, cls){
+    var s = L[k], f = el('div', 'dlt ' + cls, text);
+    f.style.top = (s.bar.offsetTop - 18) + 'px';
+    L.lane.appendChild(f); setTimeout(function(){ f.remove(); }, 1700);
+  }
+  function tween(node, from, to, label, delay){
+    var t0 = null, dur = 700;
+    function step(ts){
+      if (t0 === null) t0 = ts;
+      var p = Math.min(1, (ts - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      node.textContent = label(Math.round(from + (to - from) * e));
+      if (p < 1) requestAnimationFrame(step);
+    }
+    setTimeout(function(){ requestAnimationFrame(step); }, delay || 0);
+  }
+  function setNum(node, v){
+    var old = node.textContent; node.textContent = v;
+    if (old !== String(v) && old !== '' && !reduceMotion) restart(node, 'bump');
   }
 
   /* ---------- risposta ---------- */

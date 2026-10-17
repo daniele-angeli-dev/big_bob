@@ -13,6 +13,11 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- **Barre animate**: quando BIG-BOB aggiorna il campo dopo uno screen, le barrier non cambiano più di colpo: la barra
+  scende (con una scia chiara che mostra quanto si è perso e una piccola scossa) o sale con un lampo, il numero conta
+  fino al valore nuovo e accanto compare il danno (-8) o la cura (+5). Una barrier distrutta scende a zero, mostra
+  DISTRUTTA e si riempie a 40. Anche round, mana, barrier distrutte e contatori di mazzo e mano pulsano quando cambiano.
+  Con "riduci animazioni" di Windows attivo restano statiche.
 - **Mazzi con una carta in più, corretto**: la stima delle carte rimaste non contava la pescata del round 1, quindi
   entrambi i mazzi risultavano sempre con una carta in più del valore vero. Ora conta 4 carte iniziali + 1 a round dal
   round 1; le correzioni imparate con il vecchio conto ripartono da zero.
