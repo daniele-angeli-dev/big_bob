@@ -26,6 +26,7 @@ from origins import cervello, lessons, report, rules  # noqa: E402
 from origins import server as srv  # noqa: E402
 
 report.LOGS = tmp / "logs"
+cervello.DEFAULT_URL = ""  # il test non deve mai toccare il server vero
 FAILED = []
 
 

@@ -27,8 +27,8 @@ import urllib.request
 
 from origins import store
 
-# Indirizzo del server comune (si compila dopo la pubblicazione con pubblica_cervello.bat). Vuoto = spento.
-DEFAULT_URL = ""
+# Indirizzo del server comune (pubblicato con pubblica_cervello.bat). Si può cambiare con "cervello_url" in config.json.
+DEFAULT_URL = "https://bigbob-cervello.angeli-daniele01.workers.dev"
 TIMEOUT = 20
 SYNC_EVERY_HOURS = 3
 FONTE = "cervello"
