@@ -20,7 +20,7 @@ import threading
 import time
 from pathlib import Path
 
-from origins import deckproj, screen, store
+from origins import deckproj, evaluate, screen, store, usage
 from origins.voice import Voice
 
 ROOT = Path(__file__).resolve().parent
@@ -41,6 +41,27 @@ PROMPT_AUTO = (
     "[AUTO · lo schermo è cambiato] La schermata è allegata: NON chiamare get_screen. Se è iniziato un nuovo "
     "round o sono state rivelate carte, chiama UNA volta update_match e rispondi nel formato 'Risposta live' "
     "(modalità {mode}). Se non è cambiato niente di rilevante rispondi solo: '—'."
+)
+PROMPT_OSSERVATORE = (
+    "[OSSERVATORE] Prima della schermata attuale trovi {n} fotogrammi presi da BIG-BOB da quando hai risposto "
+    "l'ultima volta, in ordine di tempo (la zona nera è la finestra di BIG-BOB). Guardali per ricostruire cosa è "
+    "successo nel frattempo: carte rivelate o giocate dall'avversario anche se poi distrutte o scartate, magie lanciate, "
+    "creature morte in combattimento, carte pescate o create da effetti (Spellbook e simili), barrier colpite. Metti "
+    "tutto in update_match (avv_giocati / avv_scartati / avv_creati, miei_scartati / my_created): così i contatori e le "
+    "probabilità restano veri. "
+)
+PROMPT_STUDIO = (
+    "[STUDIO DELLE REGISTRAZIONI · in background] Studia le registrazioni non ancora elaborate (list_recordings), dalla "
+    "più vecchia, una alla volta ({n} in tutto). Per ciascuna segui il metodo di /impara-regole: fotogrammi in ordine, "
+    "10 alla volta (recording_frames, poi Read), appunti round per round. Ne ricavi due cose.\n"
+    "1) REGOLE: rules_upsert con fonte \"osservazione <nome registrazione>\" e la prova (round e fotogramma); una sola "
+    "osservazione = probabile; mai confermata una cosa solo dedotta.\n"
+    "2) STRATEGIA: chi ha vinto e perché, le giocate che hanno spostato la partita (corsia scelta, tempi, colpi di "
+    "chiusura, difese mancate), errori ricorrenti di Daniele, abitudini dell'avversario, come hanno reso le carte del "
+    "mazzo. Per ognuna record_lesson (tipo strategia, mossa_avversaria o mossa_vincente; carte coinvolte; fonte "
+    "\"registrazione <nome>\"): una frase pratica e generale per la prossima volta, non la cronaca.\n"
+    "Poi mark_recording_done con un riassunto di 3 righe (regole + strategia). Alla fine rispondi in testo semplice, "
+    "senza markdown: per ogni registrazione 2 righe con cosa hai imparato."
 )
 PROMPT_CHAT = "{text}\n\n(Modalità: {mode}. Se ti serve vedere la partita usa get_screen.)"
 PROMPT_CREA = (
@@ -74,8 +95,26 @@ PROMPT_IMPARA = (
     "rules_upsert; se una carta fa qualcosa di diverso dal suo testo aggiungi una nota con upsert_cards. Se le lezioni "
     "già imparate che ti ho mostrato si sono dimostrate sbagliate, usa lesson_review. Infine chiama note_round per "
     "il round precedente: se Daniele ha seguito il tuo consiglio (true/false, null se non si capisce) e com'è andata "
-    "('bene'/'male'/'neutro' + mezza riga). Se non c'è nessuna sorpresa non chiamare record_lesson. Rispondi in una "
-    "sola riga: 'ok' oppure cosa hai imparato."
+    "('bene'/'male'/'neutro' + mezza riga). Se non c'è nessuna sorpresa non chiamare record_lesson. "
+    "{valuta}Rispondi in una sola riga: 'ok' oppure cosa hai imparato."
+)
+PROMPT_VALUTA = (
+    "Infine chiama set_match_eval con la probabilità (1-99) che Daniele vinca la partita: parti dalla STIMA RAPIDA "
+    "di update_match e correggila con quello che i numeri non vedono (cosa fanno le carte in campo e in mano, location, "
+    "carte probabili dell'avversario, chi rivela prima, fatica), motivo in mezza riga. "
+)
+PROMPT_SOLO_VALUTA = (
+    "[VALUTAZIONE · in background: Daniele non sta aspettando questa risposta] " + PROMPT_VALUTA
+    + "Non chiamare altri strumenti. Rispondi solo: ok"
+)
+
+
+SYSTEM_PROMPT = (
+    "Sei BIG-BOB, il coach di Daniele per Origins TCG (gioco di carte digitale di Koin Games). Segui alla lettera le "
+    "istruzioni del progetto (CLAUDE.md): regole del gioco, formato delle risposte, modalità, regole sui dati. "
+    "Rispondi sempre in italiano. Lavori solo con gli strumenti mcp__origins (database di carte, partita, probabilità, "
+    "simulazioni, lezioni, meta) e con Read per guardare immagini: non inventare mai dati di carte né probabilità, "
+    "prendili dagli strumenti. Sii conciso."
 )
 
 
@@ -96,11 +135,32 @@ class ClaudeSession:
         self._q: queue.Queue = queue.Queue()
         self._lock = threading.Lock()
 
+    def _mcp_config(self) -> Path:
+        """In partita solo gli strumenti di partita (BIGBOB_TOOLSET=live): contesto più piccolo, risposte più economiche."""
+        full = self.cwd / ".mcp.json"
+        if not self.live or not full.exists():
+            return full
+        live = self.cwd / ".mcp-live.json"
+        try:
+            cfg = json.loads(full.read_text(encoding="utf-8"))
+            for srv in cfg.get("mcpServers", {}).values():
+                srv["env"] = {**(srv.get("env") or {}), "BIGBOB_TOOLSET": "live"}
+            text = json.dumps(cfg, indent=2)
+            if not live.exists() or live.read_text(encoding="utf-8") != text:
+                live.write_text(text, encoding="utf-8")
+            return live
+        except Exception:  # noqa: BLE001
+            log.exception(".mcp-live.json non scritto: uso tutti gli strumenti")
+            return full
+
     def _cmd(self) -> list[str]:
         cfg = store.load("config")
+        # solo Read tra gli strumenti di Claude Code (servono quelli di BIG-BOB) e istruzioni di sistema brevi: le regole
+        # vere sono in CLAUDE.md, che Claude Code carica comunque. Contesto fisso da ~87.000 a ~18.000 token.
         cmd = [self.exe, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                "--model", cfg.get("modello_live", "sonnet"),
-               "--mcp-config", str(self.cwd / ".mcp.json"), "--strict-mcp-config",
+               "--mcp-config", str(self._mcp_config()), "--strict-mcp-config",
+               "--tools", "Read", "--system-prompt", SYSTEM_PROMPT,
                "--allowedTools", "mcp__origins", "Read"]
         if self.session_id:
             cmd += ["--resume", self.session_id]
@@ -264,6 +324,10 @@ class Controller:
         self._q: queue.Queue = queue.Queue()
         self._match_mtime = 0.0
         self._stop = threading.Event()
+        self.obs_frames: list[dict] = []   # fotogrammi dell'osservatore dall'ultimo F8: {"path", "score", "t"}
+        self._obs_lock = threading.Lock()
+        self._obs_n = 0
+        self._match_active = False
 
     # ------------------------------------------------ avvio
     def start(self) -> None:
@@ -321,7 +385,9 @@ class Controller:
                    "voice": bool(cfg.get("voce", True)) and self.voice.available(),
                    "voice_available": self.voice.available(),
                    "budget_seconds": BUDGET_SECONDS,
-                   "decks": self._deck_names(), "lab": deckproj.summary()})
+                   "decks": self._deck_names(), "lab": deckproj.summary(),
+                   "consumi": usage.summary() if usage.visible() else None,
+                   "tutorial": not cfg.get("tutorial_visto", False)})
         self._emit_hud(force=True)
 
     @staticmethod
@@ -517,7 +583,7 @@ class Controller:
 
     # ------------------------------------------------ impostazioni e collegamento a Claude
     SETTINGS_KEYS = ("modello_live", "connessione", "voce", "apprendimento_live", "apri_claude_code_all_avvio",
-                     "max_thinking_live", "modalita", "meta_originsmeta")
+                     "max_thinking_live", "modalita", "meta_originsmeta", "osservatore", "barra_vantaggio")
 
     def get_settings(self) -> None:
         from origins import updates
@@ -533,7 +599,7 @@ class Controller:
         import configura
         cfg_before = store.load("config")
         extra = {k: vals[k] for k in ("voce", "apprendimento_live", "apri_claude_code_all_avvio",
-                                      "meta_originsmeta") if k in vals}
+                                      "meta_originsmeta", "osservatore", "barra_vantaggio") if k in vals}
         if "max_thinking_live" in vals:
             try:
                 extra["max_thinking_live"] = max(0, int(vals["max_thinking_live"]))
@@ -627,11 +693,76 @@ class Controller:
             log.exception("libreria")
             self.say(f"Pagina non generata: {e}", "warn")
 
+    def tutorial_done(self) -> None:
+        cfg = store.load("config")
+        cfg["tutorial_visto"] = True
+        store.save("config", cfg)
+
     def open_stats(self) -> None:
         self.open_library("statistiche")
 
     def open_learned(self) -> None:
-        self.open_library("imparato")
+        self.open_library("studio")
+
+    def open_origin(self) -> None:
+        """Il tasto Origin: i mazzi del meta presi da OriginsMeta (dentro l'app)."""
+        from origins import report
+        try:
+            self._open(report.meta_html(), "BIG-BOB · Mazzi meta")
+        except Exception as e:  # noqa: BLE001
+            log.exception("pagina mazzi meta")
+            self.say(f"Pagina non generata: {e}", "warn")
+
+    @staticmethod
+    def open_site(url: str = "https://originsmeta.com/it") -> None:
+        """Apre OriginsMeta nel browser (richiesto esplicitamente dal pulsante «vai sul sito»): solo quel sito."""
+        import webbrowser
+        if not str(url).startswith("https://originsmeta.com"):
+            return
+        webbrowser.open(url)
+
+    # ------------------------------------------------ studio delle registrazioni (regole + strategia)
+    def study_recordings(self) -> None:
+        from origins import report
+        pend = report.pending_recordings()
+        if not pend:
+            self.say("Nessuna registrazione da studiare: premi REGISTRA durante una partita.", "dim")
+            return
+        if getattr(self, "studying", False):
+            self.say("Sto già studiando le registrazioni: ti avviso quando ho finito.", "dim")
+            return
+        if self._match_active:
+            self._study_after_match = True
+            self.say(f"Studierò {len(pend)} registrazion{'e' if len(pend) == 1 else 'i'} a fine partita.", "dim")
+            return
+        threading.Thread(target=self._run_study, args=(len(pend),), daemon=True, name="bb-studio").start()
+
+    def _run_study(self, n: int) -> None:
+        self.studying = True
+        self._study_after_match = False
+        self.say(f"Studio {n} registrazion{'e' if n == 1 else 'i'} in background (regole e strategia): puoi continuare "
+                 "a usare BIG-BOB, ti avviso quando ho finito.", "dim")
+        sess = self.study_session = getattr(self, "study_session", None) or ClaudeSession(self.claude, ROOT, live=False)
+        final = ""
+        lessons_n = rules_n = 0
+        try:
+            for ev in sess.ask([{"type": "text", "text": PROMPT_STUDIO.format(n=n)}], timeout=3600):
+                if ev.get("type") == "assistant":
+                    for block in ev.get("message", {}).get("content", []):
+                        if block.get("type") == "tool_use":
+                            name = block.get("name", "").replace("mcp__origins__", "")
+                            lessons_n += name == "record_lesson"
+                            rules_n += name == "rules_upsert"
+                elif ev.get("type") == "result":
+                    final = (ev.get("result") or "").strip()
+                    usage.add_from_result(ev, sess)
+            self.say(f"Studio finito: {lessons_n} lezioni e {rules_n} regole aggiornate.\n{final}", "lesson")
+            self.emit({"type": "action", "label": "APRI LO STUDIO", "call": "open_learned"})
+        except Exception as e:  # noqa: BLE001
+            log.exception("studio delle registrazioni")
+            self.say(f"Studio delle registrazioni interrotto: {e}", "warn")
+        finally:
+            self.studying = False
 
     def open_replay(self) -> None:
         from origins import report
@@ -684,7 +815,10 @@ class Controller:
 
     def _do_analyze(self, auto: bool) -> None:
         prompt = (PROMPT_AUTO if auto else PROMPT_TURNO).format(mode=self._mode())
-        self._ask(prompt, label=None if auto else "Analisi round", attach=True, kind="live")
+        frames = self._take_obs_frames()
+        if frames:
+            prompt = PROMPT_OSSERVATORE.format(n=len(frames)) + prompt
+        self._ask(prompt, label=None if auto else "Analisi round", attach=True, kind="live", frames=frames)
 
     def _do_chat(self, text: str) -> None:
         self._ask(PROMPT_CHAT.format(text=text, mode=self._mode()), label=text)
@@ -703,6 +837,9 @@ class Controller:
         self.status(f"Scansione salvata · {n} in coda" + (" · ⚠ schermo intero" if warn else ""))
 
     def _do_new_match(self, deck: str) -> None:
+        with self._obs_lock:
+            self.obs_frames = []
+        self._obs_n = 0
         if self.session:
             self.session.reset()
             threading.Thread(target=self._prewarm, daemon=True).start()
@@ -741,6 +878,9 @@ class Controller:
                   kind="fine")
         if self.rec_on:
             self._do_record(False)
+        if getattr(self, "_study_after_match", False):
+            self._study_after_match = False
+            threading.Timer(5, self.study_recordings).start()
         if self.journal_dir is not None:
             self.emit({"type": "action", "label": "RIVEDI LA PARTITA", "call": "open_replay"})
             self.emit({"type": "action", "label": "STATISTICHE", "call": "open_stats"})
@@ -774,6 +914,38 @@ class Controller:
         p.rename(p.with_name(f"{self.rec_count:04d}_{p.name}"))
         self.status(f"Registrazione: {self.rec_count} fotogrammi")
 
+    # ------------------------------------------------ osservatore: la partita tra un F8 e l'altro
+    OBS_MAX_ATTACH = 6     # fotogrammi allegati al massimo a un F8 (i più diversi tra loro)
+    OBS_MAX_KEEP = 300     # fotogrammi tenuti nel diario per partita
+
+    def _observe(self, mask, score: float) -> None:
+        try:
+            img = screen.grab_masked(store.load("config").get("titolo_finestra", "Origins"), mask)
+            self._journal("")
+            folder = self.journal_dir / "osservatore"
+            folder.mkdir(exist_ok=True)
+            self._obs_n += 1
+            p = folder / f"{self._obs_n:04d}_{time.strftime('%H%M%S')}.jpg"
+            img.save(p, "JPEG", quality=70, optimize=True)
+            with self._obs_lock:
+                self.obs_frames.append({"path": p, "score": score, "t": time.time()})
+                self.obs_frames = self.obs_frames[-60:]
+            old = sorted(folder.glob("*.jpg"))
+            for f in old[:-self.OBS_MAX_KEEP]:
+                f.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001
+            log.exception("fotogramma dell'osservatore non salvato")
+
+    def _take_obs_frames(self) -> list[Path]:
+        """I fotogrammi da allegare all'F8: i più significativi (cambio maggiore), in ordine di tempo; poi si azzera."""
+        with self._obs_lock:
+            frames, self.obs_frames = self.obs_frames, []
+        frames = [f for f in frames if f["path"].exists()]
+        if len(frames) > self.OBS_MAX_ATTACH:
+            keep = sorted(frames, key=lambda f: -f["score"])[:self.OBS_MAX_ATTACH]
+            frames = sorted(keep, key=lambda f: f["t"])
+        return [f["path"] for f in frames]
+
     # ------------------------------------------------ cattura con finestra nascosta
     def hidden_capture(self, folder: Path | None = None) -> Path:
         title = store.load("config").get("titolo_finestra", "Origins")
@@ -800,7 +972,8 @@ class Controller:
                 f.write(text.rstrip() + "\n\n")
 
     # ------------------------------------------------ chiamata a Claude Code
-    def _ask(self, prompt: str, label: str | None, attach: bool = False, kind: str = "other") -> None:
+    def _ask(self, prompt: str, label: str | None, attach: bool = False, kind: str = "other",
+             frames: list[Path] | None = None) -> None:
         if not self.claude:
             self.say("Claude Code non trovato.", "warn")
             return
@@ -839,8 +1012,16 @@ class Controller:
         # può richiedere il tempo che serve
         self.emit({"type": "busy", "value": True, "what": what, "budget": BUDGET_SECONDS if kind == "live" else 0})
         content: list[dict] = []
+        import base64
+        for f in frames or []:  # prima i fotogrammi dell'osservatore, in ordine di tempo
+            try:
+                content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                             "data": base64.b64encode(f.read_bytes()).decode()}})
+            except OSError:
+                continue
+        if frames:
+            self._journal(f"Osservatore: {len(frames)} fotogrammi allegati ({', '.join(f.name for f in frames)})")
         if attach and shot is not None:
-            import base64
             content.append({"type": "image", "source": {"type": "base64", "media_type": "image/png",
                                                          "data": base64.b64encode(shot.read_bytes()).decode()}})
         content.append({"type": "text", "text": prompt})
@@ -866,6 +1047,7 @@ class Controller:
                             steps.append(f"{time.time() - t0:.1f}s {name}")
                             self.status(f"⚙ {name}")
                 elif ev.get("type") == "result":
+                    usage.add_from_result(ev, sess)
                     final = (ev.get("result") or (texts[-1] if texts else "")).strip()
                     dt = time.time() - t0
                     out_tok = (ev.get("usage") or {}).get("output_tokens")
@@ -890,22 +1072,31 @@ class Controller:
             self.busy = False
             self.emit({"type": "busy", "value": False})
             self._emit_hud(force=True)
+            if usage.visible():
+                self.emit({"type": "usage", **usage.summary()})
             try:
                 self._lab_after(kind)
             except Exception:  # noqa: BLE001
                 log.exception("aggiornamento laboratorio")
-            if learn:
-                self._learn()
+            if kind == "live" and (learn or store.load("config").get("barra_vantaggio", True)):
+                self._learn(learn)
             self._session_free.set()
 
-    def _learn(self) -> None:
-        """Dopo la risposta live, mentre Daniele legge e gioca: impara da ciò che non era stato previsto."""
+    def _learn(self, learn: bool = True) -> None:
+        """Dopo la risposta live, mentre Daniele legge e gioca: impara da ciò che non era stato previsto e aggiorna la
+        barra di vantaggio (stima di chi sta vincendo). Senza apprendimento fa solo la stima, in un turno brevissimo."""
+        cfg = store.load("config")
+        valuta = PROMPT_VALUTA if cfg.get("barra_vantaggio", True) else ""
+        if not learn and not valuta:
+            return
+        prompt = PROMPT_IMPARA.format(valuta=valuta) if learn else PROMPT_SOLO_VALUTA
         self.learning = True
         self.emit({"type": "learning", "value": True})
         t0 = time.time()
         learned: list[str] = []
+        learned_eval = ""
         try:
-            for ev in self.session.ask([{"type": "text", "text": PROMPT_IMPARA}], timeout=60):
+            for ev in self.session.ask([{"type": "text", "text": prompt}], timeout=60):
                 if ev.get("type") == "assistant":
                     for block in ev.get("message", {}).get("content", []):
                         if block.get("type") == "tool_use":
@@ -920,15 +1111,20 @@ class Controller:
                             elif name == "lesson_review" and inp.get("stato") == "smentita":
                                 self.emit({"type": "say", "role": "lesson",
                                            "text": f"Lezione {inp.get('id')} smentita da questo round"})
+                            elif name == "set_match_eval":
+                                learned_eval = f"vantaggio: vinci al {inp.get('mia_percentuale')}% ({inp.get('motivo', '')})"
                 elif ev.get("type") == "result":
+                    usage.add_from_result(ev, self.session)
                     summary = (ev.get("result") or "").strip()
-                    self._journal(f"### 📚 Apprendimento ({time.time() - t0:.1f}s)\n"
-                                  + ("\n".join(f"- {x}" for x in learned) or summary or "nessuna sorpresa"))
+                    lines = [f"- {x}" for x in learned] + ([f"- {learned_eval}"] if learned_eval else [])
+                    title = "📚 Apprendimento" if learn else "📊 Valutazione"
+                    self._journal(f"### {title} ({time.time() - t0:.1f}s)\n" + ("\n".join(lines) or summary or "nessuna sorpresa"))
         except Exception:  # noqa: BLE001
             log.exception("turno di apprendimento fallito")
         finally:
             self.learning = False
             self.emit({"type": "learning", "value": False})
+            self._emit_hud(force=True)  # la barra di vantaggio con la stima di BIG-BOB
 
     # ------------------------------------------------ HUD dalla partita in corso
     def _emit_hud(self, force: bool = False) -> None:
@@ -938,6 +1134,7 @@ class Controller:
             return
         self._match_mtime = mtime
         m = store.load("match") if p.exists() else {}
+        self._match_active = bool(m)
         if not m:
             self.emit({"type": "hud", "match": None})
             return
@@ -960,6 +1157,7 @@ class Controller:
             "distrutte_da_me": m.get("distrutte_da_me"), "distrutte_a_me": m.get("distrutte_a_me"),
             "mazzo": m.get("mio_mazzo"), "avv_leggendaria": m.get("avv_leggendaria"),
             "location": [self._loc(n) for n in (m.get("location") or [])[:3]],
+            "contatori": evaluate.counters(m), "valutazione": evaluate.current_eval(m),
         }})
 
     @staticmethod
@@ -984,12 +1182,13 @@ class Controller:
         def d(a, b):
             return ImageStat.Stat(ImageChops.difference(a, b)).mean[0]
 
-        prev = ref_rec = ref_auto = None
-        last_rec = 0.0
+        prev = ref_rec = ref_auto = ref_obs = None
+        last_rec = last_obs = 0.0
         while not self._stop.is_set():
             time.sleep(0.7)
-            if not (self.auto_on or self.rec_on):
-                prev = ref_rec = ref_auto = None
+            observing = self._match_active and store.load("config").get("osservatore", True)
+            if not (self.auto_on or self.rec_on or observing):
+                prev = ref_rec = ref_auto = ref_obs = None
                 continue
             if self.capturing or time.time() - self.last_capture < 1.0:
                 continue
@@ -1012,6 +1211,15 @@ class Controller:
                     ref_rec, last_rec = sig, now_t
             else:
                 ref_rec = None
+            if observing:
+                # osservatore: un fotogramma leggero a ogni schermata nuova e ferma (rivelazioni, combattimento, scarti)
+                if ref_obs is None:
+                    ref_obs = sig
+                elif d(sig, ref_obs) > 2.0 and now_t - last_obs > 1.2:
+                    self._observe(mask, d(sig, ref_obs))
+                    ref_obs, last_obs = sig, now_t
+            else:
+                ref_obs = None
             if self.auto_on:
                 if ref_auto is None:
                     ref_auto = sig

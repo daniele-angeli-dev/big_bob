@@ -102,7 +102,7 @@ class WebUI:
         except Exception:  # noqa: BLE001
             pass
         w = webview.create_window(title, **({"url": url} if url else {"html": html}), width=width, height=height,
-                                  min_size=(420, 480),
+                                  js_api=getattr(self, "api", None), min_size=(420, 480),
                                   on_top=True, resizable=True, background_color="#24104F", text_select=True,
                                   focus=True)
 
@@ -186,6 +186,18 @@ class Api:
     def open_library(self, tab="mazzi", deck=""):
         self._c.open_library(tab or "mazzi", deck or "")
 
+    def open_origin(self):
+        self._c.open_origin()
+
+    def open_site(self, url="https://originsmeta.com/it"):
+        self._c.open_site(url)
+
+    def study_recordings(self):
+        self._c.study_recordings()
+
+    def tutorial_done(self):
+        self._c.tutorial_done()
+
     def open_learned(self):
         self._c.open_learned()
 
@@ -249,6 +261,7 @@ def run_web() -> None:
     ui = WebUI()
     ctrl = Controller(ui)
     api = Api(ctrl, ui)
+    ui.api = api  # anche la finestra delle pagine può chiedere cose a BIG-BOB (studia, aggiorna, apri il sito)
     from ui.render import page
     html = page()
 

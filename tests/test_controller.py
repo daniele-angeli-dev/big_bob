@@ -159,6 +159,22 @@ time.sleep(0.3)
 wait(ui, c.analyze)
 assert ui.of("answer")[-1]["parsed"]["mossa"], "dopo un crash deve ripartire"
 
+# osservatore: fotogrammi tra un F8 e l'altro, allegati al successivo (al massimo 6, i più diversi, in ordine)
+from PIL import Image as _Im
+screen.grab_masked = lambda title, mask=None, max_width=1024: _Im.new("RGB", (320, 180), (90, 20, 20))
+c.obs_frames = []
+for i in range(9):
+    c._observe(None, float(i % 5) + 2.5)
+    time.sleep(0.01)
+assert len(c.obs_frames) == 9 and all(f["path"].suffix == ".jpg" for f in c.obs_frames)
+picked = c._take_obs_frames()
+assert len(picked) == 6 and picked == sorted(picked, key=lambda p: p.name) and c.obs_frames == []
+for i in range(3):
+    c._observe(None, 3.0)
+wait(ui, c.analyze)
+diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
+assert "Osservatore: 3 fotogrammi allegati" in diario and c.obs_frames == [], "allegati all'F8 e poi azzerati"
+
 c.stop()
 shutil.rmtree(tmp, ignore_errors=True)
 print("CONTROLLER OK")

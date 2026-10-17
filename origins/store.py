@@ -32,7 +32,8 @@ DEFAULTS = {
                "hotkey_scan": "f9", "titolo_finestra": "Origins", "patch_corrente": "",
                "max_thinking_live": 4000, "apprendimento_live": True, "voce": True,
                "apri_claude_code_all_avvio": False, "connessione": "abbonamento",
-               "controlla_aggiornamenti": True, "meta_originsmeta": True, "progetto_mazzo": ""},
+               "controlla_aggiornamenti": True, "meta_originsmeta": True, "progetto_mazzo": "",
+               "osservatore": True, "barra_vantaggio": True},
 }
 
 

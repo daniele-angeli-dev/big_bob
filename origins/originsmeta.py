@@ -430,9 +430,12 @@ def parse_deck_list(html: str) -> dict:
         refs = [r for r in (card_ref(n) for n in box.iter()) if r]
         if refs:
             entry["carte_scheda"] = list(dict.fromkeys(refs))
-        desc = [ln for ln in txt.split("\n") if len(ln) > 30 and ln != name]
+        # descrizione: la riga di testo vero più lunga (non quella con winrate, valutazione, versione, data)
+        desc = [ln for ln in txt.split("\n") if len(ln) > 30 and ln != name and "★" not in ln and "%" not in ln
+                and not re.search(r"\b20\d\d-\d\d-\d\d\b", ln)
+                and sum(ch.isalpha() for ch in ln) > 0.6 * len(ln)]
         if desc:
-            entry["descrizione_breve"] = desc[0][:300]
+            entry["descrizione_breve"] = max(desc, key=len)[:300]
         seen[url] = entry
     m = re.search(r"(\d+)\s+(?:results|risultati|decks|mazzi)\b", root.text(), re.I)
     return {"mazzi": seen, "totale_dichiarato": int(m.group(1)) if m else None}

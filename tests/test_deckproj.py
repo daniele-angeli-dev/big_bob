@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 os.environ["BIGBOB_NO_SYNC"] = "1"
@@ -161,7 +162,7 @@ c.open_stats()
 c.open_library("mazzi")
 import re as _re
 tabs = [(_re.search(r"data-tab='(\w+)'", x).group(1), _re.search(r"data-deck='([^']*)'", x).group(1)) for x in opened]
-assert tabs == [("mazzi", "sniper-lab"), ("imparato", ""), ("statistiche", ""), ("mazzi", "")], tabs
+assert tabs == [("mazzi", "sniper-lab"), ("studio", ""), ("statistiche", ""), ("mazzi", "")], tabs
 assert all("<html" in x and "file:" not in x for x in opened), "dati passati direttamente alla finestra, niente file"
 # il replay incorpora le schermate (la finestra non legge file)
 jd = tmp / "partita"; jd.mkdir()
@@ -176,9 +177,11 @@ assert len(opened[0]) < 120_000, "schermata incorporata come anteprima leggera"
 
 # la finestra del libro: tre schede, un riquadro per ogni mazzo salvato, scheda di dettaglio per ciascuno
 h = report.library_html("mazzi", "Sniper Lab").read_text(encoding="utf-8")
-for t in ("MAZZI", "COSA HO IMPARATO", "STATISTICHE"):
+for t in ("MAZZI", "STATISTICHE", "STUDIO"):
     assert f">{t}</button>" in h, t
-assert "data-deck='sniper-lab'" in h and "id='t-imparato'" in h and "id='t-statistiche'" in h
+assert h.index(">MAZZI</button>") < h.index(">STATISTICHE</button>") < h.index(">STUDIO</button>")
+assert "data-deck='sniper-lab'" in h and "id='t-studio'" in h and "id='t-statistiche'" in h
+assert "Studio delle registrazioni" in h and "Cosa ho imparato" in h
 assert h.count("class='dtile'") == len(store.load("decks")) == 2
 assert "IN CREAZIONE · v5" in h, "il mazzo del laboratorio ha la sua etichetta"
 assert "id='d-sniper-lab'" in h and "id='d-altro'" in h and "← TUTTI I MAZZI" in h
@@ -189,6 +192,69 @@ assert "Versioni" in sniper and "LABORATORIO ·" not in sniper.split("</section>
 assert "data-games='1'" in h and "<script>" in h
 store.save("decks", [])
 assert "Ancora nessun mazzo salvato" in report.library_html().read_text(encoding="utf-8")
+# STUDIO: pulsante nella scheda; con una partita in corso lo studio parte a fine partita
+from origins import screen, usage, originsmeta as om  # noqa: E402
+screen.RECORDINGS = tmp / "registrazioni"
+rec = screen.RECORDINGS / "20261017-140000"
+rec.mkdir(parents=True)
+(rec / "0001_x.png").write_bytes(b"x")
+assert "data-api='study_recordings'" in report.studio_body() and "1 registrazione da studiare" in report.studio_body()
+started = []
+c._run_study = lambda n: started.append(n)
+c._match_active = True
+c.study_recordings()
+assert c._study_after_match and not started, "in partita: aspetta la fine"
+c._match_active = False
+c.study_recordings()
+time.sleep(0.2)
+assert started == [1]
+(rec / "ELABORATA").write_text("2026-10-17 14:30\nfatto", encoding="utf-8")
+assert "Nessuna registrazione da studiare" in report.studio_body()
+
+# consumi: solo con chiave API, somma la differenza tra i totali di Claude Code
+class _S:  # finta sessione
+    pass
+fs = _S()
+fs.proc = _S(); fs.proc.pid = 1
+usage.add_from_result({"total_cost_usd": 0.30}, fs)
+usage.add_from_result({"total_cost_usd": 0.35}, fs)
+assert usage.summary()["oggi"] == 0.35
+fs.proc.pid = 2  # processo nuovo: il totale riparte
+usage.add_from_result({"total_cost_usd": 0.10}, fs)
+assert usage.summary()["oggi"] == 0.45
+cfg = store.load("config"); cfg["connessione"] = "abbonamento"; store.save("config", cfg)
+assert not usage.visible()
+cfg["connessione"], cfg["api_key"] = "api", "sk-ant-x"; store.save("config", cfg)
+assert usage.visible()
+c.emit_state()
+assert [e for e in ui.ev if e["type"] == "state"][-1]["consumi"]["oggi"] == 0.45
+cfg["connessione"] = "abbonamento"; store.save("config", cfg)
+
+# ORIGIN: pagina dei mazzi meta e collegamento solo verso originsmeta.com
+store.save("originsmeta", {"ultimo_sync": "2026-10-17 09:00", "mazzi": {"https://originsmeta.com/en/decks/community/sniper-e4a2": {
+    "nome": "SNIPER", "url": "https://originsmeta.com/en/decks/community/sniper-e4a2", "leggendaria": "Robin Hood",
+    "archetipo": "Midrange", "versione": "0.7", "winrate": 88, "partite": 16, "carte": DECK, "completo": True,
+    "guida": "## Mulligan\n- Tieni le carte da 2", "autore": "robip"}}, "statistiche": {}})
+mh = report.meta_html().read_text(encoding="utf-8")
+assert "ORIGIN · MAZZI META" in mh and "SNIPER" in mh and "data-api='open_site'" in mh and "VAI SU ORIGINSMETA.COM" in mh
+assert "<li>Tieni le carte da 2</li>" in mh and "data-filter='leg'" in mh
+import webbrowser as _wb  # noqa: E402
+opened_urls = []
+_wb.open = lambda u: opened_urls.append(u)
+c.open_site("https://originsmeta.com/it")
+c.open_site("https://example.com/phish")
+assert opened_urls == ["https://originsmeta.com/it"], "si apre solo il sito di OriginsMeta"
+ui.ev.clear()
+c.open_origin()
+assert opened[-1].startswith("<!doctype html") and "SNIPER" in opened[-1]
+
+# tutorial: alla prima apertura sì, dopo «ho capito» no
+c.emit_state()
+assert [e for e in ui.ev if e["type"] == "state"][-1]["tutorial"] is True
+c.tutorial_done()
+c.emit_state()
+assert [e for e in ui.ev if e["type"] == "state"][-1]["tutorial"] is False
+
 # creare un mazzo: sessione a parte senza tetto al ragionamento; il limite dei 40 s solo in partita
 lab_s = controller.ClaudeSession("claude", ROOT, live=False)
 live_s = controller.ClaudeSession("claude", ROOT)

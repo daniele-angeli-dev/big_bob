@@ -643,16 +643,18 @@ def decks_body() -> str:
 
 LIB_JS = """
 (function(){
-  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs button'));
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs button[data-tab]'));
   function showTab(t){
     tabs.forEach(function(b){ var on = b.dataset.tab === t; b.setAttribute('aria-selected', on ? 'true' : 'false');
       document.getElementById('t-' + b.dataset.tab).hidden = !on; });
   }
-  function listView(){ document.getElementById('dlist').hidden = false;
+  var list = document.getElementById('dlist');
+  function listView(){ if (list) list.hidden = false;
     Array.prototype.forEach.call(document.querySelectorAll('.deckd'), function(x){ x.hidden = true; }); }
   function openDeck(id){
     var sec = document.getElementById('d-' + id); if (!sec) { listView(); return; }
-    showTab('mazzi'); document.getElementById('dlist').hidden = true;
+    if (tabs.length) showTab('mazzi');
+    if (list) list.hidden = true;
     Array.prototype.forEach.call(document.querySelectorAll('.deckd'), function(x){ x.hidden = x !== sec; });
     window.scrollTo(0, 0);
   }
@@ -660,8 +662,17 @@ LIB_JS = """
   Array.prototype.forEach.call(document.querySelectorAll('.dtile'), function(t){ t.addEventListener('click', function(){ openDeck(t.dataset.id); }); });
   Array.prototype.forEach.call(document.querySelectorAll('[data-back]'), function(b){ b.addEventListener('click', function(){ listView(); window.scrollTo(0, 0); }); });
   var q = document.getElementById('dq'), sel = document.getElementById('ds'), grid = document.getElementById('dgrid');
-  if (q) q.addEventListener('input', function(){ var v = q.value.trim().toLowerCase();
-    Array.prototype.forEach.call(grid.children, function(t){ t.hidden = v && t.dataset.name.indexOf(v) < 0; }); });
+  var filters = Array.prototype.slice.call(document.querySelectorAll('[data-filter]'));
+  function applyFilter(){
+    if (!grid) return;
+    var v = q ? q.value.trim().toLowerCase() : '';
+    Array.prototype.forEach.call(grid.children, function(t){
+      var ok = !v || t.dataset.name.indexOf(v) >= 0;
+      filters.forEach(function(f){ if (f.value && t.dataset[f.dataset.filter] !== f.value) ok = false; });
+      t.hidden = !ok; });
+  }
+  if (q) q.addEventListener('input', applyFilter);
+  filters.forEach(function(f){ f.addEventListener('change', applyFilter); });
   if (sel) sel.addEventListener('change', function(){
     var k = sel.value, items = Array.prototype.slice.call(grid.children);
     items.sort(function(a, b){
@@ -669,18 +680,59 @@ LIB_JS = """
       if (k === 'last') return (b.dataset.last || '').localeCompare(a.dataset.last || '');
       return parseFloat(b.dataset[k]) - parseFloat(a.dataset[k]); });
     items.forEach(function(t){ grid.appendChild(t); }); });
-  var h = decodeURIComponent((location.hash || '').slice(1)), def = document.body.dataset.tab || 'mazzi';
-  if (h.indexOf('mazzo=') === 0) openDeck(h.slice(6));
-  else showTab(['mazzi', 'imparato', 'statistiche'].indexOf(h) >= 0 ? h : def);
-  var dd = document.body.dataset.deck; if (!h && dd) openDeck(dd);
+  // pulsanti che chiedono qualcosa a BIG-BOB (studia, aggiorna, apri il sito)
+  Array.prototype.forEach.call(document.querySelectorAll('[data-api]'), function(b){
+    b.addEventListener('click', function(){
+      var api = window.pywebview && window.pywebview.api;
+      var fn = api && api[b.dataset.api];
+      if (!fn) { b.textContent = 'Apri questa pagina da BIG-BOB'; return; }
+      fn.apply(null, b.dataset.arg ? [b.dataset.arg] : []);
+      if (b.dataset.done) { b.textContent = b.dataset.done; b.disabled = true; }
+    });
+  });
+  if (tabs.length){
+    var h = decodeURIComponent((location.hash || '').slice(1)), def = document.body.dataset.tab || 'mazzi';
+    if (h === 'imparato') h = 'studio';
+    if (h.indexOf('mazzo=') === 0) openDeck(h.slice(6));
+    else showTab(['mazzi', 'statistiche', 'studio'].indexOf(h) >= 0 ? h : def);
+    var dd = document.body.dataset.deck; if (!h && dd) openDeck(dd);
+  }
 })();
 """
 
 
+def pending_recordings() -> list[dict]:
+    try:
+        from origins import screen
+        recs = screen.list_recordings() if screen.RECORDINGS.exists() else []
+    except Exception:  # noqa: BLE001
+        return []
+    return [r for r in recs if r.get("fotogrammi") and not r.get("elaborata")]
+
+
+def studio_body() -> str:
+    """Scheda STUDIO: studio delle registrazioni (regole + strategia) e tutto ciò che BIG-BOB ha imparato."""
+    pend = pending_recordings()
+    frames = sum(r["fotogrammi"] for r in pend)
+    if pend:
+        box = (f"<div class='note' style='display:flex;gap:12px;align-items:center;flex-wrap:wrap'>"
+               f"<div style='flex:1 1 260px'><b>{len(pend)} registrazion{'e' if len(pend) == 1 else 'i'} da studiare</b> "
+               f"({frames} fotogrammi). BIG-BOB le guarda tutte e ne ricava regole del gioco e lezioni di strategia "
+               "(chi ha vinto e perché, giocate decisive, errori ricorrenti, abitudini degli avversari). Lavora in "
+               "background: puoi continuare a usare BIG-BOB. Se c'è una partita in corso parte a fine partita.</div>"
+               "<button type='button' class='back' style='margin:0;background:var(--teal);color:var(--bg);border-color:var(--teal)' "
+               "data-api='study_recordings' data-done='STUDIO AVVIATO: guarda la finestra di BIG-BOB'>STUDIA REGISTRAZIONI</button></div>")
+    else:
+        box = ("<div class='note'>Nessuna registrazione da studiare. Premi REGISTRA durante una partita: a fine partita la "
+               "trovi qui e BIG-BOB la studia con un clic.</div>")
+    return "<h2 style='margin-top:6px'>Studio delle registrazioni</h2>" + box + "<h2>Cosa ho imparato</h2>" + learned_body()
+
+
 def library_html(tab: str = "mazzi", deck: str = "") -> Path:
-    """La finestra del libro: MAZZI · COSA HO IMPARATO · STATISTICHE in un'unica pagina con le schede."""
-    panels = [("mazzi", "MAZZI", decks_body), ("imparato", "COSA HO IMPARATO", learned_body),
-              ("statistiche", "STATISTICHE", stats_body)]
+    """La finestra del libro: MAZZI · STATISTICHE · STUDIO in un'unica pagina con le schede."""
+    tab = "studio" if tab == "imparato" else tab
+    panels = [("mazzi", "MAZZI", decks_body), ("statistiche", "STATISTICHE", stats_body),
+              ("studio", "STUDIO", studio_body)]
     tabs = "".join(f"<button type='button' role='tab' data-tab='{k}' aria-controls='t-{k}' "
                    f"aria-selected='{'true' if k == tab else 'false'}'>{label}</button>" for k, label, _ in panels)
     body = [f"<div class='libhead'><h1>BIG-BOB</h1><nav class='tabs' role='tablist' aria-label='Sezioni'>{tabs}</nav></div>"]
@@ -699,8 +751,115 @@ def library_html(tab: str = "mazzi", deck: str = "") -> Path:
     return out
 
 
+# ---------------------------------------------------------------- ORIGIN: i mazzi del meta (OriginsMeta)
+
+def _guide_html(text: str) -> str:
+    e = html.escape
+    out, in_list = [], False
+    for ln in (text or "").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        if ln.startswith("- "):
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{e(ln[2:])}</li>")
+            continue
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+        out.append(f"<h3 style='margin:14px 0 4px;color:var(--yellow);font-size:15px'>{e(ln[3:])}</h3>"
+                   if ln.startswith("## ") else f"<p style='margin:4px 0'>{e(ln)}</p>")
+    if in_list:
+        out.append("</ul>")
+    return "".join(out)
+
+
+def meta_html() -> Path:
+    from origins import originsmeta as om
+    e = html.escape
+    st = om.load_state()
+    decks = sorted(st.get("mazzi", {}).values(), key=lambda d: (-(d.get("winrate") or -1), -(d.get("partite") or 0)))
+    site = "https://originsmeta.com/it"
+    head = ("<div class='libhead'><h1>ORIGIN · MAZZI META</h1><div class='tabs'>"
+            "<button type='button' data-api='sync_meta' data-done='AGGIORNAMENTO AVVIATO…'>AGGIORNA ORA</button>"
+            f"<button type='button' data-api='open_site' data-arg='{site}'>VAI SU ORIGINSMETA.COM ↗</button></div></div>"
+            f"<p class='sub'>Dati da originsmeta.com · aggiornati {e(str(st.get('ultimo_sync') or 'mai'))} · "
+            f"{len(decks)} mazzi. I winrate vengono dal tracker del sito (chi registra vince più del 50%): confronta i "
+            "mazzi tra loro, e diffida dei numeri con poche partite.</p>")
+    body = [head]
+    stats = (st.get("statistiche", {}).get("statistiche") or {}).get("interpretate") or {}
+    legs = (stats.get("leggendarie") or {}).get("righe") or []
+    if legs:
+        num = lambda v: "–" if v is None else (str(int(v)) if float(v).is_integer() else str(v))  # noqa: E731
+        rows = "".join(f"<tr><td>★ {e(r.get('nome', ''))}</td><td>{num(r.get('winrate'))}%</td>"
+                       f"<td>{num(r.get('partite'))}</td><td>{num(r.get('quota'))}%</td></tr>"
+                       for r in sorted(legs, key=lambda r: -(r.get("winrate_prudente") or r.get("winrate") or 0)))
+        legs_html = ("<h2>Leggendarie (patch attuale)</h2><table><thead><tr><th>Leggendaria</th><th>Winrate</th>"
+                     f"<th>Partite</th><th>Diffusione</th></tr></thead><tbody>{rows}</tbody></table>")
+    else:
+        legs_html = ""
+    if not decks:
+        body.append(legs_html + "<div class='empty' style='margin-top:14px'>Ancora nessun mazzo scaricato: premi AGGIORNA "
+                    "ORA (serve la connessione a internet).</div>")
+        return _write_page("meta.html", "BIG-BOB · mazzi meta", "".join(body))
+    leg_opts = sorted({d.get("leggendaria") or "" for d in decks} - {""})
+    arc_opts = sorted({d.get("archetipo") or "" for d in decks} - {""})
+    opt = lambda xs: "".join(f"<option value='{e(x)}'>{e(x)}</option>" for x in xs)  # noqa: E731
+    body.append("<div id='dlist'>" + legs_html + "<div class='toolbar'>"
+                "<label class='sr' for='dq'>Cerca</label><input id='dq' type='search' placeholder='Cerca un mazzo, una carta, un autore…'>"
+                f"<label class='sr' for='fl'>Leggendaria</label><select id='fl' data-filter='leg'><option value=''>Tutte le leggendarie</option>{opt(leg_opts)}</select>"
+                f"<label class='sr' for='fa'>Archetipo</label><select id='fa' data-filter='arc'><option value=''>Tutti gli archetipi</option>{opt(arc_opts)}</select>"
+                "<label class='sr' for='ds'>Ordina</label><select id='ds'><option value='wr'>Winrate più alto</option>"
+                "<option value='games'>Più partite</option><option value='rating'>Valutazione</option>"
+                "<option value='last'>Più recenti</option></select></div><div class='dgrid' id='dgrid'>")
+    details = []
+    for d in decks:
+        sid = store.slug(d.get("url", d.get("nome", "")))[-60:]
+        wr, games = d.get("winrate"), d.get("partite") or 0
+        cards_txt = " ".join(c.lower() for c in d.get("carte") or [])
+        tag = "<span class='tag'>TORNEO</span>" if d.get("tipo") == "torneo" else ""
+        body.append(
+            f"<button type='button' class='dtile' data-id='{e(sid)}' data-leg='{e(d.get('leggendaria') or '')}' "
+            f"data-arc='{e(d.get('archetipo') or '')}' "
+            f"data-name='{e((d.get('nome', '') + ' ' + (d.get('leggendaria') or '') + ' ' + (d.get('autore') or '') + ' ' + cards_txt).lower())}' "
+            f"data-wr='{wr if wr is not None else -1}' data-games='{games}' data-rating='{d.get('rating') or 0}' "
+            f"data-last='{e(d.get('data') or '')}'>{tag}<span class='nm'>{e(d.get('nome', ''))}</span>"
+            f"<span class='lg'>★ {e(d.get('leggendaria') or '?')} · {e(d.get('archetipo') or '–')} · v{e(str(d.get('versione') or '?'))}</span>"
+            f"<span class='rec'><b>{(str(round(wr)) + '%') if wr is not None else '–'}</b>{games} partite"
+            f"{(' · ★ ' + str(d.get('rating'))) if d.get('rating') else ''}{(' · ' + e(d['autore'])) if d.get('autore') else ''}</span>"
+            f"<span class='wrbar' aria-hidden='true'><i style='width:{wr or 0}%'></i></span></button>")
+        info = [(f"{round(wr)}%" if wr is not None else "–", "WINRATE"), (str(games), "PARTITE"),
+                (str(d.get("rating") or "–"), "VALUTAZIONE"), (str(d.get("versione") or "–"), "VERSIONE")]
+        cards = "".join(f"<span>{e(c)} ×2</span>" for c in d.get("carte") or [])
+        details.append(
+            f"<section class='deckd' id='d-{e(sid)}' hidden><button type='button' class='back' data-back>← TUTTI I MAZZI META</button>"
+            f"<h2 style='font-size:24px;letter-spacing:1px;color:var(--yellow);text-transform:none;margin:6px 0 4px'>{e(d.get('nome', ''))}</h2>"
+            f"<p class='sub'>{e(d.get('archetipo') or '')}{(' · di ' + e(d['autore'])) if d.get('autore') else ''}"
+            f"{(' · ' + e(d['data'])) if d.get('data') else ''}</p>"
+            "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in info) + "</div>"
+            "<h2>Carte</h2><div class='deck'>" + f"<span class='lg'>★ {e(d.get('leggendaria') or '?')}</span>{cards}</div>"
+            + (f"<h2>Descrizione</h2><p>{e(d['descrizione_breve'])}</p>" if d.get("descrizione_breve") else "")
+            + (f"<h2>Guida</h2>{_guide_html(d.get('guida', ''))}" if d.get("guida") else "")
+            + (f"<p style='margin-top:16px'><button type='button' class='back' data-api='open_site' data-arg='{e(d['url'])}'>"
+               "APRI SUL SITO ↗</button></p>" if d.get("url", "").startswith("https://originsmeta.com") else "")
+            + "</section>")
+    body.append("</div></div>" + "".join(details) + f"<script>{LIB_JS}</script>")
+    return _write_page("meta.html", "BIG-BOB · mazzi meta", "".join(body))
+
+
+def _write_page(name: str, title: str, body: str) -> Path:
+    out = LOGS / name
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_page(title, body), encoding="utf-8")
+    return out
+
+
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "biblioteca":
+    if len(sys.argv) > 1 and sys.argv[1] == "meta":
+        print(meta_html())
+    elif len(sys.argv) > 1 and sys.argv[1] == "biblioteca":
         print(library_html(sys.argv[2] if len(sys.argv) > 2 else "mazzi"))
     elif len(sys.argv) > 1 and sys.argv[1] == "laboratorio":
         print(lab_html(sys.argv[2] if len(sys.argv) > 2 else ""))

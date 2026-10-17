@@ -130,6 +130,21 @@ def thumbnail_signature(title: str = "Origins", size=(96, 54), mask=None):
     return img.resize(size)
 
 
+def grab_masked(title: str = "Origins", mask=None, max_width: int = 1024) -> Image.Image:
+    """Cattura del gioco SENZA nascondere BIG-BOB: la zona coperta dalla sua finestra diventa nera.
+    Serve all'osservatore, che guarda la partita tra un F8 e l'altro senza far lampeggiare la finestra."""
+    from PIL import ImageDraw
+    img, (rl, rt, rw, rh) = grab_with_region(title)
+    if mask:
+        sx, sy = img.width / rw, img.height / rh
+        ml, mt, mw, mh = mask
+        ImageDraw.Draw(img).rectangle(((ml - rl) * sx, (mt - rt) * sy, (ml - rl + mw) * sx, (mt - rt + mh) * sy),
+                                      fill=(0, 0, 0))
+    if img.width > max_width:
+        img = img.resize((max_width, int(img.height * max_width / img.width)), Image.LANCZOS)
+    return img
+
+
 def recent_history(n: int = 3) -> list[Path]:
     return sorted(HISTORY.glob("*.png"))[-n:]
 

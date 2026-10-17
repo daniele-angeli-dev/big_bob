@@ -27,10 +27,10 @@ Windows può mostrare "PC protetto da Windows" perché l'installer non è firmat
 comunque*. BIG-BOB compare in **Impostazioni → App installate**, da dove si disinstalla (ti chiede se tenere i dati).
 
 ## Aggiornamenti: te lo dice lui
-A ogni avvio BIG-BOB controlla se c'è una versione nuova. Se c'è, compare un banner con le novità e il pulsante
-**AGGIORNA ORA**: scarica solo le differenze, aggiorna le librerie se sono cambiate, si chiude e si riapre da solo
-(i tuoi dati non vengono toccati). Puoi controllare anche a mano da ⚙ Impostazioni → Controlla aggiornamenti, o dal menu
-Start → BIG-BOB → Aggiorna BIG-BOB. La prima volta GitHub chiede di accedere: fallo una volta da "Aggiorna BIG-BOB".
+A **ogni avvio** (e ogni 3 ore se BIG-BOB resta aperto) controlla se c'è una versione nuova: se c'è si apre la finestra
+con le novità e **AGGIORNA ORA** (in partita basta la barra); se è tutto a posto lo dice nella riga di stato; se il
+controllo non riesce compare una barra rossa con il motivo. AGGIORNA ORA scarica solo le differenze, si chiude e si
+riapre da solo con «Aggiornamento completato» (i tuoi dati non vengono toccati). Anche da ⚙ → Controlla aggiornamenti.
 
 ## Modalità CREAZIONE MAZZO
 Il pulsante della modalità gira tra **ALLENAMENTO → RANKED → CREAZIONE**. In creazione compare il pannello **LABORATORIO**:
@@ -135,45 +135,55 @@ previsto lo capisce, scrive una **lezione** e la rilegge ogni volta che tornano 
   risposte, lezioni e segnalazioni.
 
 ## Durante la partita (finestra Arena)
-In alto vedi **round, mana, chi rivela prima e le 6 barrier** (avversario arancione, tu teal; giallo = a rischio,
-RINF. = rinforzata, max 40) con il punteggio delle barrier distrutte. Sotto, la card gialla **LA MOSSA** e le card
-di minaccia, pescata, mano avversaria e location; poi la chat.
+In alto: **round, mana, chi rivela prima**; la **barra di vantaggio** (stile scacchi: tu teal, avversario arancione) con la
+probabilità di vincere; le **6 barrier** (giallo = a rischio, RINF. = rinforzata, max 40) con le barrier distrutte; i
+**contatori** di carte nel mazzo e in mano per te e per l'avversario. Sotto, la card **LA MOSSA** e le card di minaccia,
+pescata, mano avversaria e location.
+
+**Tasti in alto** (da sinistra): ⚙ impostazioni · **>_** terminale di Claude Code · audio (legge la mossa) · **libro**
+(mazzi, statistiche, studio) · **Origin** (mazzi del meta) · **–** riduci (F10 per riaprire) · **×** chiudi.
+Al primo avvio un **tutorial** spiega ogni tasto; si rivede da ⚙ → RIVEDI IL TUTORIAL.
 
 | Tasto | Cosa fa |
 |---|---|
+| **Modalità** | ALLENAMENTO (consigli) → RANKED (solo numeri) → CREAZIONE (BIG-BOB crea e migliora un mazzo) |
 | **NUOVA** | scegli il mazzo (o scrivi "leggilo dallo schermo e salvalo come X"): Claude inizia a tracciare |
 | **F8** | analisi del round: cattura il gioco e risponde con mossa, minacce e probabilità |
 | chat | domande libere ("se gioca X al centro cosa faccio?", "probabilità di pescare Y in 2 round?") |
-| **REGISTRA** | salva un fotogramma a ogni cambio di schermata (per `/impara-regole`), senza chiamare Claude |
-| **AUTO** | analizza da solo quando lo schermo cambia: la risposta parte prima ancora che tu prema F8 |
-| **FINE** | registra risultato e mazzo avversario nel meta + 3 righe di feedback |
-| **F9** | cattura per la scansione (la finestra lampeggia) |
-| **VOCE** | legge la mossa ad alta voce |
-| **%** | apre le statistiche |
-| **>_** | apre Claude Code per i comandi |
-| **F10** / **–** | nasconde/mostra la finestra · **×** chiude BIG-BOB |
-| **✕** | segnala che l'ultima risposta era sbagliata (finisce nel diario della partita) |
+| **REGISTRA** | salva la partita per studiarla dopo (libro → STUDIO), senza chiamare Claude |
+| **AUTO** | analizza da solo quando lo schermo cambia |
+| **FINE** | registra risultato e mazzo avversario, impara dalla partita, ferma REGISTRA e AUTO |
+| **F9** | cattura per la scansione delle carte |
+| **✕** | segnala che l'ultima risposta era sbagliata (diventa una lezione a fine partita) |
 
-La finestra si trascina dalla barra in alto e può stare sopra il gioco: a ogni cattura si nasconde per un istante.
-Se la grafica nuova non partisse, si apre da sola la **finestra classica** (o lanciala con `avvia_classico.bat`).
+**Osservatore**: durante la partita BIG-BOB salva da solo un fotogramma leggero a ogni schermata nuova (rivelazioni,
+combattimento, scarti), senza chiamare Claude e senza far lampeggiare la finestra. All'F8 successivo Claude riceve i più
+significativi (al massimo 6): così sa delle magie lanciate e scartate e delle creature morte tra un turno e l'altro, e
+contatori e probabilità restano veri. Le carte create da effetti (Spellbook, carta del potere leggendario…) sono tenute a
+parte e non falsano le carte rimaste. Si spegne da ⚙.
 
-Mentre pensa, al posto della mossa compare un riquadro di **caricamento** con quello che sta facendo (guardo lo schermo,
-calcolo le probabilità, simulo il combattimento…) e i secondi trascorsi sui 40 dell'obiettivo. Con **FINE** la vecchia
-mossa sparisce e si fermano anche **REGISTRA** e **AUTO**.
-La finestra mostra solo la **richiesta attuale**: a ogni F8 o domanda la risposta precedente sparisce, e mossa, chip e
-messaggi scorrono insieme con la rotellina. Le risposte passate restano nel diario e in **RIVEDI LA PARTITA**.
+**Barra di vantaggio**: subito dopo ogni analisi c'è una stima rapida fatta coi numeri (barrier, campo, previsione del
+combattimento, carte in mano); poi, mentre leggi la mossa, BIG-BOB la rifinisce in background ragionando su carte,
+location e mano probabile dell'avversario. Non rallenta la risposta. Si spegne da ⚙.
 
-**Il libro: MAZZI · COSA HO IMPARATO · STATISTICHE** (pulsante a forma di libro; % apre direttamente le statistiche).
-Si apre in una finestra di BIG-BOB, non nel browser, con tre schede:
-- **MAZZI**: tutti i mazzi salvati con winrate, partite e ultima partita; cerca e ordina (più giocati, winrate, recenti,
-  nome). Cliccandone uno: carte, winrate con il suo margine, punti deboli, statistiche carta per carta (pescata, giocata,
-  winrate quando giocata e no, round medio), risultati contro ogni leggendaria e ultime partite. I mazzi del laboratorio
-  mostrano anche la storia delle versioni. I dati carta per carta si raccolgono dalle partite giocate da ottobre 2026 in poi.
-- **COSA HO IMPARATO**: per ogni partita e registrazione dice **se** BIG-BOB ha imparato qualcosa e **cosa** (lezioni nuove,
-  rafforzate, confermate o smentite, regole nuove o cambiate, carte e location lette dallo schermo), più gli aggiornamenti
-  dal sito e le regole ancora da scoprire. Le registrazioni non ancora studiate invitano a lanciare `/impara-regole`.
+Mentre pensa compare un riquadro di **caricamento** con il passaggio in corso e i secondi (l'obiettivo dei 40 s vale solo
+in partita). La finestra mostra solo la **richiesta attuale**: le risposte passate restano nel diario e in RIVEDI.
+
+**Il libro** (si apre in una finestra di BIG-BOB, non nel browser) ha tre schede:
+- **MAZZI**: tutti i mazzi salvati con winrate, partite e ultima partita; cerca e ordina. Cliccandone uno: carte, winrate
+  con il suo margine, punti deboli, statistiche carta per carta, risultati contro ogni leggendaria, ultime partite; per i
+  mazzi del laboratorio la storia delle versioni.
 - **STATISTICHE**: winrate per mazzo, avversario e location, tempi di risposta, consigli seguiti.
-A fine partita i pulsanti COSA HO IMPARATO e STATISTICHE aprono la scheda giusta; dal menu Start ci sono le stesse pagine.
+- **STUDIO**: **STUDIA REGISTRAZIONI** fa studiare a BIG-BOB tutte le registrazioni in sospeso, in background: ne ricava
+  regole del gioco e **lezioni di strategia** (chi ha vinto e perché, giocate decisive, errori ricorrenti, abitudini degli
+  avversari); con una partita in corso parte a fine partita. Sotto, **cosa ho imparato** partita per partita.
+
+**Origin**: i mazzi del meta presi da OriginsMeta (lista con winrate, partite, valutazione, autore; filtri per leggendaria
+e archetipo; dettaglio con carte, descrizione e guida), la tabella delle leggendarie, AGGIORNA ORA e il collegamento al sito.
+
+**Consumi**: se sei collegato con una **chiave API** (pagamento a consumo) in basso vedi quanto hai speso oggi e nel mese.
+Con l'abbonamento non compare. Per spendere meno, BIG-BOB in partita carica solo gli strumenti che servono: il contesto
+fisso è passato da ~87.000 a ~18.000 token (avvio sessione −77%, ogni F8 circa −35%).
 
 Ogni partita ha un **diario** in `logs/partite/<data>/diario.md`: per ogni richiesta salva la schermata, gli strumenti
 usati con i tempi, i token generati, la risposta e le tue segnalazioni ✕.

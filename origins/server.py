@@ -3,6 +3,7 @@ e calcolare le probabilità. Avvio: python origins/server.py (lo fa Claude Code 
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from mcp.server.fastmcp import FastMCP, Image  # noqa: E402
 
-from origins import combat, deckproj, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
+from origins import combat, deckproj, evaluate, lab, lessons, odds, originsmeta, rules, store  # noqa: E402
 from origins.store import canonical, load, now, save  # noqa: E402
 
 mcp = FastMCP("origins")
@@ -294,7 +295,8 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
                  my_destroyed: int | None = None, opp_destroyed: int | None = None,
                  reveals_first: str | None = None, my_deck_left: int | None = None,
                  my_reinforced: list[bool] | None = None, opp_reinforced: list[bool] | None = None,
-                 board: dict | None = None, note: str = "") -> str:
+                 board: dict | None = None, my_created: list[str] | None = None,
+                 opp_created: list[str] | None = None, opp_deck_left: int | None = None, note: str = "") -> str:
     """Aggiorna lo stato della partita con ciò che vedi sullo schermo e restituisce già le probabilità
     (mia prossima pescata, pescata giocabile, mano avversaria): NON serve chiamare anche my_draw_odds o
     opponent_hand_odds, che restano per domande specifiche (es. "entro 2 round"). Le liste di carte sono lo stato
@@ -308,12 +310,17 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
       allo slot 1 avversario; null = vuoto. Con Daniele gli slot si chiamano sempre 1, 2, 3 (mai 0).
       Con board la risposta include la PREVISIONE DEL COMBATTIMENTO se nessuno gioca altro.
     reveals_first: "io" o "avversario" (chi rivela per primo in questo round).
-    my_deck_left: carte rimaste nel mio mazzo se il gioco lo mostra (serve a controllare il conteggio)."""
+    my_deck_left / opp_deck_left: carte rimaste nel mio mazzo / in quello avversario se il gioco le mostra (sono la
+      fonte più affidabile per i contatori).
+    my_created / opp_created: lista COMPLETA delle carte arrivate NON dal mazzo (la carta del potere leggendario,
+      carte generate da Spellbook o da altri effetti, token): non contano come pescate dal mazzo. Le carte pescate in
+      più da effetti invece vanno normalmente in mano/giocate (vengono dal mazzo)."""
     m = load("match")
     if not m:
         return "Nessuna partita attiva: usa start_match."
     upd = {"turno": turn, "mia_mano": my_hand, "miei_giocati": my_played, "miei_scartati": my_discarded,
-           "avv_giocati": opp_played, "avv_scartati": opp_discarded}
+           "avv_giocati": opp_played, "avv_scartati": opp_discarded, "miei_creati": my_created,
+           "avv_creati": opp_created}
     for k, v in upd.items():
         if v is not None:
             m[k] = _canon_list(v) if isinstance(v, list) else v
@@ -327,7 +334,8 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
     extra = {"mana": mana, "barrier_mie": my_barriers, "barrier_avv": opp_barriers,
              "distrutte_a_me": my_destroyed, "distrutte_da_me": opp_destroyed,
              "rivela_prima": reveals_first, "mazzo_rimasto_visibile": my_deck_left,
-             "rinforzate_mie": my_reinforced, "rinforzate_avv": opp_reinforced, "campo": board}
+             "rinforzate_mie": my_reinforced, "rinforzate_avv": opp_reinforced, "campo": board,
+             "avv_mazzo_visibile": opp_deck_left}
     for k, v in extra.items():
         if v is not None:
             m[k] = v
@@ -342,13 +350,31 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
     view = _match_view(m)
     if my_deck_left is not None:
         full = odds.deck_counts(m["leggendaria_mia"], m["carte_mie"])
-        seen = odds.counts(m.get("mia_mano", []) + m.get("miei_giocati", []) + m.get("miei_scartati", []))
+        seen = dict(evaluate.seen_mine(m))
         calc = sum(odds.remaining_deck(full, seen).values())
         if calc != my_deck_left:
             view += (f"\n⚠ Il gioco mostra {my_deck_left} carte nel mazzo ma dal tracciamento ne risultano {calc}: "
                      "probabilmente manca una carta in mano/campo/scarti, o un effetto ha aggiunto/rimosso carte.")
-    return ("Stato aggiornato.\n" + view + _locations_summary(m) + _combat_summary(m) + "\n\n" + _odds_summary(m)
-            + _lessons_summary(m))
+    return ("Stato aggiornato.\n" + view + _counters_summary(m) + _locations_summary(m) + _combat_summary(m) + "\n\n"
+            + _odds_summary(m) + _lessons_summary(m))
+
+
+def _counters_summary(m: dict) -> str:
+    c = evaluate.counters(m)
+    ev = evaluate.heuristic(m)
+    est = lambda flag: " (stimato)" if flag else ""  # noqa: E731
+    return (f"\n\nCONTATORI: tu mazzo {c['mio_mazzo']}{est(c['mio_mazzo_stimato'])} · mano {c['mia_mano']}"
+            f" | avversario mazzo {c['avv_mazzo'] if c['avv_mazzo'] is not None else '?'}{est(c['avv_mazzo_stimato'])}"
+            f" · mano {c['avv_mano'] if c['avv_mano'] is not None else '?'}"
+            f"\nSTIMA RAPIDA: vinci al {ev['pct']}% ({ev['motivo']})")
+
+
+@mcp.tool()
+def set_match_eval(mia_percentuale: int, motivo: str = "") -> str:
+    """Salva la tua stima di chi sta vincendo (la barra sopra le barrier nella finestra): mia_percentuale = probabilità
+    che Daniele vinca (1-99), motivo = mezza riga. Ragiona su barrier e barrier distrutte, campo, carte in mano e mazzo,
+    location e carte probabili dell'avversario."""
+    return _j(evaluate.save_eval(mia_percentuale, motivo))
 
 
 def _locations_summary(m: dict) -> str:
@@ -393,7 +419,7 @@ def _odds_summary(m: dict, top: int = 6) -> str:
     """Probabilità già calcolate sullo stato appena salvato (evita altre chiamate e numeri vecchi)."""
     lines = ["PROBABILITÀ (calcolate sullo stato aggiornato):"]
     full = odds.deck_counts(m["leggendaria_mia"], m["carte_mie"])
-    seen = odds.counts(m.get("mia_mano", []) + m.get("miei_giocati", []) + m.get("miei_scartati", []))
+    seen = dict(evaluate.seen_mine(m))
     mine = odds.my_draw_odds(full, seen, 1)
     rem_n = mine["carte_nel_mazzo"]
     per = ", ".join(f"{e['carta']} {round(e['p'] * 100)}%" for e in mine["per_carta"][:top])
@@ -407,7 +433,7 @@ def _odds_summary(m: dict, top: int = 6) -> str:
         lines.append(f"- Pescata giocabile al prossimo round (costo ≤{mana + 1}): "
                      f"{round(odds.p_at_least_one(rem_n, playable, 1) * 100)}%")
     if m.get("avv_mano") is not None:
-        seen_o = odds.counts(m.get("avv_giocati", []) + m.get("avv_scartati", []))
+        seen_o = dict(evaluate.seen_opp(m))
         o = odds.opponent_hand_odds(load("meta"), m.get("avv_leggendaria") or None, seen_o, m["avv_mano"])
         arch = ", ".join(f"{a['nome']} {round(a['peso'] * 100)}%" for a in o.get("archetipi_compatibili", [])[:3])
         hand = ", ".join(f"{e['carta']} {round(e['p_in_mano'] * 100)}%" for e in o.get("per_carta", [])[:top])
@@ -451,7 +477,7 @@ def my_draw_odds(draws: int = 1, cards: list[str] | None = None) -> str:
     if not m:
         return "Nessuna partita attiva."
     full = odds.deck_counts(m["leggendaria_mia"], m["carte_mie"])
-    seen = odds.counts(m.get("mia_mano", []) + m.get("miei_giocati", []) + m.get("miei_scartati", []))
+    seen = dict(evaluate.seen_mine(m))
     return _j(odds.my_draw_odds(full, seen, draws, _canon_list(cards) or None))
 
 
@@ -464,7 +490,7 @@ def opponent_hand_odds(top: int = 10) -> str:
         return "Nessuna partita attiva."
     if m.get("avv_mano") is None:
         return "Mi serve il numero di carte in mano all'avversario (update_match opp_hand_size)."
-    seen = odds.counts(m.get("avv_giocati", []) + m.get("avv_scartati", []))
+    seen = dict(evaluate.seen_opp(m))
     res = odds.opponent_hand_odds(load("meta"), m.get("avv_leggendaria") or None, seen, m["avv_mano"])
     res["per_carta"] = res["per_carta"][:top]
     for e in res["per_carta"]:
@@ -841,6 +867,19 @@ def set_rules_numbers(mano_iniziale: int | None = None, pescate_per_turno: int |
     save("config", cfg)
     return _j(r)
 
+
+# Sessione di partita: solo gli strumenti che servono in partita (meno contesto = risposte più rapide ed economiche).
+# La sessione di creazione mazzi/studio e Claude Code nel terminale vedono tutto.
+LIVE_TOOLS = {
+    "get_screen", "update_match", "simulate_combat", "mulligan_advice", "get_card", "search_cards", "get_location",
+    "start_match", "end_match", "get_match", "my_draw_odds", "opponent_hand_odds", "record_lesson", "lesson_review",
+    "rules_get", "rules_upsert", "upsert_cards", "upsert_locations", "note_round", "set_match_eval", "list_decks",
+    "save_deck", "validate_deck", "deck_project_status", "deck_project_propose", "community_stats", "community_decks",
+}
+if os.environ.get("BIGBOB_TOOLSET") == "live":
+    for _name in [t.name for t in mcp._tool_manager.list_tools()]:
+        if _name not in LIVE_TOOLS:
+            mcp.remove_tool(_name)
 
 if __name__ == "__main__":
     mcp.run()

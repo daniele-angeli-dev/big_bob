@@ -87,6 +87,21 @@ Con `update_match` passa sempre anche `my_reinforced` / `opp_reinforced` se una 
 Quando indichi dove giocare una carta, gli slot si contano **da 1** (slot 1, 2, 3, come nel CAMPO di
 `update_match`), mai da 0: es. `▶ Marian al centro, slot 2`.
 
+**Osservatore.** Durante la partita BIG-BOB salva da solo un fotogramma a ogni schermata nuova e, all'F8, ti allega
+i più significativi (richiesta "[OSSERVATORE]", prima della schermata attuale; la zona nera è la finestra di BIG-BOB).
+Usali per ricostruire ciò che è successo tra un F8 e l'altro: carte avversarie giocate anche se poi distrutte o
+scartate, magie lanciate, creature morte, carte create, pescate extra. Tutto va in `update_match`.
+
+**Contatori di mazzo e mano.** Se lo schermo mostra quante carte ci sono nei mazzi passa `my_deck_left` /
+`opp_deck_left` (sono la fonte più affidabile). Le carte arrivate NON dal mazzo (la carta del potere leggendario, carte
+generate da Spellbook o da altri effetti, token) vanno in `my_created` / `opp_created` (liste complete): così non
+falsano carte rimaste e probabilità. Le pescate extra da effetti vengono dal mazzo: mettile in mano/giocate come le
+altre. `update_match` restituisce i CONTATORI e una STIMA RAPIDA di chi sta vincendo.
+
+**Barra di vantaggio.** Dopo la risposta live, nel turno in background, chiami `set_match_eval` con la probabilità che
+Daniele vinca (1-99): parti dalla STIMA RAPIDA e correggila con ciò che i numeri non vedono (effetti delle carte,
+location, carte probabili dell'avversario, chi rivela prima, fatica). Mai durante la risposta live.
+
 **Conti di combattimento: non farli a mente.** Passa sempre `board` a `update_match` (creature in campo
 per corsia e slot, con le statistiche attuali): ti restituisce la PREVISIONE DEL COMBATTIMENTO se nessuno
 gioca altro. Se la mossa migliore non è evidente, fai UNA chiamata `simulate_combat` con 2-3 scenari

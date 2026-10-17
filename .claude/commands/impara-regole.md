@@ -1,5 +1,5 @@
 ---
-description: Studia una partita registrata (⏺ Registra) e ne deduce le regole
+description: Studia una partita registrata (⏺ Registra): regole del gioco e lezioni di strategia
 argument-hint: [nome registrazione, opzionale]
 ---
 Studia una registrazione di partita e aggiorna il regolamento.
@@ -20,8 +20,12 @@ Studia una registrazione di partita e aggiorna il regolamento.
    - non promuovere mai a confermata una cosa solo dedotta e mai vista accadere
 5. Se una carta si comporta in modo diverso dal suo testo nel database, aggiungi una nota alla
    carta con `upsert_cards` (campo `note`).
-6. `mark_recording_done` con un riassunto di 3 righe.
-7. Rispondi con: regole nuove, regole confermate, contraddizioni trovate, dubbi rimasti e
+6. **Studio strategico**: chi ha vinto e perché, le giocate che hanno spostato la partita (corsia scelta, tempi, colpi
+   di chiusura, difese mancate), errori ricorrenti di Daniele, abitudini dell'avversario, come hanno reso le carte del
+   mazzo. Per ognuna `record_lesson` (tipo strategia, mossa_avversaria o mossa_vincente; carte coinvolte;
+   fonte "registrazione <nome>"): una frase pratica e generale, non la cronaca.
+7. `mark_recording_done` con un riassunto di 3 righe (regole + strategia).
+8. Rispondi con: regole nuove, regole confermate, contraddizioni trovate, dubbi rimasti e
    1-2 esperimenti da fare contro il bot per chiarirli.
 
 Alla fine ricorda a Daniele che trova tutto ciò che hai imparato da questa registrazione nella pagina

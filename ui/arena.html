@@ -76,6 +76,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .bv{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bv.avv{color:var(--orange-t)} .bv.me{color:var(--teal-t)} .bv.risk{color:var(--yellow)}
 .score{display:flex;justify-content:center;align-items:center;gap:12px}
+/* barra di vantaggio (stile scacchi) e contatori di mazzo e mano */
+.evalb{display:flex;height:22px;border-radius:6px;overflow:hidden;font-weight:700;font-size:12px;letter-spacing:.5px;background:var(--orange)}
+.ev-me{background:var(--teal);color:var(--bg);display:flex;align-items:center;padding-left:8px;white-space:nowrap;transition:width .6s ease;min-width:0}
+.ev-opp{flex:1;color:#241000;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;white-space:nowrap;min-width:0}
+.ev-why{font-size:11px;color:var(--dim);margin-top:-6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (prefers-reduced-motion: reduce){.ev-me{transition:none}}
+.counts{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;color:var(--dim)}
+.counts b{color:#fff;font-size:14px}
+.counts .me b{color:var(--teal-t)}.counts .op b{color:var(--orange-t)}
+.counts .est{opacity:.7;font-weight:600}
 .score .n{font-family:var(--display);font-size:26px}
 .score .l{font-weight:700;font-size:12px;letter-spacing:2px;color:var(--dim)}
 .empty{padding:6px 0;text-align:center;color:var(--dim);font-weight:600}
@@ -141,6 +151,15 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .tbar.late i{background:#FF4D6D}
 .tbar{position:relative}
 .tbar b{position:absolute;top:0;bottom:0;width:2px;background:var(--dim);left:75%}
+/* tutorial: riquadro che evidenzia un tasto + scheda con la spiegazione */
+.tut{position:fixed;inset:0;z-index:30}
+.tut-hole{position:fixed;border:3px solid var(--yellow);border-radius:10px;box-shadow:0 0 0 9999px rgba(20,8,45,.82);transition:all .25s ease;pointer-events:none}
+.tut-card{position:fixed;left:12px;right:12px;background:var(--panel);border:2px solid var(--yellow);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.tut-card h2{margin:0;font-family:var(--display);font-weight:400;font-size:20px;color:var(--yellow);font-style:italic;letter-spacing:1px}
+.tut-card p{margin:0;font-size:14px;line-height:1.4}
+.tut-step{font-size:11px;font-weight:700;color:var(--dim);letter-spacing:1px}
+@media (prefers-reduced-motion: reduce){.tut-hole{transition:none}}
+.usage{font-size:12px;font-weight:700;color:var(--yellow);margin-top:-2px}
 .status{font-size:12px;color:var(--dim);min-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* aggiornamento */
@@ -195,8 +214,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
       <button class="wbtn" id="btnSet" aria-label="Impostazioni" title="Impostazioni: collegamento a Claude, modello, opzioni"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="8" cy="8" r="2.4"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg></button>
       <button class="wbtn" id="btnTerm" aria-label="Apri Claude Code per i comandi" title="Apri Claude Code (/scansiona, /mazzo, /lezioni…)" style="font-family:var(--body);font-size:13px">&gt;_</button>
       <button class="wbtn vbtn" id="btnVoice" aria-pressed="false" aria-label="Voce: legge la mossa ad alta voce" title="Voce: legge la mossa ad alta voce"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"></path><path class="wave" d="M11 5.5c1 .8 1 4.2 0 5M12.8 3.8c2 1.8 2 6.6 0 8.4"></path></svg></button>
-      <button class="wbtn" id="btnLearn" aria-label="Mazzi, cosa ho imparato e statistiche" title="Mazzi, cosa ho imparato e statistiche"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5C6.5 2.4 4.3 2 2 2.2v10.2c2.3-.2 4.5.2 6 1.3 1.5-1.1 3.7-1.5 6-1.3V2.2c-2.3-.2-4.5.2-6 1.3z"></path><path d="M8 3.5v10.2"></path></svg></button>
-      <button class="wbtn" id="btnStats" aria-label="Statistiche" title="Statistiche">%</button>
+      <button class="wbtn" id="btnLearn" aria-label="Libro: mazzi, statistiche e studio" title="Libro: i tuoi mazzi, le statistiche e lo studio"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5C6.5 2.4 4.3 2 2 2.2v10.2c2.3-.2 4.5.2 6 1.3 1.5-1.1 3.7-1.5 6-1.3V2.2c-2.3-.2-4.5.2-6 1.3z"></path><path d="M8 3.5v10.2"></path></svg></button>
+      <button class="wbtn" id="btnOrigin" aria-label="Origin: mazzi del meta da OriginsMeta" title="Origin: i mazzi del meta da OriginsMeta"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.3"></circle><path d="M10.6 5.4 9.1 9.1 5.4 10.6 6.9 6.9z" fill="currentColor"></path></svg></button>
       <button class="wbtn" id="btnHide" aria-label="Nascondi (F10 per riaprire)" title="Nascondi · F10 per riaprire">–</button>
       <button class="wbtn" id="btnQuit" aria-label="Chiudi BIG-BOB" title="Chiudi BIG-BOB">×</button>
     </div>
@@ -234,8 +253,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         <div class="round" id="hRound">ROUND –</div>
         <div class="mana"><div class="manac" id="hMana" aria-label="Mana">–</div><div class="manal">MANA<br>rivela prima: <b id="hFirst">–</b></div></div>
       </div>
+      <div class="evalb" id="hEval" role="img" aria-label="Chi sta vincendo"><div class="ev-me" id="hEvMe" style="width:50%">TU 50%</div><div class="ev-opp" id="hEvOpp">50% AVV</div></div>
+      <div class="ev-why" id="hEvWhy"></div>
       <div class="lanes" id="hLanes"></div>
       <div class="score"><div class="n" style="color:var(--teal)" id="hMine">0</div><div class="l">BARRIER DISTRUTTE</div><div class="n" style="color:var(--orange)" id="hOpp">0</div></div>
+      <div class="counts"><div class="me" id="hCntMe">TU · MAZZO <b>–</b> · MANO <b>–</b></div><div class="op" id="hCntOpp">AVV · MAZZO <b>–</b> · MANO <b>–</b></div></div>
     </div>
   </section>
 
@@ -265,6 +287,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     </form>
     <div class="timer"><div class="tbar" id="tbar" title="Obiettivo: risposta entro 40 secondi"><i id="tfill"></i><b></b></div><div id="tlab">pronto</div></div>
     <div class="status" id="status"></div>
+    <div class="usage hidden" id="usage" title="Costo delle risposte di Claude con la tua chiave API (prezzi di listino)"></div>
   </footer>
 </div>
 
@@ -340,8 +363,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     <label class="opt"><input type="checkbox" id="oVoce"> Leggi la mossa ad alta voce</label>
     <label class="opt"><input type="checkbox" id="oImpara"> Impara dalle sorprese tra i round</label>
     <label class="opt"><input type="checkbox" id="oTerm"> Apri anche il terminale di Claude Code all'avvio (serve solo per i comandi)</label>
+    <label class="opt"><input type="checkbox" id="oObs"> Osserva la partita tra un F8 e l'altro (vede magie scartate e creature morte)</label>
+    <label class="opt"><input type="checkbox" id="oEval"> Barra di vantaggio: BIG-BOB stima chi sta vincendo dopo ogni risposta</label>
     <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (al primo avvio di ogni giorno)</label>
     <label class="opt" for="oThink">Tetto ragionamento live (token) <input class="inp" id="oThink" type="number" min="0" step="500" style="width:90px;height:34px;flex-grow:0"></label>
+    <div class="btnrow" style="align-items:center"><span class="hint">Spiegazione dei tasti</span><button type="button" class="btn2" id="btnTut">RIVEDI IL TUTORIAL</button></div>
     <div class="sec">VERSIONE</div>
     <div class="btnrow" style="align-items:center"><span class="hint" id="verTxt">–</span><button type="button" class="btn2" id="btnCheck">CONTROLLA AGGIORNAMENTI</button></div>
     <div class="btnrow" style="align-items:center"><span class="hint">Mazzi, statistiche e carte da originsmeta.com</span><button type="button" class="btn2" id="btnMeta">AGGIORNA META ORA</button></div>
@@ -349,6 +375,15 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   </form>
 </div>
 <div class="flash" id="flash"></div>
+<div class="tut hidden" id="tut" role="dialog" aria-modal="true" aria-labelledby="tutT">
+  <div class="tut-hole" id="tutHole"></div>
+  <div class="tut-card" id="tutCard">
+    <div class="tut-step" id="tutStep">1/12</div>
+    <h2 id="tutT">BENVENUTO</h2>
+    <p id="tutTxt"></p>
+    <div class="bbtns"><button type="button" class="no" id="tutSkip">SALTA</button><button type="button" class="no" id="tutBack">INDIETRO</button><button type="button" class="ok" id="tutNext">AVANTI</button></div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -380,6 +415,22 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('hMana').textContent = m.mana != null ? m.mana : '–';
     var f = (m.rivela_prima || '').toLowerCase();
     $('hFirst').textContent = f ? (f.indexOf('io') === 0 || f.indexOf('tu') === 0 || f.indexOf('me') === 0 ? 'TU' : 'AVV') : '–';
+    var ev = m.valutazione || {}, pct = ev.pct != null ? ev.pct : 50;
+    $('hEvMe').style.width = pct + '%'; $('hEvMe').textContent = pct >= 18 ? 'TU ' + pct + '%' : pct + '%';
+    $('hEvOpp').textContent = (100 - pct) >= 18 ? (100 - pct) + '% AVV' : (100 - pct) + '%';
+    $('hEval').setAttribute('aria-label', 'Probabilità di vittoria: tu ' + pct + '%, avversario ' + (100 - pct) + '%');
+    $('hEvWhy').textContent = ev.motivo ? ((ev.fonte === 'BIG-BOB' ? 'BIG-BOB: ' : 'stima rapida: ') + ev.motivo) : '';
+    $('hEvWhy').title = $('hEvWhy').textContent;
+    var c = m.contatori || {};
+    function cnt(el, who, deck, est, hand){
+      el.innerHTML = '';
+      el.appendChild(document.createTextNode(who + ' · MAZZO '));
+      var b1 = document.createElement('b'); b1.textContent = deck != null ? deck : '–'; if (est) b1.className = 'est'; b1.title = est ? 'stimato dalle carte uscite' : 'letto dallo schermo'; el.appendChild(b1);
+      el.appendChild(document.createTextNode(' · MANO '));
+      var b2 = document.createElement('b'); b2.textContent = hand != null ? hand : '–'; el.appendChild(b2);
+    }
+    cnt($('hCntMe'), 'TU', c.mio_mazzo, c.mio_mazzo_stimato, c.mia_mano);
+    cnt($('hCntOpp'), 'AVV', c.avv_mazzo, c.avv_mazzo_stimato, c.avv_mano);
     $('hMine').textContent = m.distrutte_da_me != null ? m.distrutte_da_me : 0;
     $('hOpp').textContent = m.distrutte_a_me != null ? m.distrutte_a_me : 0;
     var box = $('hLanes'); box.innerHTML = '';
@@ -455,6 +506,58 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   $('btnLabStats').onclick = function(){ call('open_lab'); };
   $('btnLabApply').onclick = function(){ call('lab_apply'); };
 
+  /* ---------- tutorial (prima volta; si rivede dalle impostazioni) ---------- */
+  var TUT = [
+    [null, 'BENVENUTO IN BIG-BOB', 'Ti mostro in un minuto a cosa servono i tasti. Puoi saltare quando vuoi e rivederlo dalle impostazioni.'],
+    ['btnSet', 'IMPOSTAZIONI', 'Collegamento a Claude e modello, opzioni (voce, osservatore, barra di vantaggio), aggiornamenti e questo tutorial.'],
+    ['btnTerm', 'TERMINALE', 'Apre Claude Code per i comandi avanzati: /mazzo, /scansiona, /lezioni, /postpartita…'],
+    ['btnVoice', 'AUDIO', 'Se è acceso, BIG-BOB legge la mossa ad alta voce.'],
+    ['btnLearn', 'LIBRO', 'I tuoi mazzi con le statistiche, le statistiche generali e lo Studio: cosa ha imparato BIG-BOB e lo studio delle registrazioni.'],
+    ['btnOrigin', 'ORIGIN', 'I mazzi del meta presi da OriginsMeta: liste, winrate, guide, e il collegamento al sito.'],
+    ['btnHide', 'RIDUCI E CHIUDI', 'Il trattino nasconde BIG-BOB (F10 per riaprirlo), la X lo chiude.'],
+    ['btnMode', 'MODALITÀ', 'ALLENAMENTO: ti consiglia le mosse. RANKED: solo numeri, nessun consiglio. CREAZIONE: BIG-BOB crea un mazzo e lo migliora con le partite di test.'],
+    ['btnAuto', 'AUTO E REGISTRA', 'AUTO analizza da solo quando lo schermo cambia. REGISTRA salva la partita per studiarla dopo nello Studio.'],
+    ['btnNew', 'NUOVA E FINE', 'NUOVA all\'inizio della partita (scegli il mazzo), FINE alla fine: BIG-BOB salva la partita e impara.'],
+    ['hud', 'LA PARTITA', 'Round e mana, la barra di chi sta vincendo, le barrier delle tre corsie e le carte nel mazzo e in mano di entrambi.'],
+    ['btnF8', 'F8, F9 E ✕', 'F8 (anche dalla tastiera) analizza il round e ti dà la mossa. F9 cattura una schermata per leggere carte nuove. ✕ segnala una risposta sbagliata, così BIG-BOB impara.'],
+    ['q', 'CHIEDI A BIG-BOB', 'Scrivi qui qualsiasi domanda sulla partita, sulle carte o sui mazzi.']
+  ];
+  var tutI = 0;
+  function tutShow(i){
+    tutI = Math.max(0, Math.min(TUT.length - 1, i));
+    var st = TUT[tutI], target = st[0] ? $(st[0]) : null;
+    $('tut').classList.remove('hidden');
+    $('tutStep').textContent = (tutI + 1) + '/' + TUT.length; $('tutT').textContent = st[1]; $('tutTxt').textContent = st[2];
+    $('tutBack').classList.toggle('hidden', tutI === 0);
+    $('tutNext').textContent = tutI === TUT.length - 1 ? 'HO CAPITO' : 'AVANTI';
+    var hole = $('tutHole'), card = $('tutCard');
+    if (target){
+      if (target.id === 'btnHide'){ var r1 = $('btnHide').getBoundingClientRect(), r2 = $('btnQuit').getBoundingClientRect();
+        var r = {left: r1.left, top: r1.top, right: r2.right, bottom: r2.bottom}; }
+      else if (target.id === 'btnNew'){ var a = $('btnNew').getBoundingClientRect(), b = $('btnEnd').getBoundingClientRect(); var r = {left: a.left, top: a.top, right: b.right, bottom: b.bottom}; }
+      else if (target.id === 'btnAuto'){ var a2 = $('btnAuto').getBoundingClientRect(), b2 = $('btnRec').getBoundingClientRect(); var r = {left: a2.left, top: a2.top, right: b2.right, bottom: b2.bottom}; }
+      else var r = target.getBoundingClientRect();
+      hole.style.display = 'block';
+      hole.style.left = (r.left - 5) + 'px'; hole.style.top = (r.top - 5) + 'px';
+      hole.style.width = (r.right - r.left + 10) + 'px'; hole.style.height = (r.bottom - r.top + 10) + 'px';
+      var below = r.bottom + 14, h = card.offsetHeight || 150;
+      card.style.top = (below + h < window.innerHeight ? below : Math.max(10, r.top - h - 14)) + 'px';
+    } else {
+      hole.style.display = 'block'; hole.style.left = '50%'; hole.style.top = '45%'; hole.style.width = '0px'; hole.style.height = '0px';
+      card.style.top = Math.round(window.innerHeight * 0.32) + 'px';
+    }
+    $('tutNext').focus();
+  }
+  function tutEnd(){ $('tut').classList.add('hidden'); call('tutorial_done'); }
+  $('tutNext').onclick = function(){ if (tutI >= TUT.length - 1) tutEnd(); else tutShow(tutI + 1); };
+  $('tutBack').onclick = function(){ tutShow(tutI - 1); };
+  $('tutSkip').onclick = tutEnd;
+  document.addEventListener('keydown', function(e){
+    if ($('tut').classList.contains('hidden')) return;
+    if (e.key === 'Escape') tutEnd(); else if (e.key === 'ArrowRight') $('tutNext').click(); else if (e.key === 'ArrowLeft' && tutI > 0) tutShow(tutI - 1);
+  });
+  var tutAsked = false;
+
   /* ---------- timer ---------- */
   var STEPS = { get_screen: 'Guardo lo schermo…', update_match: 'Aggiorno la partita e calcolo le probabilità…',
     simulate_combat: 'Simulo il combattimento…', mulligan_advice: 'Valuto il mulligan…', get_card: 'Leggo una carta…',
@@ -503,6 +606,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('tlab').textContent = b ? ('risposta in ' + Math.round(secs) + ' s · obiettivo ' + b + ' s') : ('fatto in ' + Math.round(secs) + ' s');
   }
 
+  function showUsage(u){
+    var el = $('usage');
+    if (!u){ el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.textContent = 'Consumi chiave API · oggi ' + Number(u.oggi).toFixed(2) + ' $ · mese ' + Number(u.mese).toFixed(2) + ' $';
+  }
   function renderState(s){
     state = Object.assign(state, s); ROUND = s.round_seconds || ROUND; BUDGET = s.budget_seconds || BUDGET;
     SCALE = Math.round(BUDGET / 0.75);
@@ -516,6 +625,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('btnVoice').setAttribute('aria-pressed', s.voice ? 'true' : 'false');
     $('btnVoice').classList.toggle('hidden', s.voice_available === false);
     if (!!s.busy !== $('btnF8').disabled) setBusy(!!s.busy);
+    showUsage(s.consumi);
+    if (s.tutorial && !tutAsked){ tutAsked = true; setTimeout(function(){ if (!open) tutShow(0); }, 700); }
   }
 
   /* ---------- eventi da Python ---------- */
@@ -530,6 +641,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
         case 'busy': setBusy(ev.value, ev.what, ev.budget); if (ev.value) $('status').textContent = ev.budget === 0 ? 'Sto lavorando…' : 'Sto guardando…'; break;
         case 'answer': showThinking(false); renderAnswer(ev); break;
         case 'timing': setTiming(ev.secs, ev.budget); $('status').textContent = ''; break;
+        case 'usage': showUsage(ev); break;
         case 'state': renderState(ev); break;
         case 'hud': renderHud(ev.match); break;
         case 'clear': $('chat').innerHTML = ''; $('move').classList.add('hidden'); $('chips').classList.add('hidden'); break;
@@ -627,7 +739,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     $('apiKey').value = ''; $('apiKey').placeholder = v.api_key_impostata ? 'chiave salvata · scrivi per cambiarla' : 'sk-ant-…';
     $('modello').value = v.modello_live || 'sonnet';
     $('oVoce').checked = v.voce !== false; $('oImpara').checked = v.apprendimento_live !== false;
-    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false;
+    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false; $('oObs').checked = v.osservatore !== false; $('oEval').checked = v.barra_vantaggio !== false;
     $('oThink').value = v.max_thinking_live != null ? v.max_thinking_live : 4000;
     $('verTxt').textContent = 'Versione ' + (ev.versione || '–') + (ev.claude_trovato ? '' : ' · Claude Code non trovato');
     syncApi();
@@ -641,7 +753,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
     e.preventDefault();
     var vals = { connessione: connValue(), modello_live: $('modello').value, voce: $('oVoce').checked,
       apprendimento_live: $('oImpara').checked, apri_claude_code_all_avvio: $('oTerm').checked,
-      meta_originsmeta: $('oMeta').checked, max_thinking_live: parseInt($('oThink').value || '0', 10) };
+      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10) };
     var k = $('apiKey').value.trim(); if (k) vals.api_key = k;
     hide(); call('save_settings', vals);
   };
@@ -674,7 +786,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   $('btnF9').onclick = function(){ call('scan'); };
   $('btnHide').onclick = function(){ call('toggle_visibility'); };
   $('btnQuit').onclick = function(){ call('quit'); };
-  $('btnStats').onclick = function(){ call('open_stats'); };
+  $('btnOrigin').onclick = function(){ call('open_origin'); };
+  $('btnTut').onclick = function(){ hide(); setTimeout(function(){ tutShow(0); }, 120); };
   $('btnLearn').onclick = function(){ call('open_library', 'mazzi'); };
   $('btnTerm').onclick = function(){ call('open_terminal'); };
   $('form').onsubmit = function(e){ e.preventDefault(); var v = $('q').value.trim(); if (!v) return; $('q').value = ''; call('chat', v); };

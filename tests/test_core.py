@@ -103,6 +103,26 @@ c = json.loads(call("deck_curve", legendary="Robin Hood", cards=deck_cards))
 assert c["carte"] == 25 and c["creature"] == 25 and c["vita_totale"] == 24 * 2 + 8, c
 assert any(k.startswith("p_almeno_una_giocabile") for k in c), c
 
+# --- contatori di mazzo e mano, carte create, stima di chi vince ---
+from origins import evaluate  # noqa: E402
+call("start_match", my_deck="Test", opponent_legendary="Robin Hood")
+call("update_match", turn=3, my_hand=["Carta 1", "Carta 2", "Carta 5"], my_played=["Carta 3", "Carta 4"],
+     my_created=["Carta 5"], opp_played=["Carta 6", "Carta 7", "Carta 8"], opp_created=["Carta 8"], opp_hand_size=4,
+     my_barriers=[20, 20, 20], opp_barriers=[20, 5, 20], my_destroyed=0, opp_destroyed=1)
+m = store.load("match")
+c_ = evaluate.counters(m)
+assert c_["mio_mazzo"] == 25 - 4 and c_["mio_mazzo_stimato"], c_   # Carta 5 creata: non esce dal mazzo
+assert c_["avv_mazzo"] == 25 - (2 + 4) and c_["avv_mano"] == 4, c_  # Carta 8 creata
+out = call("update_match", turn=3, my_deck_left=19, opp_deck_left=18)
+assert "CONTATORI: tu mazzo 19 · mano 3 | avversario mazzo 18 · mano 4" in out and "STIMA RAPIDA" in out, out
+ev = evaluate.heuristic(store.load("match"))
+assert ev["pct"] > 55, ev  # una barrier già distrutta e un'altra a 5
+assert json.loads(call("set_match_eval", mia_percentuale=64, motivo="campo migliore"))["pct"] == 64
+assert evaluate.current_eval(store.load("match")) == {"pct": 64, "motivo": "campo migliore", "fonte": "BIG-BOB"}
+call("update_match", turn=4)
+assert evaluate.current_eval(store.load("match"))["fonte"] == "stima rapida", "la stima di BIG-BOB vale per il suo round"
+store.save("match", {})
+
 # --- regolamento ---
 from origins import rules  # noqa: E402
 
