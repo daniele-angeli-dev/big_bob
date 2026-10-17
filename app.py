@@ -270,6 +270,9 @@ class Api:
     def sync_brain(self):
         self._c.sync_brain()
 
+    def sync_brain_now(self):
+        return self._c.sync_brain_now()
+
     def brain_consent(self, ok=True):
         self._c.brain_consent(bool(ok))
 

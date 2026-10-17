@@ -2,6 +2,7 @@
 Lancia diagnostica.bat con il gioco aperto e copia/manda il risultato."""
 import importlib
 import platform
+import json
 import shutil
 import sys
 import threading
@@ -100,6 +101,27 @@ cl = configura.find_claude()
 riga(OK if cl else KO, f"comando claude: {cl or 'non installato -> riapri BIG-BOB: lo installa da solo'}")
 riga(OK if (ROOT / ".mcp.json").exists() else KO,
      ".mcp.json presente" if (ROOT / ".mcp.json").exists() else ".mcp.json mancante -> rilancia installa.bat")
+
+# 7. Cervello comune
+print("\n--- Cervello comune ---")
+try:
+    import urllib.request
+    from origins import cervello
+    url = cervello.config()["url"]
+    if not url:
+        riga(KO, "indirizzo del server non configurato")
+    else:
+        t0 = time.time()
+        with urllib.request.urlopen(urllib.request.Request(url + "/v1/stato", headers={"user-agent": "BIG-BOB diagnostica"}),
+                                    timeout=15) as r:
+            data = json.loads(r.read())
+        riga(OK if data.get("ok") else KO, f"server raggiungibile in {time.time() - t0:.1f} s ({data.get('giocatori')} giocatori)")
+    esito = (cervello.status() or {}).get("ultimo_esito") or {}
+    if esito:
+        riga(OK if esito.get("ok") else KO, f"ultima sincronizzazione {esito.get('quando')}: "
+                                            f"{'riuscita' if esito.get('ok') else esito.get('errore')}")
+except Exception as e:  # noqa: BLE001
+    riga(KO, f"server non raggiungibile: {e}")
 
 print("\n=== RISULTATO ===")
 if problemi:

@@ -13,6 +13,9 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **17/10/2026**
+- Cervello comune: SINCRONIZZA ORA nello Studio ora aspetta e mostra l'esito lì (inviati, ricevuti, tempo o il
+  problema preciso); un errore nell'invio non blocca più la ricezione; l'ultimo esito si vede anche in ⚙ e in
+  `diagnostica.bat`, che ora controlla anche il server.
 - **Cronologia delle partite** nel libro (scheda PARTITE): ogni partita con risultato, mazzi e tipo di avversario; con
   un clic, richiesta per richiesta, la schermata inviata (si ingrandisce), la mossa suggerita, cosa hai giocato davvero
   (con «consiglio seguito» / «giocata diversa»), cosa ha giocato l'avversario e le barrier dopo.

@@ -29,7 +29,7 @@ from origins import store
 
 # Indirizzo del server comune (pubblicato con pubblica_cervello.bat). Si può cambiare con "cervello_url" in config.json.
 DEFAULT_URL = "https://bigbob-cervello.angeli-daniele01.workers.dev"
-TIMEOUT = 20
+TIMEOUT = 15
 SYNC_EVERY_HOURS = 3
 FONTE = "cervello"
 CAMPI_CARTA = ("nome", "testo", "costo", "attacco", "vita", "tipo", "rarita", "potere", "leggendaria",
@@ -338,11 +338,24 @@ def sync(force: bool = False, opener=None) -> dict:
         return {"saltato": "server non configurato"}
     if not force and not due():
         return {"saltato": "fatto da poco"}
-    out = {"invio": send(opener), "ricezione": download(opener)}
+    import logging
+    log = logging.getLogger("bigbob")
+    t0 = time.time()
+    out = {}
+    for key, fn in (("invio", send), ("ricezione", download)):  # un errore nell'invio non blocca la ricezione
+        try:
+            out[key] = fn(opener)
+        except Exception as e:  # noqa: BLE001
+            log.exception("cervello comune: %s", key)
+            out[key] = {"errore": f"{type(e).__name__}: {e}"}
+    out["secondi"] = round(time.time() - t0, 1)
+    st = load_state()
+    errs = [f"{k}: {v['errore']}" for k, v in out.items() if isinstance(v, dict) and v.get("errore")]
+    st["ultimo_esito"] = {"quando": store.now(), "ok": not errs, "errore": "; ".join(errs)[:300] or None,
+                          "secondi": out["secondi"]}
     if "errore" not in out["ricezione"]:
-        st = load_state()
         st["ultimo_sync_ts"] = time.time()
-        _save_json(STATE_FILE, st)
+    _save_json(STATE_FILE, st)
     return out
 
 
@@ -452,6 +465,7 @@ def lessons_view(cards: list[str] | None = None, limit: int = 4, local: list[dic
 def status() -> dict:
     cfg, st, k = config(), _load_json(STATE_FILE, {}), _load_json(KNOW_FILE, {})
     return {"attivo": bool(cfg["url"]), "contribuisci": cfg["contribuisci"], "usa": cfg["usa"],
+            "ultimo_esito": st.get("ultimo_esito"),
             "giocatori": k.get("giocatori"), "regole": len(k.get("regole") or []),
             "lezioni": len(k.get("lezioni") or []), "partite": k.get("partite"),
             "aggiornato": (k.get("creato") or "")[:16].replace("T", " "), "ultimo_invio": st.get("ultimo_invio"),
@@ -462,8 +476,10 @@ def summary_line(rep: dict | None = None) -> str:
     s = status()
     if not s["attivo"]:
         return "Cervello comune non ancora configurato."
+    esito = s.get("ultimo_esito") or {}
     if not s["giocatori"]:
-        base = "Cervello comune collegato: ancora nessun dato."
+        base = ("Cervello comune: ultima sincronizzazione non riuscita" if esito.get("errore") and not rep
+                else "Cervello comune collegato: ancora nessun dato.")
     else:
         base = (f"Cervello comune: {s['giocatori']} giocatori · {s['regole']} regole · {s['lezioni']} lezioni · "
                 f"{s['partite'] or 0} partite")
@@ -475,6 +491,8 @@ def summary_line(rep: dict | None = None) -> str:
         err = (rep.get("invio") or {}).get("errore") or (rep.get("ricezione") or {}).get("errore")
         if err:
             base += f" · problema: {err}"
+    elif esito.get("errore"):
+        base += f" · ultimo problema ({esito.get('quando')}): {esito['errore']}"
     return base
 
 

@@ -673,11 +673,23 @@ class Controller:
             return
         threading.Timer(3, self._sync_brain, kwargs={"force": True, "manual": False}).start()
 
-    def _sync_brain(self, force: bool, manual: bool) -> None:
+    def sync_brain_now(self) -> dict:
+        """Per il pulsante della pagina Studio: sincronizza e restituisce l'esito da mostrare lì."""
         from origins import cervello
-        if getattr(self, "_brain_running", False):
-            return
-        self._brain_running = True
+        rep = self._sync_brain(force=True, manual=True) or {}
+        errs = [v.get("errore") for v in (rep.get("invio"), rep.get("ricezione")) if isinstance(v, dict) and v.get("errore")]
+        return {"ok": not errs and not rep.get("saltato"), "riga": rep.get("saltato") or cervello.summary_line(rep),
+                "errore": "; ".join(errs) or None, "secondi": rep.get("secondi")}
+
+    def _sync_brain(self, force: bool, manual: bool) -> dict | None:
+        from origins import cervello
+        lock = self.__dict__.setdefault("_brain_lock", threading.Lock())
+        # se c'è già una sincronizzazione in corso (es. quella dell'avvio) aspetto che finisca invece di ignorare il clic
+        if not lock.acquire(timeout=90 if manual else 0):
+            if manual:
+                self.say("Cervello comune: un'altra sincronizzazione è bloccata da più di un minuto e mezzo. "
+                         "Controlla la connessione e riprova.", "warn")
+            return {"saltato": "sincronizzazione già in corso"}
         try:
             if manual:
                 self.status("Sincronizzo il cervello comune…")
@@ -686,7 +698,7 @@ class Controller:
             if rep.get("saltato"):
                 if manual:
                     self.say(f"Cervello comune: {rep['saltato']}.", "dim")
-                return
+                return rep
             ric = rep.get("ricezione") or {}
             news = ric.get("carte_aggiunte") or ric.get("carte_aggiornate")
             if manual or news:
@@ -694,13 +706,16 @@ class Controller:
                                                       f"{(ric.get('carte_aggiunte') or 0) + (ric.get('carte_aggiornate') or 0)}"
                                                       if news else ""), "lesson")
             if manual:
-                self.status("Cervello comune sincronizzato")
+                self.status("Cervello comune sincronizzato" if "problema" not in cervello.summary_line(rep)
+                            else "Cervello comune: sincronizzazione con problemi")
+            return rep
         except Exception as e:  # noqa: BLE001
             log.exception("cervello comune")
             if manual:
                 self.say(f"Cervello comune non raggiungibile: {e}", "warn")
+            return {"invio": {"errore": str(e)}, "ricezione": {}}
         finally:
-            self._brain_running = False
+            lock.release()
 
     def brain_consent(self, ok: bool) -> None:
         cfg = store.load("config")

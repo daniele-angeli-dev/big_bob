@@ -74,6 +74,7 @@ tr.weak td{background:#5A1630}
 .deck span.lg{background:var(--yellow);color:var(--bg);font-weight:700}
 @media (max-width:720px){.ver{grid-template-columns:1fr}}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.apires{margin-top:8px;font-weight:600}.apires:empty{display:none}.apires.ok{color:#7DEDE2}.apires.ko{color:#FFB3C1}
 /* libreria: schede MAZZI / COSA HO IMPARATO / STATISTICHE */
 .libhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
@@ -686,6 +687,17 @@ LIB_JS = """
       var api = window.pywebview && window.pywebview.api;
       var fn = api && api[b.dataset.api];
       if (!fn) { b.textContent = 'Apri questa pagina da BIG-BOB'; return; }
+      if (b.dataset.wait){  // aspetta l'esito e lo mostra qui
+        var label = b.textContent, res = b.parentNode.querySelector('.apires');
+        b.disabled = true; b.textContent = b.dataset.busy || '…'; if (res) res.textContent = '';
+        fn().then(function(r){
+          if (res){ res.textContent = (r && r.riga) || 'Fatto.'; res.className = 'apires ' + (r && r.ok ? 'ok' : 'ko');
+            if (r && r.errore && (r.riga || '').indexOf(r.errore) < 0) res.textContent += ' · problema: ' + r.errore;
+            if (r && r.secondi != null) res.textContent += ' (' + r.secondi + ' s)'; }
+        }, function(err){ if (res){ res.textContent = 'Errore: ' + (err && err.message || err); res.className = 'apires ko'; } })
+        .then(function(){ b.disabled = false; b.textContent = label; });
+        return;
+      }
       fn.apply(null, b.dataset.arg ? [b.dataset.arg] : []);
       if (b.dataset.done) { b.textContent = b.dataset.done; b.disabled = true; }
     });
@@ -742,8 +754,8 @@ def brain_body() -> str:
            f"{' · aggiornato ' + e(st['aggiornato']) if st['aggiornato'] else ''}. Regole e lezioni scoperte dagli altri "
            "giocatori di BIG-BOB: le usa anche il coach in partita. "
            f"{'Contribuisci in forma anonima.' if st['contribuisci'] else 'Non stai inviando i tuoi dati.'} "
-           "<button type='button' class='back' style='margin:0 0 0 8px' data-api='sync_brain' "
-           "data-done='SINCRONIZZAZIONE AVVIATA'>SINCRONIZZA ORA</button></div>"]
+           "<button type='button' class='back' style='margin:0 0 0 8px' data-api='sync_brain_now' data-wait='1' "
+           "data-busy='SINCRONIZZO…'>SINCRONIZZA ORA</button><div class='apires' aria-live='polite'></div></div>"]
     if not st["usa"]:
         out.append("<div class='empty'>L'uso della conoscenza comune è spento nelle impostazioni.</div>")
         return "".join(out)

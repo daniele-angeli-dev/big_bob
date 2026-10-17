@@ -208,6 +208,24 @@ check(cervello.knowledge() == {} and "spento" in report.brain_body(), "uso spent
 cfg["cervello_usa"] = True
 store.save("config", cfg)
 
+print("5b. un errore nell'invio non blocca la ricezione, e l'esito resta scritto")
+_orig_send = cervello.send
+cervello.send = lambda opener=None: (_ for _ in ()).throw(ValueError("dati strani"))
+out = cervello.sync(force=True, opener=FakeServer(KNOW))
+cervello.send = _orig_send
+check("dati strani" in out["invio"]["errore"] and ("scaricato" in out["ricezione"] or "invariato" in out["ricezione"]),
+      f"ricezione fatta lo stesso: {out}")
+st = cervello.status()
+check(st["ultimo_esito"]["ok"] is False and "dati strani" in st["ultimo_esito"]["errore"], "esito salvato")
+check("problema" in cervello.summary_line() or "dati strani" in cervello.summary_line(out), "e mostrato nella riga")
+
+class Down:
+    def open(self, req, timeout=None):
+        raise urllib.error.URLError("timed out")
+out = cervello.sync(force=True, opener=Down())
+check(out["invio"].get("errore") and out["ricezione"].get("errore") and "timed out" in cervello.summary_line(out),
+      f"server irraggiungibile: errore chiaro ({cervello.summary_line(out)})")
+
 print("6. stesso testo, stesse regole di unione del server")
 check(cervello.tokens("Una barrier a 0 si rigenera a 40 e il danno in eccesso non passa") ==
       ["0", "40", "barrier", "danno", "eccesso", "passa", "rigenera"], "tokens come merge.js")
