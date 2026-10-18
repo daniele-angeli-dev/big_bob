@@ -102,6 +102,16 @@ def upsert_cards(cards: list[dict], patch: str = "") -> str:
 
 
 @mcp.tool()
+def propose_card_effect(carta: str, effetti: list[dict], motivo: str = "") -> str:
+    """Propone l'effetto alla rivelazione di una carta che spiega un combattimento diverso dal simulato (turno di
+    apprendimento). effetti: [{"tipo": "danno_barrier" | "danno_fronte" | "potenzia", "valore": N, "vita": M (solo
+    potenzia)}]; motivo: la prova (round, barrier previste e reali). Non cambia la carta: Daniele la conferma con un
+    clic, poi il simulatore la usa. Usalo invece di scrivere 'effetti' con upsert_cards quando l'effetto è dedotto."""
+    from origins import proposals
+    return _j(proposals.propose(carta, effetti, motivo))
+
+
+@mcp.tool()
 def upsert_locations(locations: list[dict], patch: str = "") -> str:
     """Aggiunge/aggiorna location: {nome, testo, rarita, note}."""
     return _j(store.upsert("locations", locations, patch or None))
@@ -278,7 +288,7 @@ def start_match(my_deck: str, opponent_legendary: str = "") -> str:
          "turno": 0, "mia_mano": [], "miei_giocati": [], "miei_scartati": [],
          "avv_leggendaria": canonical(opponent_legendary) if opponent_legendary else "",
          "avv_giocati": [], "avv_scartati": [], "avv_mano": None, "location": [], "note": [],
-         "viste_in_mano": [], "prima_giocata": {}, "inizio": now(), **deckproj.tag_match(d["nome"])}
+         "viste_in_mano": [], "prima_giocata": {}, "inizio": now(), "id": __import__("uuid").uuid4().hex[:12], **deckproj.tag_match(d["nome"])}
     save("match", m)
     if m.get("progetto"):  # il pannello LABORATORIO segue il mazzo che stai giocando
         deckproj.set_options(m["progetto"], attivo=True)
@@ -478,6 +488,11 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
                                     + "; ".join(vc["differenze"]) + " (effetto di carta o regola non simulata?)")
         except Exception:  # noqa: BLE001
             pass
+        try:
+            from origins import tuning
+            tuning.record_round(m)
+        except Exception:  # noqa: BLE001
+            pass
     # previsione delle carte avversarie: prima controllo com'è andata quella del round scorso, poi ne faccio una nuova
     try:
         chk = archetype.check_previous(m)
@@ -495,6 +510,11 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
         prev_s = m.get("sorprese_round") or {}
         voci = (prev_s.get("voci") or []) if prev_s.get("turno") == m.get("turno") else []
         m["sorprese_round"] = {"turno": m.get("turno"), "voci": list(dict.fromkeys(voci + sorprese))}
+    try:  # lo stato del round per l'analisi della partita a fine partita (origins/review.py)
+        from origins import review
+        review.capture(m)
+    except Exception:  # noqa: BLE001
+        pass
     save("match", m)
     view = _match_view(m)
     if my_deck_left is not None:
@@ -579,7 +599,8 @@ def _moves_summary(m: dict) -> str:
         pr = archetype.predict(m)
         opp = [x for x in (pr.get("giocabili") or pr.get("carte") or []) if x.get("giocabile", True)]
         r = search.search(m, opp, pr.get("p_giocabile"))
-        m["ricerca"] = {"turno": m.get("turno"), "mosse": r.get("mosse", [])[:3]}
+        m["ricerca"] = {"turno": m.get("turno"), "mosse": r.get("mosse", [])[:3], "dominante": r.get("dominante"),
+                        "magie": r.get("magie", [])}
         save("match", m)
         rows = search.lines(r)
     except Exception as e:  # noqa: BLE001
@@ -742,7 +763,14 @@ def end_match(result: str, opponent_cards_seen: list[str] | None = None, notes: 
                 "mazzo_avversario_stimato": (ident.get("mazzi") or [{}])[0].get("nome")})
     save("matches", log)
     save("match", {})
-    return _j({"salvata": True, "archetipo": arch})
+    taratura = None
+    if result in ("vittoria", "sconfitta"):
+        try:
+            from origins import tuning
+            taratura = tuning.record_result(m, result == "vittoria")
+        except Exception:  # noqa: BLE001
+            pass
+    return _j({"salvata": True, "archetipo": arch, "taratura": taratura})
 
 
 # ======================= META =======================
@@ -1174,6 +1202,7 @@ LIVE_TOOLS = {
     "start_match", "end_match", "get_match", "my_draw_odds", "opponent_hand_odds", "record_lesson", "lesson_review",
     "rules_get", "rules_upsert", "upsert_cards", "upsert_locations", "note_round", "set_match_eval", "list_decks",
     "save_deck", "validate_deck", "deck_project_status", "opponent_deck", "deck_project_propose", "community_stats", "community_decks",
+    "propose_card_effect",
 }
 if os.environ.get("BIGBOB_TOOLSET") == "live":
     for _name in [t.name for t in mcp._tool_manager.list_tools()]:

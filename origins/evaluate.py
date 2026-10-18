@@ -161,7 +161,7 @@ def _sign(x: float, soglia: float) -> int:
     return 1 if x > soglia else (-1 if x < -soglia else 0)
 
 
-def heuristic(m: dict) -> dict:
+def heuristic(m: dict, raw: bool = False) -> dict:
     """Stima rapida (senza Claude) della mia probabilità di vincere, in percentuale, con le voci che la spiegano e i tre
     fattori per la finestra (campo, mano, barrier: +1 vantaggio, 0 parità, -1 svantaggio, None = non si sa)."""
     by, to = m.get("distrutte_da_me") or 0, m.get("distrutte_a_me") or 0
@@ -212,8 +212,18 @@ def heuristic(m: dict) -> dict:
         if abs(c["mia_mano"] - c["avv_mano"]) >= 2:
             parts.append("più carte in mano" if s > 0 else "l'avversario ha più carte in mano")
     pct = 100 / (1 + math.exp(-score * 1.6))
+    fonte = "stima rapida"
+    if not raw:
+        # calibrata sui risultati veri delle partite di Daniele (origins/tuning.py), quando ce ne sono abbastanza
+        try:
+            from origins import tuning
+            cal = tuning.calibrate(pct)
+            if cal != pct:
+                pct, fonte = cal, "stima rapida calibrata"
+        except Exception:  # noqa: BLE001
+            pass
     return {"pct": int(round(max(3, min(97, pct)))), "motivo": ", ".join(parts) or "partita in equilibrio",
-            "fonte": "stima rapida", "fattori": f}
+            "fonte": fonte, "fattori": f}
 
 
 def current_eval(m: dict) -> dict:

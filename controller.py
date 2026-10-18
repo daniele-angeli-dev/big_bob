@@ -152,7 +152,10 @@ PROMPT_IMPARA = (
     "il round precedente: se Daniele ha seguito il tuo consiglio (true/false, null se non si capisce) e com'è andata "
     "('bene'/'male'/'neutro' + mezza riga). Se non c'è nessuna sorpresa non chiamare record_lesson. "
     "Quando una lezione vale solo in certe situazioni passa anche condizioni (mana, round, tipo di mazzo avversario, "
-    "leggendarie, corsia): così torna fuori solo quando serve.\n{contesto}"
+    "leggendarie, corsia): così torna fuori solo quando serve. Se il combattimento è stato diverso dal previsto e "
+    "la differenza si spiega con un effetto alla rivelazione di una carta (danno alla barrier o alla creatura di "
+    "fronte, potenziamento), proponilo con propose_card_effect (non scriverlo con upsert_cards): Daniele lo conferma "
+    "con un clic.\n{contesto}"
     "{valuta}Rispondi in una sola riga: 'ok' oppure cosa hai imparato."
 )
 PROMPT_VALUTA = (
@@ -291,7 +294,13 @@ class ClaudeSession:
             self.proc = None
 
     def ask(self, content: list[dict], timeout: float = 120.0):
-        """Invia un messaggio e restituisce gli eventi fino al risultato (generatore)."""
+        """Invia un messaggio e restituisce gli eventi fino al risultato (generatore). Una richiesta alla volta per
+        sessione (il preriscaldamento non si mescola con l'F8)."""
+        lock = self.__dict__.setdefault("_ask_lock", threading.Lock())
+        with lock:
+            yield from self._ask(content, timeout)
+
+    def _ask(self, content: list[dict], timeout: float):
         self.ensure()
         msg = {"type": "user", "message": {"role": "user", "content": content}}
         try:
@@ -321,7 +330,7 @@ class ClaudeSession:
                     # Claude Code vecchio: niente anteprima della mossa, ma tutto il resto funziona
                     ClaudeSession.PARTIAL = False
                     log.warning("--include-partial-messages non supportato: anteprima della mossa spenta")
-                    yield from self.ask(content, max(5.0, deadline - time.time()))
+                    yield from self._ask(content, max(5.0, deadline - time.time()))
                     return
                 raise RuntimeError("Claude Code si è chiuso: " + text[-400:])
             yield ev
@@ -786,6 +795,8 @@ class Controller:
             self._startup_meta()
         finally:
             self._startup_brain()
+        self._review_soon(announce=False)
+        self._weekly_report()
 
     def _startup_meta(self) -> None:
         from origins import originsmeta
@@ -864,6 +875,57 @@ class Controller:
         return {"ok": not errs and not rep.get("saltato"), "riga": rep.get("saltato") or cervello.summary_line(rep),
                 "errore": "; ".join(errs) or None, "secondi": rep.get("secondi")}
 
+    def _review_soon(self, announce: bool = True) -> None:
+        """Analisi della partita appena finita (e di quelle rimaste indietro), in background: mossa per mossa,
+        come la revisione dei motori di scacchi."""
+        def run():
+            from origins import review
+            lock = self.__dict__.setdefault("_review_lock", threading.Lock())
+            if not lock.acquire(blocking=False):
+                return
+            try:
+                n = review.review_pending()
+                if not n or not announce:
+                    return
+                last = (store.load("matches") or [{}])[-1].get("revisione") or {}
+                if last.get("precisione") is None:
+                    return
+                c = last.get("conteggi") or {}
+                bad = ", ".join(f"{c[k]} {k}" for k in ("errore grave", "errore", "imprecisione") if c.get(k))
+                dec = last.get("momento_decisivo")
+                self.say(f"Analisi della partita: precisione {last['precisione']}%" + (f" · {bad}" if bad else
+                         " · nessun errore") + (f" · momento decisivo: round {dec['turno']}" if dec else ""), "lesson")
+                self.emit({"type": "action", "label": "ANALISI MOSSA PER MOSSA", "call": "open_replay"})
+                if c.get("errore grave") or c.get("errore"):
+                    self.emit({"type": "action", "label": "ESERCIZI DAGLI ERRORI", "call": "open_exercises"})
+            except Exception:  # noqa: BLE001
+                log.exception("analisi della partita")
+            finally:
+                lock.release()
+        threading.Thread(target=run, daemon=True, name="bb-revisione").start()
+
+    def _weekly_report(self) -> None:
+        """Una volta a settimana, all'avvio: il riassunto della settimana in chat, con il link alle statistiche."""
+        from origins import report
+        try:
+            cfg = store.load("config")
+            last = cfg.get("report_settimanale_visto") or ""
+            if last and time.time() - time.mktime(time.strptime(last, "%Y-%m-%d")) < 6.5 * 86400:
+                return
+            w = report.week_stats()
+            if w["partite"] < 3:
+                return
+            self.say("Report della settimana: " + w["riga"], "lesson")
+            self.emit({"type": "action", "label": "REPORT DELLA SETTIMANA", "call": "open_stats"})
+            cfg = store.load("config")
+            cfg["report_settimanale_visto"] = time.strftime("%Y-%m-%d")
+            store.save("config", cfg)
+        except Exception:  # noqa: BLE001
+            log.exception("report settimanale")
+
+    def open_exercises(self) -> None:
+        self.open_library("esercizi")
+
     def _sync_brain(self, force: bool, manual: bool) -> dict | None:
         from origins import cervello
         lock = self.__dict__.setdefault("_brain_lock", threading.Lock())
@@ -917,7 +979,8 @@ class Controller:
     SETTINGS_KEYS = ("modello_live", "connessione", "voce", "apprendimento_live", "apri_claude_code_all_avvio",
                      "max_thinking_live", "modalita", "meta_originsmeta", "osservatore", "barra_vantaggio",
                      "cervello_contribuisci", "cervello_usa", "invisibile_catture", "lettura_veloce",
-                     "contesto_pulito", "lettura_anticipata", "ragionamento_dosato")
+                     "contesto_pulito", "lettura_anticipata", "ragionamento_dosato", "mossa_istantanea",
+                     "inizio_fine_automatici", "zone_lettori", "cache_calda", "atlante")
 
     def get_settings(self) -> None:
         from origins import cervello, spazio, updates
@@ -940,7 +1003,9 @@ class Controller:
         extra = {k: vals[k] for k in ("voce", "apprendimento_live", "apri_claude_code_all_avvio",
                                       "meta_originsmeta", "osservatore", "barra_vantaggio", "cervello_contribuisci",
                                       "cervello_usa", "invisibile_catture", "lettura_veloce", "contesto_pulito",
-                                      "lettura_anticipata", "ragionamento_dosato") if k in vals}
+                                      "lettura_anticipata", "ragionamento_dosato", "mossa_istantanea",
+                                      "inizio_fine_automatici", "zone_lettori", "cache_calda", "atlante")
+                 if k in vals}
         if "max_thinking_live" in vals:
             try:
                 extra["max_thinking_live"] = max(0, int(vals["max_thinking_live"]))
@@ -1456,8 +1521,22 @@ class Controller:
         except Exception:  # noqa: BLE001
             predicted = []
         import base64
-        shot_img = {"type": "image", "source": {"type": "base64", "media_type": "image/png",
-                                                "data": base64.b64encode(shot.read_bytes()).decode()}}
+        import io
+        from origins import atlas
+        cfg = store.load("config")
+        zones_on = cfg.get("zone_lettori", True)
+        self._reads = getattr(self, "_reads", 0) + 1
+        calibrate = cfg.get("atlante", True) and self._reads % atlas.CALIBRA_OGNI == 1
+
+        def jpeg(im) -> dict:
+            buf = io.BytesIO()
+            im.convert("RGB").save(buf, "JPEG", quality=88)
+            return {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                "data": base64.b64encode(buf.getvalue()).decode()}}
+        with Image.open(shot) as full:
+            full.load()
+            img_mine = jpeg(reader.zone_crop(full, "mio")) if zones_on else jpeg(full)
+            img_opp = jpeg(full) if (calibrate or not zones_on) else jpeg(reader.zone_crop(full, "avv"))
         frame_imgs = []
         for i, f in enumerate(frames, 1):
             try:
@@ -1468,8 +1547,10 @@ class Controller:
                      if f.get("foglio") else f"Fotogramma {i} · {f.get('ora', '')} · {f.get('zona', '')}")
             frame_imgs += [{"type": "text", "text": label},
                            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data}}]
-        jobs = {"mio": [shot_img, {"type": "text", "text": reader.prompt("mio", m, predicted)}],
-                "avv": frame_imgs + [shot_img, {"type": "text", "text": reader.prompt("avv", m, predicted)}]}
+        jobs = {"mio": [img_mine, {"type": "text", "text": reader.prompt("mio", m, predicted, cropped=zones_on)}],
+                "avv": frame_imgs + [img_opp, {"type": "text", "text": reader.prompt(
+                    "avv", m, predicted, cropped=zones_on and not calibrate, boxes=calibrate)}]}
+        self._zones_used = zones_on
         out: dict = {}
         times: dict = {}
 
@@ -1487,7 +1568,7 @@ class Controller:
             threading.Thread(target=self._warm_reader, args=(r,), daemon=True).start()
         return out.get("mio"), out.get("avv"), times
 
-    def _apply_reading(self, mine: dict, opp: dict) -> tuple[str, dict, list[str]]:
+    def _apply_reading(self, mine: dict, opp: dict, shot: Path | None = None) -> tuple[str, dict, list[str]]:
         """Unisce le letture, controlla che siano coerenti con lo stato di prima e chiama update_match. Prima aspetta
         che il turno di apprendimento del round prima sia finito: anche quello scrive lo stato della partita."""
         from origins import reader
@@ -1498,8 +1579,86 @@ class Controller:
         before = store.load("match")
         args, warn = reader.merge(mine, opp)
         warn += reader.check(before, args)
+        self._zone_guard(mine, opp)
+        if shot is not None:
+            try:
+                from origins import atlas
+                with Image.open(shot) as img:
+                    img.load()
+                    if isinstance(opp.get("riquadri"), dict) and args.get("board"):
+                        n_new = atlas.learn(img, opp["riquadri"], args["board"])
+                        log.info("atlante: %s carte imparate %s", n_new, atlas.stats())
+                    elif args.get("board"):
+                        warn += atlas.check(img, args["board"])
+            except Exception:  # noqa: BLE001
+                log.exception("atlante")
         state = srv.update_match(**args)
         return state, args, warn
+
+    def _zone_guard(self, mine: dict, opp: dict) -> None:
+        """Se con le zone ritagliate un lettore non trova più un dato importante (mana, barrier), dopo due volte si
+        torna alla schermata intera: la grafica del gioco può avere le cose in posti diversi da quelli previsti."""
+        if not getattr(self, "_zones_used", False):
+            return
+        missing = (not isinstance((mine or {}).get("mana"), int) or not (mine or {}).get("my_barriers")
+                   or not (opp or {}).get("opp_barriers"))
+        self._zone_miss = (getattr(self, "_zone_miss", 0) + 1) if missing else 0
+        if self._zone_miss >= 2:
+            cfg = store.load("config")
+            cfg["zone_lettori"] = False
+            store.save("config", cfg)
+            self._zone_miss = 0
+            self.say("Lettura a zone spenta: con la schermata ritagliata mancava qualche dato. I lettori tornano a "
+                     "guardare la schermata intera.", "dim")
+
+    def _detect_start(self) -> None:
+        """Schermata del mulligan riconosciuta senza una partita aperta: NUOVA automatica con l'ultimo mazzo usato e
+        subito il consiglio sul mulligan."""
+        from origins import reader
+        if self.busy or self._match_active or not self.readers:
+            return
+        try:
+            shot = screen.capture(store.load("config").get("titolo_finestra", "Origins"),
+                                  ROOT / "logs" / "lettore")
+            import base64
+            with Image.open(shot) as im:
+                small = im.convert("RGB").resize((960, int(im.height * 960 / im.width)))
+                import io
+                buf = io.BytesIO()
+                small.save(buf, "JPEG", quality=80)
+            shot.unlink(missing_ok=True)
+            txt = self.readers["mio"].read([{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                                         "data": base64.b64encode(buf.getvalue()).decode()}},
+                                            {"type": "text", "text": reader.CLASSIFY}], timeout=20)
+            res = reader.parse_json(txt) or {}
+        except Exception:  # noqa: BLE001
+            log.exception("riconoscimento dell'inizio partita")
+            return
+        finally:
+            threading.Thread(target=self._warm_reader, args=(self.readers["mio"],), daemon=True).start()
+        log.info("che schermata è: %s", res)
+        if res.get("fase") not in ("mulligan", "gioco") or self._match_active:
+            return
+        deck = store.load("config").get("ultimo_mazzo")
+        if not deck or not store.get_deck(deck):
+            self.say("Vedo una partita che inizia: premi NUOVA e scegli il mazzo.", "dim")
+            return
+        self.say(f"Partita riconosciuta: la apro io con il mazzo «{deck}» (se è un altro, premi NUOVA).", "dim")
+        self.new_match(deck)
+        self.analyze(auto=False)
+
+    def _maybe_auto_end(self, mine: dict | None) -> bool:
+        """Schermata di fine partita riconosciuta: FINE automatico con il risultato letto."""
+        if not mine or mine.get("fase") != "fine" or not store.load("config").get("inizio_fine_automatici", True):
+            return False
+        res = mine.get("risultato")
+        if res not in ("vittoria", "sconfitta"):
+            return False
+        if not (store.FILES["match"].exists() and store.load("match")):
+            return False
+        self.say(f"Fine partita riconosciuta: {res}. La chiudo io.", "dim")
+        self.end_match(res)
+        return True
 
     def _fresh_pre(self) -> dict | None:
         """La lettura anticipata, se lo schermo da allora non è cambiato e non ci sono fotogrammi nuovi."""
@@ -1534,6 +1693,7 @@ class Controller:
             if not reader.usable(mine, opp):
                 with self._obs_lock:  # i fotogrammi restano per l'F8
                     self.obs_frames = frames + self.obs_frames
+                self._maybe_auto_end(mine)
                 return
             # solo la lettura: lo stato della partita si aggiorna all'F8, se lo schermo intanto non è cambiato (così
             # non si registrano carte che stai ancora trascinando, e non si scrive mentre BIG-BOB impara)
@@ -1559,7 +1719,7 @@ class Controller:
             self._pre = None
             if pre:
                 shot, region = pre["shot"], pre["region"]
-                state, args, warn = self._apply_reading(pre["mine"], pre["opp"])
+                state, args, warn = self._apply_reading(pre["mine"], pre["opp"], pre["shot"])
                 self._journal("")
                 self._journal(f"Lettura anticipata usata (fatta {time.time() - pre['t']:.0f}s prima dell'F8 in "
                               f"{pre['secs']}s, {pre['frames']} immagini dell'osservatore)\n"
@@ -1572,6 +1732,9 @@ class Controller:
                 self._journal("")
                 if not reader.usable(mine, opp):
                     fase = (mine or {}).get("fase")
+                    if self._maybe_auto_end(mine):
+                        self.busy = False
+                        return True
                     if mine is None or opp is None:  # i lettori non rispondono: dopo due volte giro normale
                         self._fast_fail = getattr(self, "_fast_fail", 0) + 1
                         if self._fast_fail >= 2:
@@ -1592,12 +1755,13 @@ class Controller:
                               kind="live", frames=frames, shot=shot, region=region)
                     return True
                 self._fast_fail = 0
-                state, args, warn = self._apply_reading(mine, opp)
+                state, args, warn = self._apply_reading(mine, opp, shot)
                 self._journal(f"Lettura veloce: {time.time() - t0:.1f}s (lato tuo {times.get('mio')}s, avversario "
                               f"{times.get('avv')}s, {len(frames)} immagini dell'osservatore)\n"
                               f"update_match: {json.dumps(args, ensure_ascii=False)}")
                 log.info("lettura veloce in %.1fs %s", time.time() - t0, times)
         self._emit_hud(force=True)
+        self._instant_and_alerts(t0)
         prompt = PROMPT_TURNO_LETTO.format(mode=self._mode(), recenti=self._recent_text(),
                                            avvisi="; ".join(warn) or "nessuno", stato=state)
         if getattr(self, "pilot_on", False) and self._mode() != "ranked":
@@ -1605,6 +1769,35 @@ class Controller:
         self.busy = False
         self._ask(prompt, label=None if auto else "Analisi round", attach=True, kind="live", shot=shot, region=region)
         return True
+
+    def _instant_and_alerts(self, t0: float) -> None:
+        """Subito dopo la lettura, prima che Claude risponda: la mossa calcolata se è nettamente la migliore (Claude poi
+        la conferma o la corregge) e gli avvisi di chiusura (puoi vincere / rischi di perdere)."""
+        if self._mode() == "ranked" or not store.FILES["match"].exists():
+            return
+        m = store.load("match") or {}
+        r = m.get("ricerca") or {}
+        if r.get("turno") != m.get("turno") or not r.get("mosse"):
+            return
+        top = r["mosse"][0]
+        what = " + ".join(f"{g['carta']} {g['corsia']} slot {g['slot']}" for g in top["giocate"])
+        if r.get("dominante") and what and store.load("config").get("mossa_istantanea", True):
+            rk = top.get("rischio") or {}
+            why = "calcolata da BIG-BOB" + (f" · rischio di perdere una barrier {round(rk['perdi_barrier'] * 100)}%"
+                                            if rk.get("perdi_barrier") is not None else "")
+            self.emit({"type": "preview", "mossa": what, "perche": why, "secs": round(time.time() - t0, 1),
+                       "calcolata": True})
+        if (top.get("vincitore") or "").startswith("VINCI TU"):
+            self.emit({"type": "alert", "kind": "win", "text": f"PUOI CHIUDERE LA PARTITA: {what}"})
+            if store.load("config").get("voce", True):
+                self.voice.say("Puoi chiudere la partita")
+        else:
+            risk = min(((mv.get("rischio") or {}).get("perdi_partita") or 0) for mv in r["mosse"])
+            if risk >= 0.3:
+                self.emit({"type": "alert", "kind": "lose",
+                           "text": f"ATTENZIONE: anche con la mossa migliore l'avversario può chiudere ({round(risk * 100)}%)"})
+                if store.load("config").get("voce", True):
+                    self.voice.say("Attenzione, rischi di perdere")
 
     def _round_surprises(self) -> list[str]:
         """Le sorprese del round: carte avversarie non previste, combattimento diverso dal simulato (da update_match) e
@@ -1633,6 +1826,18 @@ class Controller:
                     out.append(f"Daniele non ha seguito il consiglio ({prev}): ha giocato {', '.join(played)}")
         return out
 
+    def _warm_cache(self, sess) -> None:
+        """Preriscaldamento: un messaggio minimo alla sessione nuova, così istruzioni e strumenti (la parte lunga e
+        fissa del contesto) sono già nella memoria di Claude quando arriva l'F8, che parte più in fretta."""
+        try:
+            time.sleep(0.5)
+            for ev in sess.ask([{"type": "text", "text": "[PRERISCALDAMENTO] Nessuna partita da analizzare adesso: "
+                                                         "rispondi solo «ok», senza strumenti."}], timeout=40):
+                if ev.get("type") == "result":
+                    usage.add_from_result(ev, sess)
+        except Exception:  # noqa: BLE001
+            log.exception("preriscaldamento")
+
     def _warm_reader(self, r) -> None:
         try:
             r.ensure()
@@ -1646,6 +1851,8 @@ class Controller:
             return
         old = self.session
         self.session = type(old)(old.exe, old.cwd) if old else ClaudeSession(self.claude, ROOT)
+        if store.load("config").get("cache_calda", True):
+            threading.Thread(target=self._warm_cache, args=(self.session,), daemon=True, name="bb-cache").start()
         try:
             m = store.load("match") if store.FILES["match"].exists() else {}
             self.session.thinking, why = thinking_budget(m, store.load("config"))
@@ -1688,6 +1895,10 @@ class Controller:
         self.live_n = 0
         self.flags = []
         self._recent_moves, self._last_live, self._fast_fail, self._pre = [], "", 0, None
+        cfg_last = store.load("config")
+        if cfg_last.get("ultimo_mazzo") != deck:
+            cfg_last["ultimo_mazzo"] = deck
+            store.save("config", cfg_last)
         for r in self.readers.values():
             threading.Thread(target=self._warm_reader, args=(r,), daemon=True).start()
         cfg = store.load("config")
@@ -2075,6 +2286,7 @@ class Controller:
                     self._link_journal()
                 except Exception:  # noqa: BLE001
                     log.exception("collegamento del diario alla partita")
+                self._review_soon(announce=True)
             if kind in ("fine", "crea"):
                 self._brain_soon()
             self._session_free.set()
@@ -2117,6 +2329,9 @@ class Controller:
                             elif name == "lesson_review" and inp.get("stato") == "smentita":
                                 self.emit({"type": "say", "role": "lesson",
                                            "text": f"Lezione {inp.get('id')} smentita da questo round"})
+                            elif name == "propose_card_effect":
+                                self.emit({"type": "say", "role": "lesson",
+                                           "text": f"Effetto proposto per {inp.get('carta')}: {inp.get('motivo', '')}"})
                             elif name == "set_match_eval":
                                 learned_eval = f"vantaggio: vinci al {inp.get('mia_percentuale')}% ({inp.get('motivo', '')})"
                 elif ev.get("type") == "result":
@@ -2131,6 +2346,30 @@ class Controller:
             self.learning = False
             self.emit({"type": "learning", "value": False})
             self._emit_hud(force=True)  # la barra di vantaggio con la stima di BIG-BOB
+            self._offer_effects(t0)
+
+    def _offer_effects(self, since: float) -> None:
+        """Gli effetti di carta proposti in questo turno: un pulsante per confermarli e uno per scartarli."""
+        from origins import proposals
+        try:
+            for p in proposals.pending(since):
+                self.emit({"type": "action", "label": f"CONFERMA: {p['carta']} {proposals.describe(p['effetti'])}",
+                           "call": "effect_confirm", "args": [p["id"]]})
+                self.emit({"type": "action", "label": "SCARTA", "call": "effect_discard", "args": [p["id"]]})
+        except Exception:  # noqa: BLE001
+            log.exception("proposte di effetti")
+
+    def effect_confirm(self, pid: str) -> None:
+        from origins import proposals
+        r = proposals.decide(str(pid), True)
+        self.say(r.get("errore") or f"Effetto salvato: {r['carta']} {r['effetto']}. Il simulatore ora lo usa.",
+                 "warn" if r.get("errore") else "lesson")
+
+    def effect_discard(self, pid: str) -> None:
+        from origins import proposals
+        r = proposals.decide(str(pid), False)
+        self.say(r.get("errore") or f"Proposta scartata: {r['carta']} {r['effetto']}.",
+                 "warn" if r.get("errore") else "dim")
 
     # ------------------------------------------------ HUD dalla partita in corso
     def _emit_hud(self, force: bool = False) -> None:
@@ -2180,6 +2419,11 @@ class Controller:
                 sh = {"tipo": "?", "p": None, "mazzo": None, "p_mazzo": None, "viste": 0}
             if sh is not None:
                 sh["probabili"] = probs
+                # tracker: le carte che l'avversario ha probabilmente ancora (mano + mazzo), con quelle già viste
+                from origins import evaluate
+                seen = {store.slug(k): v for k, v in evaluate.seen_opp(m).items()}
+                sh["tracker"] = [{"carta": x["carta"], "p": round(x["p_mano"] * 100), "costo": x.get("costo"),
+                                  "viste": seen.get(store.slug(x["carta"]), 0)} for x in (pr.get("tutte") or [])[:12]]
             return sh
         except Exception:  # noqa: BLE001
             log.exception("mazzo avversario")
@@ -2213,6 +2457,7 @@ class Controller:
         self._obs_async = True
         threading.Thread(target=self._obs_saver, daemon=True, name="bb-osservatore").start()
         prev = ref_rec = ref_auto = ref_obs = ref_pre = None
+        det = {"prev": None, "still": None, "ref": None, "last": 0.0}
         last_rec = last_obs = last_pre = 0.0
         still_since = None
         cfg, cfg_t = {}, 0.0
@@ -2224,7 +2469,25 @@ class Controller:
             observing = self._match_active and cfg.get("osservatore", True)
             if not (self.auto_on or self.rec_on or observing):
                 prev = ref_rec = ref_auto = ref_obs = None
-                time.sleep(0.7)
+                # nessuna partita: guarda di rado se ne sta iniziando una (schermata del mulligan)
+                if (not self._match_active and cfg.get("inizio_fine_automatici", True) and self.readers
+                        and not self.busy):
+                    try:
+                        dsig = screen.thumbnail_signature(cfg.get("titolo_finestra", "Origins"),
+                                                          mask=self._capture_mask())
+                        now_d = time.time()
+                        if det["prev"] is not None and d(dsig, det["prev"]) < 1.0:
+                            det["still"] = det["still"] or now_d
+                        else:
+                            det["still"] = None
+                        det["prev"] = dsig
+                        if (det["still"] and now_d - det["still"] >= 1.5 and now_d - det["last"] > 15
+                                and (det["ref"] is None or d(dsig, det["ref"]) > 8)):
+                            det["ref"], det["last"] = dsig, now_d
+                            threading.Thread(target=self._detect_start, daemon=True, name="bb-inizio").start()
+                    except Exception:  # noqa: BLE001
+                        pass
+                time.sleep(1.5)
                 continue
             excluded = getattr(self, "capture_excluded", False)
             # con BIG-BOB invisibile alle catture l'F8 non nasconde la finestra: si può continuare a guardare

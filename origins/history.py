@@ -289,6 +289,98 @@ def body(selected: str = "") -> str:
             + "".join(details) + "<div class='lightbox' id='lbox' hidden><img alt='Schermata ingrandita'></div>")
 
 
+CLASS_CSS = {"migliore": "cm", "buona": "cb", "imprecisione": "ci", "errore": "ce", "errore grave": "cg"}
+
+
+def timeline(m: dict | None) -> list[dict]:
+    """Per round: barrier (totale residuo di ciascuno), distrutte e stima di vittoria, dallo storico e dall'analisi."""
+    from origins import evaluate
+    rv = {r["turno"]: r for r in ((m or {}).get("revisione") or {}).get("round") or []}
+    seen, out = set(), []
+    for snap in (m or {}).get("storico") or []:
+        t = snap.get("turno")
+        if not isinstance(t, int) or t in seen:
+            continue
+        seen.add(t)
+        pct = (rv.get(t) or {}).get("pct")
+        if pct is None:
+            try:
+                pct = evaluate.heuristic(snap).get("pct")
+            except Exception:  # noqa: BLE001
+                pct = None
+        def tot(x):
+            return sum(v for v in (x or []) if isinstance(v, (int, float))) if x else None
+        out.append({"turno": t, "pct": pct, "mie": tot(snap.get("barrier_mie")), "avv": tot(snap.get("barrier_avv")),
+                    "da_me": snap.get("distrutte_da_me") or 0, "a_me": snap.get("distrutte_a_me") or 0,
+                    "classe": (rv.get(t) or {}).get("classe")})
+    return out
+
+
+def chart(tl: list[dict], decisive: int | None = None) -> str:
+    """Grafico della partita: stima di vittoria round per round (linea), barrier distrutte (✕) e le mosse classificate
+    (pallini colorati come nella revisione)."""
+    pts = [x for x in tl if isinstance(x.get("pct"), (int, float))]
+    if len(pts) < 2:
+        return ""
+    W, H, L, R, T, B = 640, 170, 34, 12, 14, 26
+    t0, t1 = pts[0]["turno"], pts[-1]["turno"]
+    span = max(1, t1 - t0)
+    X = lambda t: L + (t - t0) / span * (W - L - R)  # noqa: E731
+    Y = lambda p: T + (100 - p) / 100 * (H - T - B)  # noqa: E731
+    col = {"migliore": "#1FD6C4", "buona": "#7DEDE2", "imprecisione": "#FFD23F", "errore": "#FF8A3D",
+           "errore grave": "#FF4D6D"}
+    g = [f"<line x1='{L}' x2='{W - R}' y1='{Y(50):.1f}' y2='{Y(50):.1f}' stroke='#D9CCFF' stroke-opacity='.35' stroke-dasharray='4 4'/>"]
+    for p in (0, 50, 100):
+        g.append(f"<text x='{L - 6}' y='{Y(p) + 4:.1f}' text-anchor='end' font-size='11' fill='#D9CCFF'>{p}%</text>")
+    if decisive is not None and t0 <= decisive <= t1:
+        g.append(f"<rect x='{X(decisive) - 12:.1f}' y='{T}' width='24' height='{H - T - B}' fill='#FF4D6D' fill-opacity='.18' rx='4'/>")
+    path = " ".join(f"{'M' if i == 0 else 'L'}{X(x['turno']):.1f},{Y(x['pct']):.1f}" for i, x in enumerate(pts))
+    g.append(f"<path d='{path}' fill='none' stroke='#FFD23F' stroke-width='2.5'/>")
+    prev = None
+    for x in tl:
+        if not isinstance(x.get("pct"), (int, float)):
+            continue
+        cx, cy = X(x["turno"]), Y(x["pct"])
+        c = col.get(x.get("classe") or "", "#FFD23F")
+        g.append(f"<circle cx='{cx:.1f}' cy='{cy:.1f}' r='{5 if x.get('classe') else 3}' fill='{c}'>"
+                 f"<title>Round {x['turno']}: {x['pct']}%{(' · ' + x['classe']) if x.get('classe') else ''}</title></circle>")
+        g.append(f"<text x='{cx:.1f}' y='{H - 8}' text-anchor='middle' font-size='11' fill='#D9CCFF'>{x['turno']}</text>")
+        if prev is not None:
+            for k, fill, lab in (("da_me", "#1FD6C4", "barrier avversaria distrutta"), ("a_me", "#FF4D6D", "tua barrier distrutta")):
+                if x[k] > prev[k]:
+                    g.append(f"<text x='{cx:.1f}' y='{T + (10 if k == 'da_me' else H - T - B - 2):.1f}' text-anchor='middle' "
+                             f"font-size='14' font-weight='700' fill='{fill}'>✕<title>{lab}</title></text>")
+        prev = x
+    return (f"<figure class='mchart'><svg viewBox='0 0 {W} {H}' role='img' aria-label='Stima di vittoria round per round'>"
+            + "".join(g) + "</svg><figcaption><span class='lg y'></span>stima di vittoria · <b class='tc'>✕</b> barrier "
+            "avversaria distrutta · <b class='rc'>✕</b> tua barrier distrutta · pallini: mossa migliore / buona / "
+            "imprecisione / errore / errore grave</figcaption></figure>")
+
+
+def review_html(m: dict | None) -> str:
+    """Il riquadro dell'analisi della partita: grafico, precisione, conteggio delle mosse e momento decisivo."""
+    from origins import review
+    e = html.escape
+    rv = (m or {}).get("revisione") or {}
+    dec = rv.get("momento_decisivo") or {}
+    tl = timeline(m)
+    g = chart(tl, dec.get("turno"))
+    if not g and not rv.get("precisione"):
+        return ""
+    parts = ["<div class='rvbox'>", g]
+    if rv.get("precisione") is not None:
+        c = rv.get("conteggi") or {}
+        chips = "".join(f"<span class='cls {CLASS_CSS[k]}'>{review.SIMBOLO[k]} {c[k]} {k}</span>"
+                        for k in ("migliore", "buona", "imprecisione", "errore", "errore grave") if c.get(k))
+        parts.append(f"<div class='rvhead'><b>PRECISIONE {rv['precisione']}%</b>{chips}</div>")
+    elif (m or {}).get("stati_round"):
+        parts.append("<div class='meta'>Analisi mossa per mossa in preparazione: riapri tra poco.</div>")
+    if dec:
+        parts.append(f"<div class='flag'>Momento decisivo, round {dec['turno']}: {e(dec['motivo'])}</div>")
+    parts.append("</div>")
+    return "".join(parts)
+
+
 def _cards(lst) -> str:
     return ", ".join(html.escape(c) for c in lst) if lst else "niente"
 
@@ -302,6 +394,12 @@ def _detail(pid, m, j, rs, when, deck, opp, typ, long) -> str:
              f"{(' · modalità ' + e(j['modalita'])) if j and j.get('modalita') else ''}</p>"]
     if m and m.get("note_finali"):
         parts.append(f"<div class='note'>{e(m['note_finali'])}</div>")
+    try:
+        parts.append(review_html(m))
+    except Exception:  # noqa: BLE001
+        pass
+    rv_by_turn = {r["turno"]: r for r in ((m or {}).get("revisione") or {}).get("round") or [] if r.get("classe")}
+    last_req = {r.get("turno"): r["n"] for r in rs if r.get("giocate") is not None}  # l'analisi va sull'ultima del round
     qa = load_qa(pid)
     parts.append("<div class='askall'><div class='askhint'>Parla con BIG-BOB di questa partita: spiegagli le tue scelte, "
                  "correggilo quando sbaglia, raccontagli cosa non vedeva. È da qui che impara di più.</div>"
@@ -337,6 +435,14 @@ def _detail(pid, m, j, rs, when, deck, opp, typ, long) -> str:
             if r.get("superato"):
                 badge = "<span class='bd'>SOSTITUITO DAL CONSIGLIO DOPO</span>"
             info.append(f"<div class='play'><span class='k'>GIOCATA</span>{_cards(r['giocate'])} {badge}</div>")
+            rr = rv_by_turn.get(r.get("turno")) if last_req.get(r.get("turno")) == r["n"] else None
+            if rr:
+                from origins import review
+                info.append(f"<div class='play'><span class='cls {CLASS_CSS[rr['classe']]}'>{review.SIMBOLO[rr['classe']]} "
+                            f"{e(rr['classe']).upper()}</span>"
+                            + (f" −{rr['perdita']} punti · migliore secondo la ricerca: {e(rr['migliore'])}"
+                               if rr["classe"] != "migliore" else " è la mossa che la ricerca considera migliore")
+                            + "</div>")
             info.append(f"<div class='play opp'><span class='k'>AVVERSARIO</span>{_cards(r['avv_giocate'])}</div>")
             b = r.get("barrier") or {}
             if b.get("mie") or b.get("avv"):
@@ -434,6 +540,14 @@ CSS = """
 .ans .qa{background:var(--bg);border-left:4px solid var(--teal);border-radius:6px;padding:8px 10px;font-size:14px;line-height:1.45;white-space:pre-wrap}
 .ans .qq{color:var(--dim);font-size:13px}.ans .wait{color:var(--dim);font-size:13px;font-style:italic}
 .askall{background:var(--panel);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.rvbox{background:var(--panel);border-radius:10px;padding:12px;margin-bottom:12px}
+.mchart{margin:0}.mchart svg{width:100%;height:auto;display:block}
+.mchart figcaption{font-size:12px;color:var(--dim);margin-top:4px}.mchart .tc{color:#1FD6C4}.mchart .rc{color:#FF4D6D}
+.mchart .lg{display:inline-block;width:14px;height:3px;background:#FFD23F;vertical-align:middle;margin-right:5px}
+.rvhead{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:8px 0 6px}.rvhead b{color:var(--yellow);letter-spacing:1px}
+.cls{display:inline-block;border-radius:5px;padding:2px 7px;font-size:12px;font-weight:700;margin-right:6px}
+.cls.cm{background:#1FD6C4;color:#24104F}.cls.cb{background:#14405A;color:#7DEDE2}.cls.ci{background:#FFD23F;color:#24104F}
+.cls.ce{background:#FF8A3D;color:#24104F}.cls.cg{background:#FF4D6D;color:#fff}
 @media (max-width:720px){.rq{grid-template-columns:1fr}}
 """
 
@@ -589,6 +703,19 @@ def question_context(pid: str, n: int) -> tuple[str, Path | None]:
                      f"{', '.join(r['giocate']) if r['giocate'] is not None else 'non registrato'}; avversario: "
                      f"{', '.join(r['avv_giocate']) if r['avv_giocate'] is not None else 'non registrato'}"
                      f"{(' · barrier dopo: tue ' + str(r['barrier']['mie']) + ' avversarie ' + str(r['barrier']['avv'])) if r.get('barrier') else ''}")
+    rv = (m or {}).get("revisione") or {}
+    if rv.get("round"):
+        lines.append(f"\nANALISI DI BIG-BOB (ricerca della mossa, stessi criteri per la mossa giocata e la migliore; "
+                     f"punteggio della corsa a 2 barrier, ~25 = una barrier portata da piena a 0; magie non simulate): "
+                     f"precisione {rv.get('precisione')}%"
+                     + (f", momento decisivo round {rv['momento_decisivo']['turno']}: {rv['momento_decisivo']['motivo']}"
+                        if rv.get("momento_decisivo") else ""))
+        for x in rv["round"]:
+            if x.get("classe"):
+                lines.append(f"- round {x['turno']}: giocata {x['giocata']} → {x['classe']} (−{x['perdita']}); migliore "
+                             f"{x['migliore']}")
+            elif x.get("nota"):
+                lines.append(f"- round {x['turno']}: non votato ({x['nota']})")
     shot = None
     if n:
         r = next((x for x in rs if x["n"] == n), None)

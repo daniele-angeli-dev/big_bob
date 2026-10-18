@@ -176,6 +176,48 @@ c._pre = None
 c.capture_excluded = False
 c._session_free.wait(10)
 c.readers = {}
+# mossa istantanea e avvisi: dalla ricerca della mossa, prima che Claude risponda
+_m = store.load("match")
+_m["ricerca"] = {"turno": _m.get("turno"), "dominante": True, "mosse": [
+    {"giocate": [{"carta": "Ariete", "corsia": "sinistra", "slot": 1}], "vincitore": "VINCI TU (seconda barrier)",
+     "rischio": {"perdi_barrier": 0.1, "perdi_partita": 0.0}}]}
+store.save("match", _m)
+n0 = len(ui.events)
+c._instant_and_alerts(time.time())
+new_ev = ui.events[n0:]
+assert any(e["type"] == "preview" and e.get("calcolata") and "Ariete" in e["mossa"] for e in new_ev), new_ev
+assert any(e["type"] == "alert" and e["kind"] == "win" for e in new_ev), new_ev
+_m["ricerca"]["mosse"][0].update(vincitore=None, rischio={"perdi_barrier": 0.9, "perdi_partita": 0.6})
+_m["ricerca"]["dominante"] = False
+store.save("match", _m)
+n0 = len(ui.events)
+c._instant_and_alerts(time.time())
+assert [e["kind"] for e in ui.events[n0:] if e["type"] == "alert"] == ["lose"]
+assert not [e for e in ui.events[n0:] if e["type"] == "preview"], "non dominante: niente mossa istantanea"
+# fine partita riconosciuta dal lettore: FINE automatico
+ended = []
+_orig_end = c.end_match
+c.end_match = lambda r: ended.append(r)
+assert c._maybe_auto_end({"fase": "fine", "risultato": "vittoria"}) and ended == ["vittoria"]
+assert not c._maybe_auto_end({"fase": "gioco"})
+c.end_match = _orig_end
+# inizio partita riconosciuto (schermata del mulligan): NUOVA con l'ultimo mazzo
+started, analyzed = [], []
+_orig_new, _orig_an, _orig_act = c.new_match, c.analyze, c._match_active
+c.new_match, c.analyze = (lambda d: started.append(d)), (lambda auto=False: analyzed.append(auto))
+c._match_active = False
+c.readers = {"mio": FakeReader("fake", tmp), "avv": FakeReader("fake", tmp)}
+_cfg = store.load("config")
+_cfg["ultimo_mazzo"] = "Test"
+store.save("config", _cfg)
+c._session_free.wait(10)
+if not store.get_deck("Test"):
+    store.save("decks", store.load("decks") + [{"nome": "Test", "leggendaria": "Robin Hood", "carte": ["Marian"]}])
+c._detect_start()
+assert started == ["Test"] and analyzed == [False], (started, analyzed)
+c.new_match, c.analyze, c._match_active = _orig_new, _orig_an, _orig_act
+c._session_free.wait(10)
+c.readers = {}
 assert controller.preview_move("▶ Marian al centro\nperché: blocca\n⚠") == {"mossa": "Marian al centro",
                                                                             "perche": "blocca"}
 assert controller.preview_move("▶ Marian al cen") is None, "la riga ▶ si mostra solo quando è finita"
@@ -363,6 +405,19 @@ c.claude, c.session = None, None
 c._install_claude()
 assert c.claude is None and any("installalo a mano" in str(e).lower() for e in ui.events[-3:])
 c.session = old_session
+
+# effetti di carta proposti dall'apprendimento: pulsanti CONFERMA / SCARTA con l'id, la conferma scrive la carta
+from origins import proposals  # noqa: E402
+store.upsert("cards", [{"nome": "Pipistrello Prova", "costo": 1, "attacco": 1, "vita": 1, "tipo": "creatura"}])
+pid = proposals.propose("Pipistrello Prova", [{"tipo": "danno_barrier", "valore": 2}], "R4")["id"]
+n = len(ui.events)
+c._offer_effects(0)
+acts = [e for e in ui.events[n:] if e["type"] == "action"]
+assert [a["call"] for a in acts] == ["effect_confirm", "effect_discard"] and acts[0]["args"] == [pid], acts
+c.effect_confirm(pid)
+assert {"tipo": "danno_barrier", "valore": 2} in store.find("cards", "Pipistrello Prova")["effetti"]
+c.effect_discard(pid)
+assert "già" in ui.events[-1]["text"]
 
 c.stop()
 shutil.rmtree(tmp, ignore_errors=True)

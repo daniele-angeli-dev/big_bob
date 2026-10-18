@@ -9,6 +9,11 @@ for line in sys.stdin:
     content = msg["message"]["content"]
     text = next(b["text"] for b in content if b["type"] == "text")
     has_img = any(b["type"] == "image" for b in content)
+    if "[LETTORE · che schermata è]" in text:
+        txt = json.dumps({"fase": "mulligan"})
+        print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": txt,
+                          "session_id": sid, "usage": {"output_tokens": 9}}), flush=True)
+        continue
     if "[LETTORE" in text:
         if "[LETTORE · lato di Daniele]" in text:
             out = {"fase": "gioco", "turn": 5, "mana": 6, "my_hand": ["Marian", "Little John"],

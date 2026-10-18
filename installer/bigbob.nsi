@@ -475,6 +475,12 @@ Section "BIG-BOB" SecMain
   ${If} $2 != 0
     StrCpy $TESTFAIL "$TESTFAIL pilota"
   ${EndIf}
+  StrCpy $0 "Collaudo: analisi delle partite e taratura"
+  StrCpy $1 '"$PY" "$INSTDIR\tests\test_tuning.py"'
+  Call Esegui
+  ${If} $2 != 0
+    StrCpy $TESTFAIL "$TESTFAIL analisi"
+  ${EndIf}
   ${If} $TESTFAIL != ""
     MessageBox MB_OK|MB_ICONEXCLAMATION "Alcuni collaudi non sono passati:$TESTFAIL.$\r$\nBIG-BOB è installato lo stesso: mandami l'elenco dei dettagli (tasto destro › Copia i dettagli negli appunti)."
   ${EndIf}

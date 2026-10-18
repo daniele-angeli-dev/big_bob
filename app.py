@@ -224,6 +224,12 @@ class Api:
     def lab_apply(self):
         self._c.lab_apply()
 
+    def effect_confirm(self, pid):
+        self._c.effect_confirm(pid)
+
+    def effect_discard(self, pid):
+        self._c.effect_discard(pid)
+
     def lab_select(self, name):
         self._c.lab_select(name)
 
@@ -253,6 +259,9 @@ class Api:
 
     def open_learned(self):
         self._c.open_learned()
+
+    def open_exercises(self):
+        self._c.open_exercises()
 
     def open_replay(self):
         self._c.open_replay()

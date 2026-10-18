@@ -70,6 +70,38 @@ def effects(e: dict) -> list[dict]:
     return out
 
 
+_LOC_BUFF = re.compile(r"(?:creatures?|units?)\s+(?:here|in this lane|at this location)\s+(?:get|gain|have)\s*"
+                       r"\+(\d+)\s*/\s*\+(\d+)", re.I)
+_LOC_ATK = re.compile(r"(?:creatures?|units?)\s+(?:here|in this lane|at this location)\s+(?:get|gain|have)\s*"
+                      r"\+(\d+)\s+(?:attack|power)", re.I)
+
+
+def location_mods(names: list | None) -> dict[int, tuple[int, int, str]]:
+    """Modificatori delle location per corsia: {corsia: (attacco, vita, nome)} per le creature che entrano lì.
+    Dal campo 'effetti' della location ([{"tipo": "potenzia_corsia", "valore": 1, "vita": 0}]) o dal testo, solo
+    nella forma semplice "creatures here get +1/+1" (le regole con condizioni no)."""
+    out = {}
+    for i, name in enumerate((names or [])[:3]):
+        if not name:
+            continue
+        e = store.find("locations", name) or {}
+        fx = [x for x in (e.get("effetti") or []) if isinstance(x, dict) and x.get("tipo") == "potenzia_corsia"]
+        if fx:
+            out[i] = (int(fx[0].get("valore") or 0), int(fx[0].get("vita") or 0), e.get("nome", name))
+            continue
+        text = " ".join(str(e.get(k) or "") for k in ("testo", "regola"))
+        if re.search(r"\bif\b|\bwhen\b|\bfor each\b|\bunless\b|\benemy\b|\byour\b", text, re.I):
+            continue
+        m = _LOC_BUFF.search(text)
+        if m:
+            out[i] = (int(m.group(1)), int(m.group(2)), e.get("nome", name))
+            continue
+        m = _LOC_ATK.search(text)
+        if m:
+            out[i] = (int(m.group(1)), 0, e.get("nome", name))
+    return out
+
+
 def apply_reveal(lanes: list[dict], side: str, i: int, k: int, card: str) -> tuple[list[dict], list[str]]:
     """Applica gli effetti alla rivelazione della carta appena messa (corsia i, slot k): ritorna (danni diretti alle
     barrier da passare a simulate, note di cosa è stato simulato)."""
@@ -243,7 +275,9 @@ def simulate(lanes: list[dict], barriers_me, barriers_opp, destroyed_by_me: int 
     survivors = {LANES[i]: {"mie": [f"{u['nome']} {u['atk']}/{u['hp']}" for u in lane["mie"] if u],
                             "avv": [f"{u['nome']} {u['atk']}/{u['hp']}" for u in lane["avv"] if u]}
                  for i, lane in enumerate(lanes)}
-    return {"barrier_tue": bm, "barrier_avv": bo, "distrutte_da_te": by_me, "distrutte_a_te": to_me,
+    after = {LANES[i]: {side: [f"{u['nome']} {u['atk']}/{u['hp']}" if u else None for u in lane[side]]
+                        for side in ("mie", "avv")} for i, lane in enumerate(lanes)}
+    return {"campo": after, "barrier_tue": bm, "barrier_avv": bo, "distrutte_da_te": by_me, "distrutte_a_te": to_me,
             "vincitore": winner, "eventi": log, "sopravvissuti": survivors}
 
 

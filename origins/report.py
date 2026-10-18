@@ -8,10 +8,10 @@ from __future__ import annotations
 import html
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
-from origins import deckproj, lessons, rules, store
+from origins import combat, deckproj, lessons, rules, store
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGS = ROOT / "logs"
@@ -166,12 +166,22 @@ def stats_body() -> str:
         (str(sum(1 for x in ls if x.get("stato") == "confermata")), "LEZIONI CONFERMATE"),
         (f"{pred_hit / pred_all * 100:.0f}%" if pred_all else "–", "CARTE AVVERSARIE PREVISTE"),
     ]
-    body = [f"<p class='sub'>{len(games)} partite registrate · aggiornato {store.now()}</p>",
+    accs = [m["revisione"]["precisione"] for m in games if (m.get("revisione") or {}).get("precisione") is not None]
+    tiles.insert(2, (f"{round(sum(accs) / len(accs))}%" if accs else "–", "PRECISIONE MOSSE"))
+    try:
+        week = week_body()
+    except Exception:  # noqa: BLE001
+        week = ""
+    body = [week, f"<p class='sub'>{len(games)} partite registrate · aggiornato {store.now()}</p>",
             "<div class='tiles'>" + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles)
             + "</div>",
             "<h2>Winrate per mio mazzo</h2>", _bars([(k, v[0], v[1]) for k, v in by_deck.items()]),
             "<h2>Winrate contro archetipo avversario</h2>", _bars([(k, v[0], v[1]) for k, v in by_arch.items()]),
             "<h2>Winrate per location in gioco</h2>", _bars([(k, v[0], v[1]) for k, v in by_loc.items()])]
+    try:
+        body.append(calibration_body())
+    except Exception:  # noqa: BLE001
+        pass
     if games:
         rows = "".join(
             f"<tr><td>{html.escape(str(m.get('fine', '')))}</td><td>{html.escape(str(m.get('mio_mazzo', '')))}</td>"
@@ -710,7 +720,7 @@ LIB_JS = """
     if (h === 'imparato') h = 'studio';
     if (h.indexOf('mazzo=') === 0) openDeck(h.slice(6));
     else if (h.indexOf('partita=') === 0){ showTab('partite'); document.body.dataset.match = h.slice(8); }
-    else showTab(['mazzi', 'partite', 'statistiche', 'studio'].indexOf(h) >= 0 ? h : def);
+    else showTab(['mazzi', 'partite', 'statistiche', 'esercizi', 'studio'].indexOf(h) >= 0 ? h : def);
     var dd = document.body.dataset.deck; if (!h && dd) openDeck(dd);
   }
 })();
@@ -799,7 +809,8 @@ def library_html(tab: str = "mazzi", deck: str = "", match: str = "") -> Path:
     from origins import history
     tab = "studio" if tab == "imparato" else ("partite" if match else tab)
     panels = [("mazzi", "MAZZI", decks_body), ("partite", "PARTITE", history.body),
-              ("statistiche", "STATISTICHE", stats_body), ("studio", "STUDIO", studio_body)]
+              ("statistiche", "STATISTICHE", stats_body), ("esercizi", "ESERCIZI", exercises_body),
+              ("studio", "STUDIO", studio_body)]
     tabs = "".join(f"<button type='button' role='tab' data-tab='{k}' aria-controls='t-{k}' "
                    f"aria-selected='{'true' if k == tab else 'false'}'>{label}</button>" for k, label, _ in panels)
     body = [f"<div class='libhead'><h1>BIG-BOB</h1><nav class='tabs' role='tablist' aria-label='Sezioni'>{tabs}</nav></div>"]
@@ -940,3 +951,193 @@ if __name__ == "__main__":
     else:
         print(stats_html())
     sys.stdout.flush()
+
+
+# ---------------------------------------------------------------- report settimanale, esercizi, taratura
+
+def _when(s) -> float | None:
+    import time as _t
+    try:
+        return _t.mktime(_t.strptime(str(s)[:16], "%Y-%m-%d %H:%M"))
+    except (TypeError, ValueError):
+        return None
+
+
+def week_stats(now: float | None = None) -> dict:
+    """Gli ultimi 7 giorni confrontati con i 7 prima: partite, winrate, precisione delle mosse (dall'analisi della
+    partita), errori, matchup migliore e peggiore, lezioni nuove."""
+    import time as _t
+    now = now or _t.time()
+    games = [m for m in store.load("matches") if m.get("risultato") and _when(m.get("fine") or m.get("inizio"))]
+    cur = [m for m in games if now - _when(m.get("fine") or m.get("inizio")) <= 7 * 86400]
+    prev = [m for m in games if 7 * 86400 < now - _when(m.get("fine") or m.get("inizio")) <= 14 * 86400]
+
+    def wr(lst):
+        return round(100 * sum(str(m["risultato"]).lower().startswith("v") for m in lst) / len(lst)) if lst else None
+    accs = [m["revisione"]["precisione"] for m in cur if (m.get("revisione") or {}).get("precisione") is not None]
+    accs_prev = [m["revisione"]["precisione"] for m in prev if (m.get("revisione") or {}).get("precisione") is not None]
+    errs = Counter()
+    err_cards = Counter()
+    for m in cur:
+        for r in (m.get("revisione") or {}).get("round") or []:
+            if r.get("classe") in ("errore", "errore grave"):
+                errs[r["classe"]] += 1
+                for part in str(r.get("giocata") or "").split(" + "):
+                    name = part.rsplit(" slot", 1)[0].rsplit(" ", 1)[0].strip()
+                    if name and name != "nessuna":
+                        err_cards[name] += 1
+    by_opp: dict = defaultdict(lambda: [0, 0])
+    for m in cur:
+        k = m.get("archetipo_avversario") or m.get("avv_leggendaria") or "?"
+        by_opp[k][0] += str(m["risultato"]).lower().startswith("v")
+        by_opp[k][1] += 1
+    opp = [(k, v[0] / v[1], v[1]) for k, v in by_opp.items() if v[1] >= 2]
+    best = max(opp, key=lambda x: (x[1], x[2]), default=None)
+    worst = min(opp, key=lambda x: (x[1], -x[2]), default=None)
+    new_lessons = [x for x in lessons.load() if _when(x.get("creata")) and now - _when(x.get("creata")) <= 7 * 86400]
+    out = {"partite": len(cur), "winrate": wr(cur), "winrate_prima": wr(prev), "partite_prima": len(prev),
+           "precisione": round(sum(accs) / len(accs)) if accs else None,
+           "precisione_prima": round(sum(accs_prev) / len(accs_prev)) if accs_prev else None,
+           "errori": dict(errs), "carte_negli_errori": err_cards.most_common(3),
+           "matchup_migliore": best, "matchup_peggiore": worst if worst != best else None,
+           "lezioni_nuove": len(new_lessons)}
+    bits = [f"{len(cur)} partite, winrate {out['winrate']}%"
+            + (f" ({'+' if out['winrate'] >= out['winrate_prima'] else ''}{out['winrate'] - out['winrate_prima']} punti "
+               "rispetto alla settimana prima)" if out["winrate_prima"] is not None else "")]
+    if out["precisione"] is not None:
+        bits.append(f"precisione delle mosse {out['precisione']}%")
+    if errs:
+        bits.append("errori: " + ", ".join(f"{v} {k}" for k, v in errs.items())
+                    + (f" (spesso con {err_cards.most_common(1)[0][0]})" if err_cards else ""))
+    if worst and worst[1] < 0.5:
+        bits.append(f"matchup più difficile: {worst[0]} ({round(worst[1] * 100)}% su {worst[2]})")
+    if new_lessons:
+        bits.append(f"{len(new_lessons)} lezioni nuove")
+    out["riga"] = " · ".join(bits)
+    return out
+
+
+def week_body() -> str:
+    w = week_stats()
+    if not w["partite"]:
+        return ""
+    e = html.escape
+    def delta(a, b):
+        if a is None or b is None:
+            return ""
+        d = a - b
+        return f" <small style='color:{'#7DEDE2' if d >= 0 else '#FFB3C1'}'>{'+' if d >= 0 else ''}{d}</small>"
+    tiles = [(str(w["partite"]), "PARTITE"), (f"{w['winrate']}%{delta(w['winrate'], w['winrate_prima'])}", "WINRATE"),
+             ((f"{w['precisione']}%{delta(w['precisione'], w['precisione_prima'])}" if w["precisione"] is not None
+               else "–"), "PRECISIONE MOSSE"),
+             (str(sum(w["errori"].values())), "ERRORI"), (str(w["lezioni_nuove"]), "LEZIONI NUOVE")]
+    rows = []
+    if w["carte_negli_errori"]:
+        rows.append("Carte giocate negli errori: " + ", ".join(f"{e(c)} ({n})" for c, n in w["carte_negli_errori"]))
+    if w["matchup_migliore"]:
+        k, p, n = w["matchup_migliore"]
+        rows.append(f"Matchup migliore: {e(k)} ({round(p * 100)}% su {n})")
+    if w["matchup_peggiore"]:
+        k, p, n = w["matchup_peggiore"]
+        rows.append(f"Matchup peggiore: {e(k)} ({round(p * 100)}% su {n})")
+    return ("<h2 style='margin-top:6px'>Questa settimana</h2><div class='tiles'>"
+            + "".join(f"<div class='tile'><b>{v}</b><span>{k}</span></div>" for v, k in tiles) + "</div>"
+            + ("<div class='note' style='margin-top:10px'>" + "<br>".join(rows) + "</div>" if rows else ""))
+
+
+def calibration_body() -> str:
+    """Quanto la barra di vantaggio ci azzecca: per fasce, la percentuale detta e quante partite sono state vinte."""
+    from origins import tuning
+    rep = tuning.report()
+    if not rep["fasce"]:
+        return ""
+    rows = "".join(f"<tr><td>{b['da']}–{b['a']}%</td><td>{b['detto']}%</td><td>{b['vero']}%</td><td>{b['n']}</td></tr>"
+                   for b in rep["fasce"])
+    cal = rep.get("calibrazione")
+    pesi = rep.get("pesi_tarati")
+    note = ("La stima rapida è già corretta con questi dati." if cal else
+            f"La correzione parte da {tuning.MIN_PARTITE} partite finite.")
+    if pesi:
+        note += (f" Pesi della ricerca tarati su {pesi['partite']} partite: chiusura {pesi['chiusura']}, rischio "
+                 f"{pesi['rischio']}, barrier distrutta {pesi['distrutta_da_te']}/{pesi['distrutta_a_te']}, campo {pesi['campo']}.")
+    return ("<h2>Barra di vantaggio: detto contro vero</h2><table><thead><tr><th>Fascia</th><th>Stima media</th>"
+            f"<th>Partite vinte</th><th>Round</th></tr></thead><tbody>{rows}</tbody></table>"
+            f"<p class='sub' style='margin-top:6px'>{html.escape(note)}</p>")
+
+
+def _mini_board(st: dict) -> str:
+    e = html.escape
+    lanes = combat.normalize_board(st.get("campo"))
+    bm, bo = st.get("barrier_mie") or ["?"] * 3, st.get("barrier_avv") or ["?"] * 3
+    cols = []
+    for i, ln in enumerate(lanes):
+        def units(side):
+            return "".join(f"<div class='u'>{e(u['nome'])} <b>{u['atk']}/{u['hp']}</b></div>" if u else
+                           "<div class='u empty'>vuoto</div>" for u in ln[side]) or "<div class='u empty'>vuoto</div>"
+        cols.append(f"<div class='lane'><div class='bh'>barrier avv {e(str(bo[i]))}</div>{units('avv')}"
+                    f"<div class='mid'>{combat.LANES[i].upper()}</div>{units('mie')}"
+                    f"<div class='bh'>barrier tua {e(str(bm[i]))}</div></div>")
+    return "<div class='mboard'>" + "".join(cols) + "</div>"
+
+
+EX_CSS = """
+.ex{background:var(--panel);border-radius:10px;padding:14px;margin-bottom:14px}
+.ex h3{margin:0 0 4px;font-size:16px}.ex .sub{margin:0 0 10px;font-size:13px}
+.mboard{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0}
+.mboard .lane{background:var(--bg);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.mboard .u{background:#4B2A93;border-radius:5px;padding:3px 6px}.mboard .u b{color:var(--yellow)}
+.mboard .u.empty{background:transparent;color:var(--dim);font-style:italic}
+.mboard .mid{color:var(--teal);font-weight:700;letter-spacing:1px;text-align:center;font-size:12px;margin:2px 0}
+.mboard .bh{color:var(--dim);font-size:12px}
+.exopts{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.exopts button{text-align:left;background:var(--bg);border:2px solid var(--line);color:#fff;border-radius:8px;padding:8px 10px;
+  font:inherit;font-size:14px;cursor:pointer}
+.exopts button:hover{border-color:var(--teal)}.exopts button:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.exopts button.ok{border-color:var(--teal);background:#14405A}.exopts button.ko{border-color:#FF6B8B;background:#5A1630}
+.exsol{margin-top:8px;font-size:14px}.exsol[hidden]{display:none}
+@media (max-width:720px){.mboard{grid-template-columns:1fr}}
+"""
+
+EX_JS = """
+(function(){
+  Array.prototype.forEach.call(document.querySelectorAll('.ex'), function(ex){
+    var btns = ex.querySelectorAll('.exopts button'), sol = ex.querySelector('.exsol');
+    Array.prototype.forEach.call(btns, function(b){ b.addEventListener('click', function(){
+      Array.prototype.forEach.call(btns, function(x){ x.disabled = true; if (x.dataset.ok === '1') x.classList.add('ok'); });
+      if (b.dataset.ok !== '1') b.classList.add('ko');
+      sol.querySelector('.res').textContent = b.dataset.ok === '1' ? 'Giusto!' : 'Non era questa.';
+      sol.hidden = false; }); });
+  });
+})();
+"""
+
+
+def exercises_body() -> str:
+    """Scheda ESERCIZI: le posizioni in cui hai perso di più, da risolvere ("trova la mossa")."""
+    import random
+    from origins import review
+    e = html.escape
+    items = review.puzzles()
+    if not items:
+        return ("<div class='empty' style='margin-top:14px'>Ancora nessun esercizio. A fine partita BIG-BOB analizza ogni "
+                "mossa (come la revisione dei motori di scacchi): le posizioni in cui hai perso più punti diventano "
+                "esercizi \"trova la mossa\".</div>")
+    out = [f"<p class='sub' style='margin-top:6px'>{len(items)} posizioni dalle tue partite in cui la mossa giocata "
+           "costava punti. Trova la mossa migliore secondo la ricerca di BIG-BOB (le magie non sono simulate).</p>"]
+    for x in items:
+        st = x["stato"]
+        opts = list(x["opzioni"])
+        random.Random(x["id"]).shuffle(opts)
+        hand = ", ".join(st.get("mia_mano") or []) or "?"
+        info = (f"Round {x['turno']} · mana {e(str(st.get('mana', '?')))} · in mano: {e(hand)} · distrutte "
+                f"{st.get('distrutte_da_me') or 0}-{st.get('distrutte_a_me') or 0} · rivela prima: "
+                f"{'avversario' if st.get('rivela_prima') == 'avversario' else 'tu'}"
+                + (f" · location: {e(', '.join(st['location']))}" if st.get("location") else ""))
+        opp = ", ".join(f"{e(o['carta'])} {round((o.get('p_mano') or 0) * 100)}%" for o in x["avv_probabili"][:4])
+        buttons = "".join(f"<button type='button' data-ok='{1 if o == x['soluzione'] else 0}'>{e(o)}</button>" for o in opts)
+        out.append(f"<article class='ex'><h3>{e(x['partita'])} · {e(x['data'])}</h3><p class='sub'>{info}"
+                   + (f"<br>L'avversario probabilmente ha: {opp}" if opp else "") + "</p>"
+                   + _mini_board(st) + f"<div class='exopts'>{buttons}</div>"
+                   f"<div class='exsol' hidden><b class='res'></b> Migliore: <b>{e(x['soluzione'])}</b>. In partita hai "
+                   f"giocato {e(x['giocata'])}: {e(x['classe'])}, −{x['perdita']} punti nella corsa a 2 barrier.</div></article>")
+    return "".join(out) + f"<style>{EX_CSS}</style><script>{EX_JS}</script>"

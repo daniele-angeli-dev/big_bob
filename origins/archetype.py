@@ -300,6 +300,7 @@ def _predict(m: dict, meta: list[dict] | None = None, top: int = 6) -> dict:
         x["ora"] = round(x["p_mano"] * _timing(x["costo"], mana, x["round_medio"], turn, label), 3) \
             if x["giocabile"] else 0.0
     out["carte"] = cards[:top]
+    out["tutte"] = [{k: x[k] for k in ("carta", "p_mano", "costo")} for x in cards if x["p_mano"] >= 0.03][:16]
     # le giocate più probabili adesso: in mano, giocabili, e "giuste" per il round e il tipo di mazzo
     out["giocabili"] = sorted([x for x in cards if x["giocabile"] and x["p_mano"] >= 0.1],
                               key=lambda x: -x["ora"])[:4]

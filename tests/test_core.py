@@ -305,6 +305,31 @@ assert t["unite"] == ["L099 → L001"] and len(left) == 2, (t, left)
 assert {(x.get("condizioni") or {}).get("tipo_avversario") for x in left} == {"Aggro", "Control"}
 store.save("lessons", [])
 
+# atlante delle carte: impara dove sono gli spazi e che aspetto hanno le carte, poi controlla i nomi
+from PIL import Image as _Img, ImageDraw as _Draw  # noqa: E402
+from origins import atlas  # noqa: E402
+def _scene(colors):
+    im = _Img.new("RGB", (400, 300), (20, 20, 40))
+    dr = _Draw.Draw(im)
+    for k, col in enumerate(colors):
+        x = 20 + k * 120
+        dr.rectangle((x, 180, x + 80, 280), fill=col)
+        dr.ellipse((x + 10, 190, x + 50, 230), fill=(255 - col[0], 255 - col[1], 255 - col[2]))
+        dr.line((x, 280, x + 80, 180), fill=(250, 250, 250), width=4)
+    return im
+boxes = {"sinistra": {"mie": [[5, 60, 20, 33.3], [35, 60, 20, 33.3], [65, 60, 20, 33.3]]}}
+board = {"sinistra": {"mie": ["Ariete 6/2", "Scudo 1/6", "Muro 0/9"]}}
+cols = [(200, 30, 30), (30, 200, 30), (30, 30, 200)]
+for _ in range(2):
+    atlas.learn(_scene(cols), boxes, board)
+assert atlas.stats()["spazi"] == 3 and atlas.stats()["carte"] == 3, atlas.stats()
+assert atlas.check(_scene(cols), board) == [], "nomi giusti: nessun avviso"
+w = atlas.check(_scene(cols), {"sinistra": {"mie": ["Scudo 6/2", "Scudo 1/6", "Muro 0/9"]}})
+assert len(w) == 1 and "Ariete" in w[0] and "slot 1" in w[0], w
+from origins import reader as _R  # noqa: E402
+cz = _R.zone_crop(_Img.new("RGB", (100, 300)), "mio")
+assert cz.size == (100, 201), cz.size
+
 # verifica del simulatore e round andato bene/male
 store.upsert("cards", [{"nome": "Ariete", "costo": 3, "attacco": 6, "vita": 2, "tipo": "creatura"},
                        {"nome": "Lampo", "costo": 1, "tipo": "spell", "testo": "Deal 2 damage."}], "0.7")
@@ -350,6 +375,24 @@ assert all(mv.get("peggiore") or not r3["mosse"] for mv in r3["mosse"][:1]) or r
 txt = "\n".join(search.lines(r2))
 assert txt.startswith("MOSSE CALCOLATE") and "risposta peggiore: Muro" in txt and "Lampo" in txt, txt
 assert len({tuple((g["carta"], g["corsia"]) for g in mv["giocate"]) for mv in r2["mosse"]}) == len(r2["mosse"])
+mv0 = r2["mosse"][0]
+assert mv0["rischio"]["campioni"] > 0 and 0 <= mv0["rischio"]["perdi_barrier"] <= 1, mv0["rischio"]
+assert (mv0.get("dopo") or {}).get("valore") is not None, "valore del round dopo"
+# location: "creatures here get +2/+2" alle creature che entrano in quella corsia
+store.upsert("locations", [{"nome": "Arena", "testo": "Creatures here get +2/+2."},
+                           {"nome": "Palude", "testo": "If you play a spell, creatures here get +1/+1."}], "0.7")
+assert combat.location_mods(["Arena", "Palude", None]) == {0: (2, 2, "Arena")}, "condizioni: niente"
+lanes_t, _, _ = search._play(combat.normalize_board(mm["campo"]), [("Ariete", 0, 0)], "mie",
+                             combat.location_mods(["Arena"]))
+assert lanes_t[0]["mie"][0]["atk"] == 8 and lanes_t[0]["mie"][0]["hp"] == 4
+# ordine di rivelazione: chi rivela prima applica prima i suoi effetti alla rivelazione
+store.upsert("cards", [{"nome": "Cecchino", "costo": 2, "attacco": 1, "vita": 1, "tipo": "creatura",
+                        "testo": "On Reveal: deal 3 damage to the enemy creature in front."},
+                       {"nome": "Fante", "costo": 1, "attacco": 2, "vita": 3, "tipo": "creatura"}], "0.7")
+base_l = combat.normalize_board({"sinistra": {"mie": [None], "avv": [None]}})
+l1, _ = search._both(base_l, [("Cecchino", 0, 0)], [("Fante", 0, 0)], "io", {})
+l2, _ = search._both(base_l, [("Cecchino", 0, 0)], [("Fante", 0, 0)], "avversario", {})
+assert l1[0]["avv"][0]["hp"] == 3 and l2[0]["avv"][0] is None, "rivelando dopo, il Cecchino colpisce il Fante"
 _cfg = store.load("config")
 _cfg["modalita"] = "allenamento"
 store.save("config", _cfg)

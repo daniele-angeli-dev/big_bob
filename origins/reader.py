@@ -34,8 +34,31 @@ MINE = (
     ' "mie": {"sinistra": [...slot], "centro": [...], "destra": [...]},\n'
     ' "my_barriers": [sx, centro, dx], "my_reinforced": [bool, bool, bool], "my_destroyed": int,\n'
     ' "my_deck_left": int (solo se il numero è scritto), "reveals_first": "io" | "avversario" (solo se è indicato),\n'
-    ' "locations": ["Nome sx", "Nome centro", "Nome dx"] (null per quelle non ancora rivelate)}\n'
+    ' "locations": ["Nome sx", "Nome centro", "Nome dx"] (null per quelle non ancora rivelate),\n'
+    ' "risultato": "vittoria" | "sconfitta" (solo se la fase è "fine")}\n'
 )
+
+BOXES = (
+    'Aggiungi anche "riquadri": per ogni corsia e lato, il rettangolo di ogni slot del campo (anche vuoto) in '
+    'PERCENTUALE dell\'immagine: {"sinistra": {"mie": [[x, y, larghezza, altezza], ...], "avv": [...]}, "centro": ..., '
+    '"destra": ...}. Serve a BIG-BOB per imparare dove sono gli spazi.\n'
+)
+
+CLASSIFY = (
+    "[LETTORE · che schermata è] Guarda l'immagine del gioco Origins TCG e rispondi SOLO con un JSON: "
+    '{"fase": "mulligan" (scelta della mano iniziale, Keep/Replace) | "gioco" (partita in corso) | "fine" (schermata '
+    'di vittoria o sconfitta) | "menu" | "altro", "risultato": "vittoria" | "sconfitta" (solo se fine), '
+    '"leggendaria_avversaria": "Nome" (solo se si legge)}'
+)
+
+ZONE = {"mio": (0.33, 1.0), "avv": (0.0, 0.67)}  # parte verticale della schermata che serve a ogni lettore
+
+
+def zone_crop(img, side: str, zones: dict | None = None):
+    """Solo la parte di schermata che serve a quel lettore (meno immagine da leggere = risposta più rapida). Le due zone
+    si sovrappongono al centro, dove stanno corsie, location e barrier."""
+    y0, y1 = (zones or ZONE).get(side, (0.0, 1.0))
+    return img.crop((0, int(img.height * y0), img.width, int(img.height * y1)))
 
 OPP = (
     "[LETTORE · lato avversario e cosa è successo] Dall'ULTIMA immagine (la schermata attuale) leggi il lato "
@@ -69,8 +92,11 @@ def previous_state(m: dict) -> str:
     return "STATO REGISTRATO (round precedente o ultima lettura): " + json.dumps(keep, ensure_ascii=False) + "\n"
 
 
-def prompt(side: str, m: dict, predicted: list[str] | None = None) -> str:
-    return (MINE if side == "mio" else OPP) + COMMON + known_cards(m, predicted) + previous_state(m)
+def prompt(side: str, m: dict, predicted: list[str] | None = None, cropped: bool = False, boxes: bool = False) -> str:
+    note = ("L'immagine attuale è solo una parte della schermata (" + ("la metà bassa: il tuo lato e le corsie"
+            if side == "mio" else "la metà alta: il lato avversario e le corsie") + "): leggi ciò che c'è.\n") if cropped else ""
+    return (MINE if side == "mio" else OPP) + COMMON + note + (BOXES if boxes else "") + known_cards(m, predicted) \
+        + previous_state(m)
 
 
 def parse_json(text: str) -> dict | None:

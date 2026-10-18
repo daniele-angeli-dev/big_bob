@@ -13,6 +13,40 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **18/10/2026**
+- **Analisi della partita mossa per mossa** (come la revisione delle partite di scacchi): a fine partita BIG-BOB
+  confronta ogni tua giocata con la migliore trovata dalla sua ricerca, con gli stessi criteri, e la classifica:
+  migliore, buona, imprecisione, errore, errore grave. In libro → PARTITE trovi la precisione della partita, un grafico
+  della stima di vittoria round per round (con le barrier distrutte), il voto di ogni mossa e il momento decisivo.
+  Le magie non sono simulate, quindi i round con magie non vengono votati.
+- **Esercizi dagli errori**: nuova scheda ESERCIZI nel libro. Le posizioni in cui hai perso più punti diventano
+  esercizi "trova la mossa", con il campo, la mano, le carte probabili dell'avversario e la soluzione.
+- **Report della settimana**: una volta a settimana, all'avvio, BIG-BOB ti riassume in chat partite, winrate e
+  precisione rispetto alla settimana prima, gli errori (e con quali carte), il matchup più difficile e le lezioni
+  nuove. Lo trovi sempre in cima a STATISTICHE.
+- **Ricerca e barra tarate sulle tue partite**: BIG-BOB registra com'era la partita a ogni round e come è finita.
+  Da 12 partite in su impara quanto conta davvero ogni fattore per vincere e sposta un po' (al massimo il 60%) i pesi
+  con cui sceglie le mosse; i fattori che nelle tue partite non sono quasi mai cambiati restano come sono. La barra di
+  vantaggio viene corretta così che "70%" voglia dire davvero vincere circa 7 volte su 10. In STATISTICHE vedi la
+  tabella "detto contro vero".
+- **Effetti di carta da confermare con un clic**: quando il combattimento vero non torna con quello simulato, il coach
+  può proporre l'effetto della carta che lo spiega (es. "alla rivelazione 2 di danno alla barrier di fronte"). In chat
+  compaiono CONFERMA e SCARTA: solo se confermi, il simulatore inizia a usarlo.
+- **Ricerca più efficiente**: le posizioni già simulate vengono riusate invece di essere ricalcolate (come la tabella
+  delle trasposizioni dei motori di scacchi), e le mani avversarie si provano a giri su tutte le mosse candidate
+  insieme. Se il tempo finisce, tutte le candidate sono state messe alla prova allo stesso modo.
+- **Mossa istantanea e avvisi**: se una giocata è nettamente la migliore la vedi subito ("MOSSA CALCOLATA") e Claude
+  la conferma poco dopo. Se puoi chiudere la partita, o se anche la mossa migliore rischia di farti perdere, compare
+  un avviso in alto (anche a voce).
+- **Ricerca della mossa più profonda**: ogni giocata è provata contro 24 mani avversarie plausibili, prese dalla
+  previsione sul suo mazzo, e conta anche quanto prepara il round dopo. Tiene conto dei bonus delle location e di chi
+  rivela per primo.
+- **Carte avversarie probabili**: un riquadro apribile sotto l'HUD mostra la lista stimata dell'avversario con le
+  carte che probabilmente ha ancora.
+- **Inizio e fine partita automatici**: BIG-BOB riconosce la schermata del mulligan (inizia la partita con l'ultimo
+  mazzo usato) e quella finale (la chiude con il risultato letto).
+- **Lettura più leggera**: ogni lettore guarda solo la sua parte di schermata (se manca qualcosa, torna da solo alla
+  schermata intera). Un "atlante" impara l'aspetto delle carte e segnala i nomi letti male. A fine round Claude viene
+  preparato per l'F8 successivo. Ogni cosa si spegne da ⚙.
 - **Più mazzi in laboratorio insieme**: puoi creare un nuovo mazzo mentre un altro è a metà test e tornare a quello
   quando vuoi. Ogni progetto tiene le sue versioni e le sue partite; una partita conta per il progetto del mazzo che
   scegli con NUOVA, e il pannello LABORATORIO passa da solo a quel progetto. Con più progetti in test, nel pannello
@@ -248,6 +282,8 @@ Moderazione: `python -m origins.cervello admin panoramica` (ultimi giocatori, re
   *Prova collegamento* verifica che risponda.
 - **Modello per le risposte live**: Sonnet (veloce, consigliato), Opus (più preciso ma rischia i 40 s), Haiku (velocissimo).
 - Voce, apprendimento tra i round, Claude Code all'avvio, controllo aggiornamenti, tetto di ragionamento.
+- Velocità e lettura: lettura veloce, mossa istantanea, inizio e fine automatici, lettura a zone, memoria pronta,
+  atlante delle carte, lettura anticipata, ragionamento dosato, contesto pulito, invisibile alle catture.
 - **Cervello comune**: contribuisci (invio anonimo) e usa la conoscenza degli altri, con *Sincronizza ora*.
 
 ## Avvio: un'icona
@@ -294,6 +330,10 @@ previsto lo capisce, scrive una **lezione** e la rilegge ogni volta che tornano 
 - Le trovi in `data/lezioni.md`; in Claude Code `/lezioni` per rivederle, confermarle, correggerle o eliminarle.
   Dopo una patch, `/patch` ti segnala quelle sulle carte cambiate da riverificare.
 - Costa un turno breve in più per round (~5-10 s, mentre giochi). Per spegnerlo: `apprendimento_live: false` in `config.json`.
+- **Effetti delle carte**: se il combattimento vero non torna con quello simulato, il coach propone l'effetto che
+  manca. Tu lo confermi o lo scarti con un clic in chat; solo quelli confermati entrano nel simulatore.
+- **Taratura**: con le partite finite BIG-BOB tara i pesi con cui sceglie le mosse e corregge la barra di vantaggio
+  (da 12 partite in su, sempre mescolando con i valori di partenza). File `data/taratura.json`.
 
 ## Cosa fa BIG-BOB in partita
 - **Simulatore di combattimento**: BIG-BOB non fa i conti a mente. Passa il campo a `update_match` e riceve la
@@ -310,6 +350,13 @@ previsto lo capisce, scrive una **lezione** e la rilegge ogni volta che tornano 
   medio di risposta, risposte oltre 40 s, consigli seguiti e andati bene, lezioni confermate.
 - **Rivedi la partita**: a fine partita il pulsante **RIVEDI LA PARTITA** apre la linea del tempo con schermate,
   risposte, lezioni e segnalazioni.
+- **Ricerca della mossa** (allenamento e creazione): prima di chiedere al coach, BIG-BOB prova tutte le giocate che
+  puoi pagare negli spazi liberi, contro 24 mani avversarie plausibili, con i bonus delle location, chi rivela per primo
+  e il valore del round dopo. Le 3 migliori arrivano al coach con i numeri. Se una è nettamente la migliore compare
+  subito come MOSSA CALCOLATA. Avvisi in alto quando puoi chiudere la partita o rischi di perderla.
+- **Analisi della partita**: a fine partita ogni mossa viene votata (migliore, buona, imprecisione, errore, errore
+  grave) confrontandola con la migliore trovata dalla ricerca. In PARTITE trovi precisione, grafico e momento decisivo.
+  Gli errori diventano esercizi nella scheda ESERCIZI.
 
 ## Durante la partita (finestra Arena)
 In alto: **round, mana, chi rivela prima**; la **barra di vantaggio** (stile scacchi: tu teal, avversario arancione) con la
@@ -346,11 +393,15 @@ location e mano probabile dell'avversario. Non rallenta la risposta. Si spegne d
 Mentre pensa compare un riquadro di **caricamento** con il passaggio in corso e i secondi (l'obiettivo dei 40 s vale solo
 in partita). La finestra mostra solo la **richiesta attuale**: le risposte passate restano nel diario e in RIVEDI.
 
-**Il libro** (si apre in una finestra di BIG-BOB, non nel browser) ha tre schede:
+**Il libro** (si apre in una finestra di BIG-BOB, non nel browser) ha cinque schede:
 - **MAZZI**: tutti i mazzi salvati con winrate, partite e ultima partita; cerca e ordina. Cliccandone uno: carte, winrate
   con il suo margine, punti deboli, statistiche carta per carta, risultati contro ogni leggendaria, ultime partite; per i
   mazzi del laboratorio la storia delle versioni.
-- **STATISTICHE**: winrate per mazzo, avversario e location, tempi di risposta, consigli seguiti.
+- **PARTITE**: la cronologia con schermate, mosse suggerite e giocate, e l'analisi mossa per mossa (precisione,
+  grafico della stima di vittoria, momento decisivo). Puoi parlarne con BIG-BOB mossa per mossa.
+- **STATISTICHE**: in cima la settimana (confronto con quella prima); poi winrate per mazzo, avversario e location,
+  tempi di risposta, consigli seguiti, precisione media delle mosse e la tabella "detto contro vero" della barra.
+- **ESERCIZI**: "trova la mossa" nelle posizioni in cui hai perso più punti.
 - **STUDIO**: **STUDIA REGISTRAZIONI** fa studiare a BIG-BOB tutte le registrazioni in sospeso, in background: ne ricava
   regole del gioco e **lezioni di strategia** (chi ha vinto e perché, giocate decisive, errori ricorrenti, abitudini degli
   avversari); con una partita in corso parte a fine partita. Sotto, **cosa ho imparato** partita per partita.
@@ -405,7 +456,9 @@ Cartella `data/` (JSON leggibili, puoi farne backup o modificarli a mano):
 `patches.json`, `matches_log.json`, `rules.json` (regolamento, con versione leggibile `regole.md`),
 `lessons.json` (lezioni imparate, versione leggibile `lezioni.md`),
 `strategia.md` (idee da video e analisi), `cervello.json` (conoscenza comune scaricata) e `cervello_stato.json`
-(codice anonimo e cosa è già stato inviato). Schermate, registrazioni e video sono in `captures/`.
+(codice anonimo e cosa è già stato inviato), `taratura.json` (pesi della ricerca e correzione della barra),
+`proposte_effetti.json` (effetti di carta in attesa di conferma), `atlante/` (aspetto delle carte e posizione degli
+spazi). Schermate, registrazioni e video sono in `captures/`.
 
 ## Configurazione (`config.json`)
 - `modello_live`: modello per la finestra (`sonnet` = più veloce; `opus` = più preciso ma più lento: rischia di superare i 40 s)
