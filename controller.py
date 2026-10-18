@@ -678,6 +678,14 @@ class Controller:
                      "di test: scegli il mazzo con NUOVA.", "lesson")
         self.emit_state()
 
+    def lab_select(self, name: str) -> None:
+        """Cambia il progetto mostrato nel pannello LABORATORIO (le partite contano comunque per il mazzo scelto con
+        NUOVA: ogni progetto tiene le sue versioni e le sue statistiche)."""
+        res = deckproj.set_options(name, attivo=True)
+        if isinstance(res, dict) and res.get("errore"):
+            self.say(res["errore"], "warn")
+        self.emit_state()
+
     def open_lab(self) -> None:
         p = deckproj.active()
         if not p:

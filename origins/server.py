@@ -280,6 +280,8 @@ def start_match(my_deck: str, opponent_legendary: str = "") -> str:
          "avv_giocati": [], "avv_scartati": [], "avv_mano": None, "location": [], "note": [],
          "viste_in_mano": [], "prima_giocata": {}, "inizio": now(), **deckproj.tag_match(d["nome"])}
     save("match", m)
+    if m.get("progetto"):  # il pannello LABORATORIO segue il mazzo che stai giocando
+        deckproj.set_options(m["progetto"], attivo=True)
     out = _j(m)
     if m.get("progetto"):
         out += (f"\n\nQuesta partita è un TEST del progetto «{m['progetto']}» v{m['versione']} (modalità creazione "

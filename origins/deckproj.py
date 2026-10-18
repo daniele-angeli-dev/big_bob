@@ -334,17 +334,18 @@ def status(p: dict) -> dict:
 
 
 def summary(p: dict | None = None) -> dict | None:
-    """Riassunto per la finestra (pannello LABORATORIO)."""
+    """Riassunto per la finestra (pannello LABORATORIO), con l'elenco dei progetti ancora in test per cambiare."""
     p = p or active()
     if not p:
         return None
+    others = [{"nome": x["nome"], "v": current(x)["v"]} for x in load() if x.get("stato") != "concluso"]
     st = status(p)
     cur = st["statistiche_versione_attuale"]
     return {"nome": p["nome"], "v": st["versione_attuale"], "partite": cur["partite"],
             "obiettivo": cur["partite_obiettivo"], "vinte": cur["vinte"], "perse": cur["perse"],
             "mancanti": st["partite_mancanti"], "confronto": st["confronto"],
             "proposta": (instructions(p["proposta"]) + " " + p["proposta"]["motivo"]) if p.get("proposta") else None,
-            "deck": deck_name(p), "consiglio": st["consiglio"]}
+            "deck": deck_name(p), "consiglio": st["consiglio"], "progetti": others}
 
 
 def tag_match(deck: str) -> dict:

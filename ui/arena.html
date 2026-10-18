@@ -44,6 +44,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .lab-k{font-family:var(--display);font-size:12px;letter-spacing:1.5px;color:var(--teal-t);flex-shrink:0}
 .lab-n{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-grow:1;min-width:0}
 .lab-v{font-family:var(--display);font-size:16px;color:var(--yellow);flex-shrink:0}
+.lab-sel{flex-grow:1;min-width:0;background:var(--bg);color:#fff;border:2px solid var(--teal);border-radius:8px;font-weight:700;font-size:14px;padding:3px 6px}
 .lab-prog{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--dim)}
 .lab-bar{flex-grow:1;height:10px;background:var(--bg);transform:skewX(-15deg);overflow:hidden}
 .lab-bar i{display:block;height:100%;background:var(--teal);width:0}
@@ -285,7 +286,7 @@ body.inmatch .score .l{font-size:11px}
   </div>
 
   <section class="labp hidden" id="labp" aria-label="Mazzo in creazione">
-    <div class="lab-top"><div class="lab-k">LABORATORIO</div><div class="lab-n" id="labName">Nessun mazzo in creazione</div><div class="lab-v" id="labVer"></div></div>
+    <div class="lab-top"><div class="lab-k">LABORATORIO</div><div class="lab-n" id="labName">Nessun mazzo in creazione</div><select id="labSel" class="lab-sel hidden" aria-label="Progetto di mazzo da mostrare"></select><div class="lab-v" id="labVer"></div></div>
     <div class="lab-prog" id="labProg"><div class="lab-bar"><i id="labFill"></i></div><span id="labCount"></span></div>
     <div class="lab-txt" id="labTxt">Premi CREA MAZZO: BIG-BOB parte dai mazzi del meta e lo migliora con le tue partite di test.</div>
     <div class="lab-btns">
@@ -667,6 +668,12 @@ body.inmatch .score .l{font-size:11px}
     if (!on) return;
     var has = !!lab;
     $('labName').textContent = has ? lab.nome : 'Nessun mazzo in creazione';
+    var many = has && lab.progetti && lab.progetti.length > 1, sel = $('labSel');
+    sel.classList.toggle('hidden', !many); $('labName').classList.toggle('hidden', many);
+    if (many){
+      sel.innerHTML = '';
+      lab.progetti.forEach(function(x){ var o = el('option', null, x.nome + ' · v' + x.v); o.value = x.nome; if (x.nome === lab.nome) o.selected = true; sel.appendChild(o); });
+    }
     $('labVer').textContent = has ? 'v' + lab.v : '';
     $('labProg').classList.toggle('hidden', !has);
     $('btnLabStats').classList.toggle('hidden', !has);
@@ -686,6 +693,7 @@ body.inmatch .score .l{font-size:11px}
   $('fCreate').onsubmit = function(e){ e.preventDefault(); hide(); call('create_deck', $('goalIn').value.trim(), parseInt($('gamesIn').value || '10', 10)); };
   $('btnLabStats').onclick = function(){ call('open_lab'); };
   $('btnLabApply').onclick = function(){ call('lab_apply'); };
+  $('labSel').onchange = function(){ call('lab_select', $('labSel').value); };
 
   /* ---------- tutorial (prima volta; si rivede dalle impostazioni) ---------- */
   var TUT = [

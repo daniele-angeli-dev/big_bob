@@ -268,6 +268,22 @@ lab_s = controller.ClaudeSession("claude", ROOT, live=False)
 live_s = controller.ClaudeSession("claude", ROOT)
 cfg = store.load("config"); cfg["max_thinking_live"] = 4000; store.save("config", cfg)
 assert "MAX_THINKING_TOKENS" not in lab_s._env() and live_s._env()["MAX_THINKING_TOKENS"] == "4000"
+# due progetti: se ne crei un altro e poi torni a giocare il primo, le partite vanno al progetto del mazzo scelto e il
+# pannello lo segue; dal pannello si può anche cambiare a mano
+v_prima = deckproj.current(deckproj.get("Sniper Lab"))["v"]
+r2 = json.loads(call("deck_project_start", nome="Secondo Lab", leggendaria="Robin Hood", carte=DECK))
+assert r2.get("creato") == "Secondo Lab" and deckproj.active()["nome"] == "Secondo Lab"
+names = [x["nome"] for x in deckproj.summary()["progetti"]]
+assert "Sniper Lab" in names and "Secondo Lab" in names, names
+_sp = deckproj.current(deckproj.get("Sniper Lab"))
+store.save_deck("Sniper Lab", _sp["leggendaria"], _sp["carte"])  # (un test più su ha riscritto l'elenco dei mazzi)
+call("start_match", my_deck="Sniper Lab", opponent_legendary="Dracula")
+assert store.load("match")["progetto"] == "Sniper Lab" and store.load("match")["versione"] == v_prima
+assert deckproj.active()["nome"] == "Sniper Lab", "il pannello segue il mazzo che stai giocando"
+c.lab_select("Secondo Lab")
+assert deckproj.active()["nome"] == "Secondo Lab"
+call("start_match", my_deck="Secondo Lab", opponent_legendary="Dracula")
+assert store.load("match")["versione"] == 1
 c.stop()
 
 shutil.rmtree(tmp, ignore_errors=True)

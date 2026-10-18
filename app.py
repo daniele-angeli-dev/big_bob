@@ -224,6 +224,9 @@ class Api:
     def lab_apply(self):
         self._c.lab_apply()
 
+    def lab_select(self, name):
+        self._c.lab_select(name)
+
     def open_lab(self):
         self._c.open_lab()
 

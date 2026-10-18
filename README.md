@@ -13,6 +13,10 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **18/10/2026**
+- **Più mazzi in laboratorio insieme**: puoi creare un nuovo mazzo mentre un altro è a metà test e tornare a quello
+  quando vuoi. Ogni progetto tiene le sue versioni e le sue partite; una partita conta per il progetto del mazzo che
+  scegli con NUOVA, e il pannello LABORATORIO passa da solo a quel progetto. Con più progetti in test, nel pannello
+  compare un menu per scegliere quale guardare (APPLICA MIGLIORIA vale per quello mostrato).
 - **Il timer non si azzera più**: dalla lettura della schermata al ragionamento sulla mossa il conteggio continua,
   quindi vedi il tempo vero dall'F8 alla risposta.
 - **Ricerca della mossa**: prima di chiedere al coach, BIG-BOB prova da solo tutte le giocate che puoi pagare, in tutti
