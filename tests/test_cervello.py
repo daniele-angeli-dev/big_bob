@@ -43,9 +43,11 @@ def call(name, **kw):
 
 
 class Resp(io.BytesIO):
-    def __init__(self, data, headers=None):
-        super().__init__(json.dumps(data).encode())
-        self.headers = headers or {}
+    def __init__(self, data, headers=None, gz=False):
+        import gzip
+        raw = json.dumps(data).encode()
+        super().__init__(gzip.compress(raw) if gz else raw)
+        self.headers = {**(headers or {}), **({"content-encoding": "gzip"} if gz else {})}
         self.status = 200
 
     def __enter__(self):
@@ -65,7 +67,8 @@ class FakeServer:
         if req.get_method() == "POST":
             body = json.loads(req.data)
             self.posts.append(body)
-            return Resp({"ok": True, "ricevuti": {k: len(body.get(k, [])) for k in ("regole", "lezioni")}})
+            # Cloudflare comprime anche le risposte alle POST (accept-encoding: gzip)
+            return Resp({"ok": True, "ricevuti": {k: len(body.get(k, [])) for k in ("regole", "lezioni")}}, gz=True)
         self.gets += 1
         if req.get_header("If-none-match") == self.etag:
             raise urllib.error.HTTPError(req.full_url, 304, "Not Modified", {}, None)

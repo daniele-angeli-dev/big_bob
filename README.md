@@ -13,6 +13,13 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **18/10/2026**
+- **Impostazioni riordinate**: le voci sono divise in gruppi (In partita, Velocità della risposta, Apprendimento,
+  Finestra e sistema, Cervello comune) con nomi brevi. Accanto a ogni voce ci sono delle icone (più veloce, più
+  preciso, consuma di più, consuma meno, fa imparare) e il pulsante "i", che spiega cosa fa. In cima tre modalità
+  rapide: VELOCE (tutto acceso), BILANCIATA (senza i consumi extra) e RISPARMIO (consuma il minimo).
+- **Corretto l'errore del cervello comune** "'utf-8' codec can't decode byte 0x8b": il server manda le risposte
+  compresse e l'invio non le decomprimeva, quindi i tuoi contributi non partivano. Ora gli errori di sincronizzazione
+  compaiono in arancione, non più come lezione imparata.
 - **Analisi della partita mossa per mossa** (come la revisione delle partite di scacchi): a fine partita BIG-BOB
   confronta ogni tua giocata con la migliore trovata dalla sua ricerca, con gli stessi criteri, e la classifica:
   migliore, buona, imprecisione, errore, errore grave. In libro → PARTITE trovi la precisione della partita, un grafico
@@ -282,8 +289,11 @@ Moderazione: `python -m origins.cervello admin panoramica` (ultimi giocatori, re
   *Prova collegamento* verifica che risponda.
 - **Modello per le risposte live**: Sonnet (veloce, consigliato), Opus (più preciso ma rischia i 40 s), Haiku (velocissimo).
 - Voce, apprendimento tra i round, Claude Code all'avvio, controllo aggiornamenti, tetto di ragionamento.
-- Velocità e lettura: lettura veloce, mossa istantanea, inizio e fine automatici, lettura a zone, memoria pronta,
-  atlante delle carte, lettura anticipata, ragionamento dosato, contesto pulito, invisibile alle catture.
+- **Modalità rapide**: VELOCE, BILANCIATA o RISPARMIO accendono e spengono insieme le voci che cambiano velocità e
+  consumi; poi puoi ritoccare le singole voci.
+- Le voci sono in gruppi (In partita, Velocità della risposta, Apprendimento, Finestra e sistema), ognuna con le icone
+  di cosa cambia (più veloce, più preciso, consuma di più, consuma meno, fa imparare) e il pulsante "i" con la
+  spiegazione.
 - **Cervello comune**: contribuisci (invio anonimo) e usa la conoscenza degli altri, con *Sincronizza ora*.
 
 ## Avvio: un'icona

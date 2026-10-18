@@ -294,6 +294,17 @@ def _request(url: str, body: dict | None = None, headers: dict | None = None, op
     return op.open(req, timeout=TIMEOUT)
 
 
+def _read(r) -> bytes:
+    """Il corpo della risposta, decompresso se il server l'ha mandato con gzip (lo chiediamo noi con
+    accept-encoding, e Cloudflare comprime anche le risposte alle POST)."""
+    raw = r.read() or b""
+    if (getattr(r, "headers", None) and (r.headers.get("content-encoding") or "").lower() == "gzip") \
+            or raw[:2] == b"\x1f\x8b":
+        import gzip
+        raw = gzip.decompress(raw)
+    return raw
+
+
 LIMITI = {"regole": 300, "lezioni": 300, "carte": 400, "location": 120, "partite": 100}
 
 
@@ -317,10 +328,10 @@ def send(opener=None) -> dict:
                 "patch": store.load("config").get("patch_corrente", ""), **chunk}
         try:
             with _request(cfg["url"] + "/v1/contributi", body, opener=opener) as r:
-                json.loads(r.read() or b"{}")
+                json.loads(_read(r) or b"{}")
         except urllib.error.HTTPError as e:
             try:
-                msg = json.loads(e.read() or b"{}").get("errore") or str(e)
+                msg = json.loads(_read(e) or b"{}").get("errore") or str(e)
             except Exception:  # noqa: BLE001
                 msg = str(e)
             _save_json(STATE_FILE, st)
@@ -352,11 +363,7 @@ def download(opener=None) -> dict:
         url += "?da=" + urllib.parse.quote(old["creato"])
     try:
         with _request(url, headers=headers, opener=opener) as r:
-            raw = r.read()
-            if (r.headers.get("content-encoding") or "").lower() == "gzip" or raw[:2] == b"\x1f\x8b":
-                import gzip
-                raw = gzip.decompress(raw)
-            data = json.loads(raw)
+            data = json.loads(_read(r))
             etag = r.headers.get("etag")
     except urllib.error.HTTPError as e:
         if e.code == 304:
@@ -719,9 +726,9 @@ def admin(command: str, body: dict | None = None, opener=None) -> dict:
     try:
         with _request(f"{url}/v1/admin/{command}", body if body is not None else ({} if command != "panoramica" else None),
                       {"authorization": f"Bearer {key}"}, opener=opener) as r:
-            return json.loads(r.read())
+            return json.loads(_read(r))
     except urllib.error.HTTPError as e:
-        return {"errore": f"HTTP {e.code}", "dettagli": (e.read() or b"")[:300].decode("utf-8", "replace")}
+        return {"errore": f"HTTP {e.code}", "dettagli": (_read(e) or b"")[:300].decode("utf-8", "replace")}
     except Exception as e:  # noqa: BLE001
         return {"errore": str(e)}
 

@@ -949,7 +949,8 @@ class Controller:
             if manual or news:
                 self.say(cervello.summary_line(rep) + (f" · carte aggiornate dal cervello comune: "
                                                       f"{(ric.get('carte_aggiunte') or 0) + (ric.get('carte_aggiornate') or 0)}"
-                                                      if news else ""), "lesson")
+                                                      if news else ""),
+                         "warn" if "problema" in cervello.summary_line(rep) else "dim")
             if manual:
                 self.status("Cervello comune sincronizzato" if "problema" not in cervello.summary_line(rep)
                             else "Cervello comune: sincronizzazione con problemi")

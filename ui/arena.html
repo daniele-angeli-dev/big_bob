@@ -239,6 +239,29 @@ body.inmatch .score .l{font-size:11px}
 .testres.tr-ok{color:var(--teal-t)} .testres.tr-ko{color:var(--orange-t)}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap}
 .btn2{border:2px solid var(--teal);border-radius:8px;background:transparent;color:var(--teal-t);font-weight:700;padding:7px 10px;font-size:13px}
+.srow{display:flex;align-items:center;gap:8px;min-height:30px}
+.srow .opt{flex:1 1 auto;min-width:0}
+.snm{overflow:hidden;text-overflow:ellipsis}
+.tgs{display:flex;gap:3px;flex-shrink:0}
+.tg{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px}
+.tg svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.t-fast{background:rgba(31,214,196,.18);color:var(--teal-t)}.t-cost{background:rgba(255,138,61,.2);color:var(--orange-t)}
+.t-save{background:rgba(125,237,226,.12);color:#B8F5EF}.t-prec{background:rgba(255,210,63,.18);color:var(--yellow)}
+.t-learn{background:rgba(255,122,200,.18);color:var(--pink)}
+.info{flex-shrink:0;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);background:transparent;color:var(--dim);
+  font-family:Georgia,serif;font-style:italic;font-weight:700;font-size:12px;line-height:1;padding:0;cursor:pointer}
+.info:hover,.info[aria-expanded="true"]{border-color:var(--teal);color:var(--teal-t)}
+.ihelp{margin:-4px 0 2px 26px!important;padding:7px 10px;background:var(--bg);border-left:3px solid var(--teal);border-radius:6px;
+  font-size:12.5px!important;line-height:1.4!important;color:var(--dim)}
+.inp.num{width:84px;height:30px;flex:0 0 auto}
+.legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:11.5px;color:var(--dim)}
+.legend .tg{margin-left:4px}
+.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pre{border:2px solid var(--line);border-radius:8px;background:transparent;color:#fff;font-family:var(--display);font-size:14px;
+  letter-spacing:1px;padding:7px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+.pre small{font-family:var(--body);font-size:11px;letter-spacing:0;color:var(--dim);font-weight:600}
+.pre:hover{border-color:var(--teal)}
+.pre[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:var(--bg)}.pre[aria-pressed="true"] small{color:var(--bg)}
 /* modali */
 .modal{position:fixed;inset:0;background:rgba(20,8,45,.82);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
 .box{width:100%;background:var(--panel);border:2px solid var(--teal);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -258,6 +281,13 @@ body.inmatch .score .l{font-size:11px}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-fast" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-cost" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 7.5v9M7.5 12h9"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 12h9"/></symbol>
+  <symbol id="i-prec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-learn" viewBox="0 0 24 24"><path d="M2 6h7a3 3 0 0 1 3 3v11a2 2 0 0 0-2-2H2zM22 6h-7a3 3 0 0 0-3 3v11a2 2 0 0 1 2-2h8z"/></symbol>
+</svg>
 <div class="app">
   <header class="head pywebview-drag-region">
     <div class="brand pywebview-drag-region"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true">
@@ -432,30 +462,59 @@ body.inmatch .score .l{font-size:11px}
       <option value="opus">Opus · più preciso, più lento (rischia i 40 s)</option>
       <option value="haiku">Haiku · velocissimo, meno preciso</option>
     </select>
-    <div class="sec">OPZIONI</div>
-    <label class="opt"><input type="checkbox" id="oVoce"> Leggi la mossa ad alta voce</label>
-    <label class="opt"><input type="checkbox" id="oImpara"> Impara dalle sorprese tra i round</label>
-    <label class="opt"><input type="checkbox" id="oTerm"> Apri anche il terminale di Claude Code all'avvio (serve solo per i comandi)</label>
-    <label class="opt"><input type="checkbox" id="oObs"> Osserva la partita tra un F8 e l'altro (vede magie scartate e creature morte)</label>
-    <div class="hint" id="spaceTxt" style="margin:4px 0 6px">–</div>
-    <label class="opt"><input type="checkbox" id="oFast"> Lettura veloce: due lettori leggono la schermata in parallelo e il coach pensa solo alla mossa</label>
-    <label class="opt"><input type="checkbox" id="oInst"> Mossa istantanea: se una giocata è nettamente la migliore la vedi subito, poi Claude la conferma</label>
-    <label class="opt"><input type="checkbox" id="oAutoMatch"> Inizio e fine partita automatici (riconosce mulligan e schermata finale)</label>
-    <label class="opt"><input type="checkbox" id="oZone"> Lettura a zone: ogni lettore guarda solo la sua metà di schermata (si spegne da solo se manca qualcosa)</label>
-    <label class="opt"><input type="checkbox" id="oWarm"> Memoria pronta: a fine round prepara Claude per l'F8 dopo</label>
-    <label class="opt"><input type="checkbox" id="oAtlas"> Atlante delle carte: impara l'aspetto delle carte e controlla i nomi letti</label>
-    <label class="opt"><input type="checkbox" id="oPre"> Lettura anticipata: a inizio round legge la schermata prima che tu prema F8 (consuma un po' di più)</label>
-    <label class="opt"><input type="checkbox" id="oDose"> Ragionamento dosato: poco nei round facili, di più in quelli decisivi</label>
-    <label class="opt"><input type="checkbox" id="oClean"> Contesto pulito a ogni round (risposte più rapide: le immagini dei round prima non rallentano)</label>
-    <label class="opt"><input type="checkbox" id="oInv"> BIG-BOB invisibile alle catture: le schermate vedono il gioco sotto la finestra, senza farla sparire (spegnilo solo per fotografare BIG-BOB)</label>
-    <label class="opt"><input type="checkbox" id="oEval"> Barra di vantaggio: BIG-BOB stima chi sta vincendo dopo ogni risposta</label>
-    <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (al primo avvio di ogni giorno)</label>
-    <label class="opt" for="oThink">Tetto ragionamento live (token) <input class="inp" id="oThink" type="number" min="0" step="500" style="width:90px;height:34px;flex-grow:0"></label>
+    <div class="sec">MODALITÀ</div>
+    <div class="presets" role="group" aria-label="Modalità rapide">
+      <button type="button" class="pre" data-preset="veloce" aria-pressed="false">VELOCE<small>tutto acceso</small></button>
+      <button type="button" class="pre" data-preset="bilanciata" aria-pressed="false">BILANCIATA<small>senza i consumi extra</small></button>
+      <button type="button" class="pre" data-preset="risparmio" aria-pressed="false">RISPARMIO<small>consuma il minimo</small></button>
+    </div>
+    <div class="legend" aria-hidden="true"><span class="tg t-fast" title="Più veloce"><svg aria-hidden="true"><use href="#i-fast"/></svg><span class="sr">Più veloce</span></span> veloce <span class="tg t-prec" title="Più preciso"><svg aria-hidden="true"><use href="#i-prec"/></svg><span class="sr">Più preciso</span></span> preciso <span class="tg t-cost" title="Consuma di più (messaggi dell'abbonamento o token)"><svg aria-hidden="true"><use href="#i-cost"/></svg><span class="sr">Consuma di più (messaggi dell'abbonamento o token)</span></span> consuma di più <span class="tg t-save" title="Consuma di meno"><svg aria-hidden="true"><use href="#i-save"/></svg><span class="sr">Consuma di meno</span></span> consuma meno <span class="tg t-learn" title="BIG-BOB impara"><svg aria-hidden="true"><use href="#i-learn"/></svg><span class="sr">BIG-BOB impara</span></span> impara</div>
+    <div class="sec">IN PARTITA</div>
+    <div class="srow"><label class="opt" for="oInst"><input type="checkbox" id="oInst"><span class="snm">Mossa istantanea</span></label><span class="tgs"><span class="tg t-fast" title="Più veloce"><svg aria-hidden="true"><use href="#i-fast"/></svg><span class="sr">Più veloce</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oInst" aria-label="Cosa fa: Mossa istantanea">i</button></div>
+    <p class="ihelp" id="h-oInst" hidden>Se la ricerca di BIG-BOB trova una giocata nettamente migliore delle altre, la vedi subito come MOSSA CALCOLATA, prima della risposta di Claude, che poi la conferma o la corregge. Non costa niente: il calcolo lo fa il tuo PC.</p>
+    <div class="srow"><label class="opt" for="oAutoMatch"><input type="checkbox" id="oAutoMatch"><span class="snm">Inizio e fine automatici</span></label><span class="tgs"></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oAutoMatch" aria-label="Cosa fa: Inizio e fine automatici">i</button></div>
+    <p class="ihelp" id="h-oAutoMatch" hidden>Quando vede la schermata del mulligan inizia la partita con l'ultimo mazzo usato; quando vede la schermata finale la chiude con il risultato letto. Non devi premere NUOVA e FINE.</p>
+    <div class="srow"><label class="opt" for="oObs"><input type="checkbox" id="oObs"><span class="snm">Osservatore</span></label><span class="tgs"><span class="tg t-prec" title="Più preciso"><svg aria-hidden="true"><use href="#i-prec"/></svg><span class="sr">Più preciso</span></span><span class="tg t-cost" title="Consuma di più (messaggi dell'abbonamento o token)"><svg aria-hidden="true"><use href="#i-cost"/></svg><span class="sr">Consuma di più (messaggi dell'abbonamento o token)</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oObs" aria-label="Cosa fa: Osservatore">i</button></div>
+    <p class="ihelp" id="h-oObs" hidden>Tra un F8 e l'altro salva i momenti in cui lo schermo cambia (magie lanciate, creature morte, carte scartate) e all'F8 li mostra a Claude. Senza, i contatori e le probabilità possono perdere carte. Le immagini in più consumano qualche token.</p>
+    <div class="srow"><label class="opt" for="oEval"><input type="checkbox" id="oEval"><span class="snm">Barra di vantaggio</span></label><span class="tgs"><span class="tg t-cost" title="Consuma di più (messaggi dell'abbonamento o token)"><svg aria-hidden="true"><use href="#i-cost"/></svg><span class="sr">Consuma di più (messaggi dell'abbonamento o token)</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oEval" aria-label="Cosa fa: Barra di vantaggio">i</button></div>
+    <p class="ihelp" id="h-oEval" hidden>Dopo ogni risposta Claude rifinisce in background la stima di chi sta vincendo (la barra in alto). Spenta, resta la stima rapida calcolata dal PC, senza consumi.</p>
+    <div class="srow"><label class="opt" for="oVoce"><input type="checkbox" id="oVoce"><span class="snm">Mossa a voce</span></label><span class="tgs"></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oVoce" aria-label="Cosa fa: Mossa a voce">i</button></div>
+    <p class="ihelp" id="h-oVoce" hidden>Legge la mossa ad alta voce con la voce di Windows, insieme agli avvisi (puoi chiudere / rischi di perdere). In ranked non dice nulla.</p>
+    <div class="sec">VELOCITÀ DELLA RISPOSTA</div>
+    <div class="srow"><label class="opt" for="oFast"><input type="checkbox" id="oFast"><span class="snm">Lettura veloce</span></label><span class="tgs"><span class="tg t-fast" title="Più veloce"><svg aria-hidden="true"><use href="#i-fast"/></svg><span class="sr">Più veloce</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oFast" aria-label="Cosa fa: Lettura veloce">i</button></div>
+    <p class="ihelp" id="h-oFast" hidden>Due lettori leggono la schermata in parallelo (Haiku il tuo lato, Sonnet quello avversario) e BIG-BOB registra lo stato da solo: Claude pensa solo alla mossa. Se la lettura non riesce torna da solo al giro normale.</p>
+    <div class="srow"><label class="opt" for="oPre"><input type="checkbox" id="oPre"><span class="snm">Lettura anticipata</span></label><span class="tgs"><span class="tg t-fast" title="Più veloce"><svg aria-hidden="true"><use href="#i-fast"/></svg><span class="sr">Più veloce</span></span><span class="tg t-cost" title="Consuma di più (messaggi dell'abbonamento o token)"><svg aria-hidden="true"><use href="#i-cost"/></svg><span class="sr">Consuma di più (messaggi dell'abbonamento o token)</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oPre" aria-label="Cosa fa: Lettura anticipata">i</button></div>
+    <p class="ihelp" id="h-oPre" hidden>A inizio round, appena lo schermo si ferma, i lettori leggono già la schermata, prima che tu prema F8: all'F8 resta solo la mossa. Se lo schermo cambia nel frattempo la lettura si rifà, quindi consuma un po' di più.</p>
+    <div class="srow"><label class="opt" for="oZone"><input type="checkbox" id="oZone"><span class="snm">Lettura a zone</span></label><span class="tgs"><span class="tg t-fast" title="Più veloce"><svg aria-hidden="true"><use href="#i-fast"/></svg><span class="sr">Più veloce</span></span><span class="tg t-save" title="Consuma di meno"><svg aria-hidden="true"><use href="#i-save"/></svg><span class="sr">Consuma di meno</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oZone" aria-label="Cosa fa: Lettura a zone">i</button></div>
+    <p class="ihelp" id="h-oZone" hidden>Ogni lettore riceve solo la sua metà di schermata, ritagliata: immagini più piccole, risposte più rapide e meno token. Se dopo due letture manca qualcosa (mana, barrier) torna da solo alla schermata intera.</p>
+    <div class="srow"><label class="opt" for="oWarm"><input type="checkbox" id="oWarm"><span class="snm">Memoria pronta</span></label><span class="tgs"><span class="tg t-fast" title="Più veloce"><svg aria-hidden="true"><use href="#i-fast"/></svg><span class="sr">Più veloce</span></span><span class="tg t-cost" title="Consuma di più (messaggi dell'abbonamento o token)"><svg aria-hidden="true"><use href="#i-cost"/></svg><span class="sr">Consuma di più (messaggi dell'abbonamento o token)</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oWarm" aria-label="Cosa fa: Memoria pronta">i</button></div>
+    <p class="ihelp" id="h-oWarm" hidden>A fine round manda a Claude un messaggio minimo, così istruzioni e strumenti sono già in memoria quando arriva l'F8 dopo. Costa un messaggio brevissimo per round.</p>
+    <div class="srow"><label class="opt" for="oClean"><input type="checkbox" id="oClean"><span class="snm">Contesto pulito</span></label><span class="tgs"><span class="tg t-fast" title="Più veloce"><svg aria-hidden="true"><use href="#i-fast"/></svg><span class="sr">Più veloce</span></span><span class="tg t-save" title="Consuma di meno"><svg aria-hidden="true"><use href="#i-save"/></svg><span class="sr">Consuma di meno</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oClean" aria-label="Cosa fa: Contesto pulito">i</button></div>
+    <p class="ihelp" id="h-oClean" hidden>A ogni round Claude riparte da una sessione nuova: le immagini dei round prima non si accumulano e non rallentano le risposte. La partita resta registrata in BIG-BOB, quindi non si perde niente.</p>
+    <div class="srow"><label class="opt" for="oDose"><input type="checkbox" id="oDose"><span class="snm">Ragionamento dosato</span></label><span class="tgs"><span class="tg t-fast" title="Più veloce"><svg aria-hidden="true"><use href="#i-fast"/></svg><span class="sr">Più veloce</span></span><span class="tg t-save" title="Consuma di meno"><svg aria-hidden="true"><use href="#i-save"/></svg><span class="sr">Consuma di meno</span></span><span class="tg t-prec" title="Più preciso"><svg aria-hidden="true"><use href="#i-prec"/></svg><span class="sr">Più preciso</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oDose" aria-label="Cosa fa: Ragionamento dosato">i</button></div>
+    <p class="ihelp" id="h-oDose" hidden>BIG-BOB decide quanto far ragionare Claude round per round: poco nei primi round e in quelli facili, il doppio in quelli decisivi (chiusure, barrier a rischio).</p>
+    <div class="srow"><label class="opt" for="oThink"><span class="snm">Tetto di ragionamento</span></label><input class="inp num" id="oThink" type="number" min="0" step="500" aria-describedby="h-oThink"><span class="tgs"></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oThink" aria-label="Cosa fa: Tetto di ragionamento">i</button></div>
+    <p class="ihelp" id="h-oThink" hidden>Il massimo di token che Claude può usare per ragionare in una risposta live (4000 consigliato). Più alto = risposte più pensate ma più lente; 0 = nessun ragionamento esteso.</p>
+    <div class="sec">APPRENDIMENTO</div>
+    <div class="srow"><label class="opt" for="oImpara"><input type="checkbox" id="oImpara"><span class="snm">Impara tra i round</span></label><span class="tgs"><span class="tg t-learn" title="BIG-BOB impara"><svg aria-hidden="true"><use href="#i-learn"/></svg><span class="sr">BIG-BOB impara</span></span><span class="tg t-cost" title="Consuma di più (messaggi dell'abbonamento o token)"><svg aria-hidden="true"><use href="#i-cost"/></svg><span class="sr">Consuma di più (messaggi dell'abbonamento o token)</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oImpara" aria-label="Cosa fa: Impara tra i round">i</button></div>
+    <p class="ihelp" id="h-oImpara" hidden>Dopo la risposta, mentre giochi, Claude confronta cosa aveva previsto con cosa è successo e scrive le lezioni. Parte solo quando c'è una sorpresa (carta inattesa, combattimento diverso dal simulato, consiglio non seguito).</p>
+    <div class="srow"><label class="opt" for="oAtlas"><input type="checkbox" id="oAtlas"><span class="snm">Atlante delle carte</span></label><span class="tgs"><span class="tg t-prec" title="Più preciso"><svg aria-hidden="true"><use href="#i-prec"/></svg><span class="sr">Più preciso</span></span><span class="tg t-learn" title="BIG-BOB impara"><svg aria-hidden="true"><use href="#i-learn"/></svg><span class="sr">BIG-BOB impara</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oAtlas" aria-label="Cosa fa: Atlante delle carte">i</button></div>
+    <p class="ihelp" id="h-oAtlas" hidden>Impara com'è fatta ogni carta in campo e dove sono gli spazi, poi segnala i nomi letti male. Lavora tutto sul tuo PC, senza consumi.</p>
+    <div class="srow"><label class="opt" for="oMeta"><input type="checkbox" id="oMeta"><span class="snm">Meta da OriginsMeta</span></label><span class="tgs"></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oMeta" aria-label="Cosa fa: Meta da OriginsMeta">i</button></div>
+    <p class="ihelp" id="h-oMeta" hidden>Al primo avvio di ogni giorno scarica carte, location, mazzi e statistiche da originsmeta.com. Servono alle probabilità sulla mano avversaria e alla creazione dei mazzi.</p>
+    <div class="sec">FINESTRA E SISTEMA</div>
+    <div class="srow"><label class="opt" for="oInv"><input type="checkbox" id="oInv"><span class="snm">Invisibile alle catture</span></label><span class="tgs"></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oInv" aria-label="Cosa fa: Invisibile alle catture">i</button></div>
+    <p class="ihelp" id="h-oInv" hidden>Le schermate (F8, osservatore, registrazioni) vedono il gioco sotto la finestra di BIG-BOB, senza farla sparire. Spegnilo solo se vuoi fotografare BIG-BOB. Serve Windows 10 (2004) o più recente.</p>
+    <div class="srow"><label class="opt" for="oTerm"><input type="checkbox" id="oTerm"><span class="snm">Terminale all'avvio</span></label><span class="tgs"></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oTerm" aria-label="Cosa fa: Terminale all'avvio">i</button></div>
+    <p class="ihelp" id="h-oTerm" hidden>Apre anche il terminale di Claude Code quando avvii BIG-BOB. Serve solo per i comandi come /scansiona o /mazzo.</p>
+    <div class="hint" id="spaceTxt">–</div>
     <div class="btnrow" style="align-items:center"><span class="hint">Spiegazione dei tasti</span><button type="button" class="btn2" id="btnTut">RIVEDI IL TUTORIAL</button></div>
     <div class="btnrow" style="align-items:center"><span class="hint">BIG-BOB si riapre dove e grande come l'hai lasciato</span><button type="button" class="btn2" id="btnWin">RIPRISTINA POSIZIONE</button></div>
     <div class="sec">CERVELLO COMUNE</div>
-    <label class="opt"><input type="checkbox" id="oShare"> Contribuisci in forma anonima: regole, lezioni, testi delle carte verificati e risultati delle partite (niente nomi né schermate)</label>
-    <label class="opt"><input type="checkbox" id="oUse"> Usa ciò che hanno imparato gli altri giocatori (regole, lezioni, mazzi avversari più visti)</label>
+    <div class="srow"><label class="opt" for="oShare"><input type="checkbox" id="oShare"><span class="snm">Contribuisci</span></label><span class="tgs"><span class="tg t-learn" title="BIG-BOB impara"><svg aria-hidden="true"><use href="#i-learn"/></svg><span class="sr">BIG-BOB impara</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oShare" aria-label="Cosa fa: Contribuisci">i</button></div>
+    <p class="ihelp" id="h-oShare" hidden>Invia in forma anonima regole, lezioni, testi delle carte verificati e risultati delle partite. Niente nomi né schermate.</p>
+    <div class="srow"><label class="opt" for="oUse"><input type="checkbox" id="oUse"><span class="snm">Usa il cervello comune</span></label><span class="tgs"><span class="tg t-prec" title="Più preciso"><svg aria-hidden="true"><use href="#i-prec"/></svg><span class="sr">Più preciso</span></span></span><button type="button" class="info" aria-expanded="false" aria-controls="h-oUse" aria-label="Cosa fa: Usa il cervello comune">i</button></div>
+    <p class="ihelp" id="h-oUse" hidden>Usa ciò che hanno imparato gli altri giocatori di BIG-BOB: regole, lezioni, mazzi avversari più visti.</p>
     <div class="btnrow" style="align-items:center"><span class="hint" id="brainTxt">–</span><button type="button" class="btn2" id="btnBrain">SINCRONIZZA ORA</button></div>
     <div class="sec">VERSIONE</div>
     <div class="btnrow" style="align-items:center"><span class="hint" id="verTxt">–</span><button type="button" class="btn2" id="btnCheck">CONTROLLA AGGIORNAMENTI</button></div>
@@ -978,7 +1037,37 @@ body.inmatch .score .l{font-size:11px}
     $('oShare').disabled = $('oUse').disabled = !cb.attivo;
     $('verTxt').textContent = 'Versione ' + (ev.versione || '–') + (ev.claude_trovato ? '' : ' · Claude Code non trovato');
     syncApi();
+    markPreset();
   }
+  // impostazioni: spiegazioni (i) e modalità rapide
+  Array.prototype.forEach.call(document.querySelectorAll('#fSet .info'), function(b){
+    b.addEventListener('click', function(){
+      var h = $(b.getAttribute('aria-controls')), open = b.getAttribute('aria-expanded') !== 'true';
+      b.setAttribute('aria-expanded', open ? 'true' : 'false'); h.hidden = !open;
+    });
+  });
+  var PRESET_KEYS = ['oInst', 'oObs', 'oEval', 'oFast', 'oPre', 'oZone', 'oWarm', 'oClean', 'oDose', 'oImpara', 'oAtlas'];
+  var PRESETS = {
+    veloce: {},
+    bilanciata: {oPre: false, oWarm: false},
+    risparmio: {oPre: false, oWarm: false, oEval: false, oImpara: false}
+  };
+  function markPreset(){
+    var cur = null;
+    Object.keys(PRESETS).forEach(function(k){
+      var ok = PRESET_KEYS.every(function(id){ var want = PRESETS[k][id] !== undefined ? PRESETS[k][id] : true; return $(id).checked === want; });
+      if (ok && !cur) cur = k;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#fSet .pre'), function(b){ b.setAttribute('aria-pressed', b.dataset.preset === cur ? 'true' : 'false'); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#fSet .pre'), function(b){
+    b.addEventListener('click', function(){
+      var p = PRESETS[b.dataset.preset];
+      PRESET_KEYS.forEach(function(id){ $(id).checked = p[id] !== undefined ? p[id] : true; });
+      markPreset();
+    });
+  });
+  PRESET_KEYS.forEach(function(id){ $(id).addEventListener('change', markPreset); });
   $('btnSet').onclick = function(){ $('testRes').textContent = ''; call('get_settings'); show('mSet', 'modello'); };
   $('btnLogin').onclick = function(){ call('claude_login'); };
   $('btnTest').onclick = function(){ $('testRes').className = 'testres'; $('testRes').textContent = 'Provo il collegamento…'; call('claude_test'); };
