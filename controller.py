@@ -1787,8 +1787,12 @@ class Controller:
                                             if rk.get("perdi_barrier") is not None else "")
             self.emit({"type": "preview", "mossa": what, "perche": why, "secs": round(time.time() - t0, 1),
                        "calcolata": True})
-        if (top.get("vincitore") or "").startswith("VINCI TU"):
-            self.emit({"type": "alert", "kind": "win", "text": f"PUOI CHIUDERE LA PARTITA: {what}"})
+        rk = top.get("rischio") or {}
+        # la vittoria deve reggere contro le risposte avversarie probabili, non solo se l'avversario non gioca niente
+        p_win = rk.get("vinci_partita") if rk.get("campioni") else (1.0 if (top.get("vincitore") or "").startswith("VINCI TU") else 0.0)
+        if (p_win or 0) >= 0.7:
+            self.emit({"type": "alert", "kind": "win", "text": f"PUOI CHIUDERE LA PARTITA: {what}"
+                       + (f" (regge nel {round(p_win * 100)}% delle risposte)" if rk.get("campioni") and p_win < 1 else "")})
             if store.load("config").get("voce", True):
                 self.voice.say("Puoi chiudere la partita")
         else:

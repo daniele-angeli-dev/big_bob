@@ -90,7 +90,8 @@ def learn(img: Image.Image, boxes: dict, board: dict) -> int:
             rects = ((boxes.get(lane) or {}).get(side) or [])
             units = ((board.get(lane) or {}).get(side) or [])
             for k, rect in enumerate(rects):
-                if not isinstance(rect, list) or len(rect) != 4:
+                if not isinstance(rect, list) or len(rect) != 4 or not all(
+                        isinstance(v, (int, float)) and not isinstance(v, bool) for v in rect):
                     continue
                 key = f"{lane}:{side}:{k}"
                 slots.setdefault(key, [])

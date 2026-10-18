@@ -41,7 +41,7 @@ def clean(effetti) -> list[dict]:
             hp = int(x.get("vita", 0) or 0)
         except (TypeError, ValueError):
             continue
-        if not (0 <= v <= 30 and 0 <= hp <= 30) or (v == 0 and hp == 0):
+        if not (0 <= v <= 30 and 0 <= hp <= 30) or (v == 0 and hp == 0) or (x["tipo"] != "potenzia" and v == 0):
             continue
         out.append({"tipo": x["tipo"], "valore": v, **({"vita": hp} if x["tipo"] == "potenzia" else {})})
     return out
@@ -69,9 +69,12 @@ def propose(carta: str, effetti, motivo: str = "") -> dict:
     same = next((p for p in items if p["stato"] == "attesa" and p["carta"] == card["nome"] and p["effetti"] == fx), None)
     if same:
         same["volte"] = same.get("volte", 1) + 1  # la stessa proposta vista di nuovo: è un indizio più forte
+        same["creata"] = time.time()  # torna fuori con i pulsanti (quelli di prima possono essere spariti dalla chat)
         _save(items)
         return {"id": same["id"], "gia_proposta": True, "volte": same["volte"]}
-    pid = f"E{len(items) + 1:03d}"
+    n = max((int(p["id"][1:]) for p in items if str(p.get("id", "")).startswith("E") and p["id"][1:].isdigit()),
+            default=0)
+    pid = f"E{n + 1:03d}"  # il numero più alto + 1: il file tiene solo le ultime 200, len() ripeterebbe gli id
     items.append({"id": pid, "carta": card["nome"], "effetti": fx, "motivo": motivo.strip()[:300],
                   "stato": "attesa", "creata": time.time(), "data": store.now(), "volte": 1})
     _save(items)

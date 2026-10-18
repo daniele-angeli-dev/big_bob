@@ -23,11 +23,32 @@ def _path():
     return store.DATA / FILE
 
 
+_MEMO: dict = {"key": None, "d": None}
+
+
+def _empty() -> dict:
+    return {"campioni": [], "valutazioni": [], "pesi": None, "calibrazione": None}
+
+
 def load() -> dict:
     try:
         return json.loads(_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {"campioni": [], "valutazioni": [], "pesi": None, "calibrazione": None}
+        return _empty()
+
+
+def _summary() -> dict:
+    """Solo pesi e calibrazione, riletti quando il file cambia: calibrate() viene chiamata per ogni round di ogni
+    partita quando si apre il libro."""
+    try:
+        st = _path().stat()
+        key = (str(_path()), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return _empty()
+    if _MEMO["key"] != key:
+        d = load()
+        _MEMO.update(key=key, d={"pesi": d.get("pesi"), "calibrazione": d.get("calibrazione")})
+    return _MEMO["d"]
 
 
 def save(d: dict) -> None:
@@ -39,8 +60,14 @@ def features(m: dict) -> list[float] | None:
     bo, bm = m.get("barrier_avv"), m.get("barrier_mie")
     if not (isinstance(bo, list) and isinstance(bm, list) and len(bo) == len(bm) == 3):
         return None
-    def closeness(bs):
-        return sum(max(0.0, 1 - (b / (40 if b > 20 else 20))) for b in bs if isinstance(b, (int, float))) / 3
+    def closeness(bs, reinf):
+        reinf = reinf if isinstance(reinf, list) else []
+        tot = 0.0
+        for i, b in enumerate(bs):
+            if isinstance(b, (int, float)):
+                full = 40 if (b > 20 or (i < len(reinf) and reinf[i])) else 20
+                tot += max(0.0, 1 - b / full)
+        return tot / 3
     field = 0.0
     if m.get("campo"):
         from origins import combat
@@ -49,7 +76,7 @@ def features(m: dict) -> list[float] | None:
                 field += sum(u["atk"] + u["hp"] for u in ln["mie"] if u) - sum(u["atk"] + u["hp"] for u in ln["avv"] if u)
         except Exception:  # noqa: BLE001
             field = 0.0
-    return [closeness(bo), closeness(bm), float(m.get("distrutte_da_me") or 0), float(m.get("distrutte_a_me") or 0),
+    return [closeness(bo, m.get("rinforzate_avv")), closeness(bm, m.get("rinforzate_mie")), float(m.get("distrutte_da_me") or 0), float(m.get("distrutte_a_me") or 0),
             field / 20.0]
 
 
@@ -106,10 +133,18 @@ def _logistic(X, y, l2=1.0, iters=400, lr=0.3):
     return w, b
 
 
+def _both_outcomes(lab: list[dict], minimo: int = 3) -> bool:
+    """Servono partite vinte E perse (almeno `minimo` ciascuna): con solo vittorie la regressione non impara niente
+    di vero (dodici vittorie di fila contro il bot farebbero dire 99% a ogni stato)."""
+    won = {x["partita"] for x in lab if x["esito"] == 1}
+    lost = {x["partita"] for x in lab if x["esito"] == 0}
+    return len(won) >= minimo and len(lost) >= minimo
+
+
 def fit_weights(samples: list[dict]) -> dict | None:
     lab = [s for s in samples if s.get("esito") is not None]
     games = {s["partita"] for s in lab}
-    if len(games) < MIN_PARTITE:
+    if len(games) < MIN_PARTITE or not _both_outcomes(lab):
         return None
     w, _ = _logistic([s["f"] for s in lab], [s["esito"] for s in lab])
     # coefficienti → pesi del punteggio, con il segno atteso; peso relativo rispetto alla chiusura
@@ -117,7 +152,9 @@ def fit_weights(samples: list[dict]) -> dict | None:
     if coef["chiusura"] <= 0.05:
         return None  # i dati non dicono niente di sensato: restano i pesi di partenza
     scale = DEFAULT["chiusura"] / coef["chiusura"]
-    learned = {k: max(0.0, v * scale) for k, v in coef.items()}
+    # mai fuori da [0,25×, 4×] il valore di partenza: un coefficiente della chiusura appena sopra lo zero gonfierebbe
+    # tutti gli altri
+    learned = {k: min(4 * DEFAULT[k], max(0.25 * DEFAULT[k], v * scale)) for k, v in coef.items()}
     # un fattore che nelle partite non è quasi mai cambiato (es. nessuna barrier distrutta) non ha niente da insegnare:
     # la regressione lo porterebbe verso 0 solo per mancanza di dati, quindi resta il peso di partenza
     keys = ["chiusura", "rischio", "distrutta_da_te", "distrutta_a_te", "campo"]
@@ -137,21 +174,23 @@ def fit_weights(samples: list[dict]) -> dict | None:
 
 
 def weights() -> dict:
-    p = load().get("pesi")
+    p = _summary().get("pesi")
     return {k: (p or {}).get(k, v) for k, v in DEFAULT.items()}
 
 
 def fit_calibration(evals: list[dict]) -> dict | None:
     lab = [e for e in evals if e.get("esito") is not None]
-    if len({e["partita"] for e in lab}) < MIN_PARTITE:
+    if len({e["partita"] for e in lab}) < MIN_PARTITE or not _both_outcomes(lab):
         return None
     X = [[math.log(max(0.01, min(0.99, e["pct"] / 100)) / max(0.01, 1 - min(0.99, e["pct"] / 100)))] for e in lab]
     w, b = _logistic(X, [e["esito"] for e in lab], l2=0.1)
+    if w[0] <= 0.05:  # pendenza nulla o al contrario: la correzione invertirebbe la barra
+        return None
     return {"a": round(w[0], 3), "b": round(b, 3), "campioni": len(lab)}
 
 
 def calibrate(pct: float) -> float:
-    c = load().get("calibrazione")
+    c = _summary().get("calibrazione")
     if not c or not isinstance(pct, (int, float)):
         return pct
     p = max(0.01, min(0.99, pct / 100))

@@ -130,5 +130,24 @@ page = report.library_html("esercizi").read_text(encoding="utf-8")
 assert "ESERCIZI" in page and "PRECISIONE MOSSE" in page and "detto contro vero" in page
 print("revisione, esercizi e report settimanale ok")
 
+# --- correzioni dalla revisione del codice
+assert tuning.fit_calibration([{"partita": f"w{i}", "pct": 60 + i % 30, "esito": 1} for i in range(300)]) is None, \
+    "solo vittorie: nessuna calibrazione"
+assert tuning.fit_weights([{"partita": f"w{i % 15}", "f": [0.1 * (i % 7), 0.2, 0, 0, 0.5], "esito": 1}
+                           for i in range(300)]) is None
+store.upsert("cards", [{"nome": "Folletto", "costo": 0, "attacco": 1, "vita": 1, "tipo": "creatura"}])
+hands = search._sample_hands([{"carta": "Folletto", "p_mano": 1.0}], 3, 3)
+assert all("Folletto" in h for h in hands), "le creature a costo 0 si campionano"
+import time as _time  # noqa: E402
+old = store.load("matches")
+store.save("matches", [{"risultato": "vittoria", "fine": _time.strftime("%Y-%m-%d %H:%M", _time.localtime(_time.time() - 9 * 86400))}])
+assert report.week_stats()["partite"] == 0 and report.week_body() == ""
+store.save("matches", old)
+items = [{"id": f"E{i:03d}", "carta": "Vampire Bat", "effetti": [], "stato": "scartata", "creata": 0} for i in range(250, 450)]
+proposals._save(items)
+assert proposals.propose("Vampire Bat", [{"tipo": "danno_fronte", "valore": 3}])["id"] == "E450"
+assert proposals.clean([{"tipo": "danno_barrier", "valore": 0, "vita": 2}]) == []
+print("correzioni ok")
+
 shutil.rmtree(tmp)
 print("TUTTO OK")

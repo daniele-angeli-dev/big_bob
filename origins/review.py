@@ -34,7 +34,7 @@ def capture(m: dict) -> None:
     """Salva lo stato del round in m['stati_round'] (in update_match). Nello stesso round si aggiorna finché Daniele
     non ha giocato niente: l'ultimo stato prima delle giocate è quello su cui ha deciso."""
     t = m.get("turno")
-    if not isinstance(t, int) or not m.get("campo"):
+    if not isinstance(t, int):
         return
     stati = m.setdefault("stati_round", {})
     prev = stati.get(str(t))
@@ -187,6 +187,8 @@ def review_pending(limit: int = 5, time_limit: float = 0.6) -> int:
             if m.get("stati_round") and not m.get("revisione")][-limit:]
     done = {}
     for mid in todo:
+        if store.FILES["match"].exists() and store.load("match"):
+            break  # è iniziata una partita: la ricerca live ha la precedenza, si riprende alla fine
         entry = next((m for m in log if (m.get("id") or m.get("inizio")) == mid), None)
         if entry is None:
             continue

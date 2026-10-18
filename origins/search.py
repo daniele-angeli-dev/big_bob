@@ -196,7 +196,7 @@ def _sample_hands(opp_cards: list[dict], mana: int | None, n: int, seed: int = 1
     import random
     rnd = random.Random(seed)
     cards = [c for c in opp_cards if c.get("carta") and _is_creature(_card(c["carta"]))
-             and (mana is None or (_cost(_card(c["carta"])) or 99) <= mana)]
+             and _cost(_card(c["carta"])) is not None and (mana is None or _cost(_card(c["carta"])) <= mana)]
     out = []
     for _ in range(n):
         hand = [c["carta"] for c in cards if rnd.random() < float(c.get("p_mano") or 0)]
@@ -342,7 +342,7 @@ def search(m: dict, opp_cards: list[dict] | None = None, p_reply: float | None =
     # le mani avversarie a giri di MC_BATCH per tutte le mosse insieme: se il tempo finisce, tutte le candidate sono
     # state messe alla prova sugli stessi campioni (come l'approfondimento iterativo dei motori di scacchi), invece
     # di avere le prime controllate a fondo e le ultime per niente
-    acc = {id(ev): {"scores": [], "lost": 0, "opp_win": 0, "worst": None} for ev in shortlist}
+    acc = {id(ev): {"scores": [], "lost": [], "opp_win": [], "win": [], "worst": None} for ev in shortlist}
     for ev in shortlist:
         ev["controllata"] = not samples or not any(samples)
     timed_out = False
@@ -359,10 +359,9 @@ def search(m: dict, opp_cards: list[dict] | None = None, p_reply: float | None =
                     sc, res, plays = _opp_best(m, lanes0, ev["giocate"], hand, n_slots, before, first, mods, mana)
                     n += 1
                 a["scores"].append(sc)
-                if res["distrutte_a_te"] > before["to"]:
-                    a["lost"] += 1
-                if (res.get("vincitore") or "").startswith("VINCE L'AVVERSARIO"):
-                    a["opp_win"] += 1
+                a["lost"].append(res["distrutte_a_te"] > before["to"])
+                a["opp_win"].append((res.get("vincitore") or "").startswith("VINCE L'AVVERSARIO"))
+                a["win"].append((res.get("vincitore") or "").startswith("VINCI TU"))
                 if plays and (a["worst"] is None or sc < a["worst"]["score"]):
                     c0, i0, k0 = plays[0]
                     a["worst"] = {"score": sc, "carta": " + ".join(p[0] for p in plays),
@@ -372,16 +371,20 @@ def search(m: dict, opp_cards: list[dict] | None = None, p_reply: float | None =
                 break
         if timed_out:
             break
+    # tempo finito a metà giro: tutte le candidate si confrontano sullo stesso numero di mani (le stesse)
+    common = min((len(acc[id(ev)]["scores"]) for ev in shortlist), default=0)
     for ev in shortlist:
         a = acc[id(ev)]
+        for k in ("scores", "lost", "opp_win", "win"):
+            a[k] = a[k][:common]
         scores, worst = a["scores"], a["worst"]
         k_s = len(scores)
-        if k_s:
-            ev["controllata"] = True
+        ev["controllata"] = bool(k_s) or not samples or not any(samples)
         mean = sum(scores) / k_s if k_s else ev["base"]
         ev["peggiore"] = worst
-        ev["rischio"] = {"campioni": k_s, "perdi_barrier": round(a["lost"] / k_s, 2) if k_s else None,
-                         "perdi_partita": round(a["opp_win"] / k_s, 2) if k_s else None}
+        ev["rischio"] = {"campioni": k_s, "perdi_barrier": round(sum(a["lost"]) / k_s, 2) if k_s else None,
+                         "perdi_partita": round(sum(a["opp_win"]) / k_s, 2) if k_s else None,
+                         "vinci_partita": round(sum(a["win"]) / k_s, 2) if k_s else None}
         # le mani campionate includono già "non gioca niente" con la sua probabilità
         ev["totale"] = round(mean if k_s else ev["base"] * (1 - pr) + (worst["score"] if worst else ev["base"]) * pr, 1)
     # il round dopo, solo per le migliori: una giocata che prepara la chiusura vale di più
@@ -410,7 +413,8 @@ def search(m: dict, opp_cards: list[dict] | None = None, p_reply: float | None =
     dom = False
     if len(out) >= 1 and not spells:
         gap = out[0]["punteggio"] - (out[1]["punteggio"] if len(out) > 1 else -1e9)
-        dom = gap >= max(15.0, abs(out[0]["punteggio"]) * 0.2) and not any(
+        checked = shortlist[0].get("controllata") and (len(out) > 1 or not (opp_cards or []))
+        dom = checked and gap >= max(15.0, abs(out[0]["punteggio"]) * 0.2) and not any(
             (store.find("cards", g["carta"]) or {}).get("testo") and not combat.effects(store.find("cards", g["carta"]))
             and "reveal" in str((store.find("cards", g["carta"]) or {}).get("testo", "")).lower()
             for g in out[0]["giocate"])

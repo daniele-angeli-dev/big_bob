@@ -1001,6 +1001,9 @@ def week_stats(now: float | None = None) -> dict:
            "errori": dict(errs), "carte_negli_errori": err_cards.most_common(3),
            "matchup_migliore": best, "matchup_peggiore": worst if worst != best else None,
            "lezioni_nuove": len(new_lessons)}
+    if not cur:
+        out["riga"] = "nessuna partita questa settimana"
+        return out
     bits = [f"{len(cur)} partite, winrate {out['winrate']}%"
             + (f" ({'+' if out['winrate'] >= out['winrate_prima'] else ''}{out['winrate'] - out['winrate_prima']} punti "
                "rispetto alla settimana prima)" if out["winrate_prima"] is not None else "")]
@@ -1068,7 +1071,8 @@ def calibration_body() -> str:
 def _mini_board(st: dict) -> str:
     e = html.escape
     lanes = combat.normalize_board(st.get("campo"))
-    bm, bo = st.get("barrier_mie") or ["?"] * 3, st.get("barrier_avv") or ["?"] * 3
+    bm = (list(st.get("barrier_mie") or []) + ["?"] * 3)[:3]
+    bo = (list(st.get("barrier_avv") or []) + ["?"] * 3)[:3]
     cols = []
     for i, ln in enumerate(lanes):
         def units(side):
