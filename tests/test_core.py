@@ -292,11 +292,17 @@ for _ in range(9):
     _L.mark_outcome([b["id"]], False)
 assert _L.utility(_L.load()[1]) < 0.3 and [x["id"] for x in _L.relevant(["Ariete"], m=ctx_m)] == [], \
     "una lezione rivelatasi inutile non esce più in partita"
-_L.record("Contro Aggro tieni sempre un blocco al centro", "strategia", ["Scudo", "Muro"], fonte="partita R7")
+_L.record("Contro Aggro tieni sempre un blocco al centro", "strategia", ["Scudo", "Muro"], fonte="partita R7",
+          condizioni={"tipo_avversario": "Aggro", "mana_min": 3})
+c1 = _L.record("Contro Aggro tieni un blocco al centro sempre", "strategia", ["Scudo"], fonte="partita R8",
+               condizioni={"tipo_avversario": "Control"})
+assert c1["azione"] == "nuova", "stessa frase ma situazione diversa: lezione a parte"
 store.save("lessons", _L.load() + [{**_L.load()[0], "id": "L099", "lezione": "Contro Aggro tieni un blocco al centro!",
-                                     "volte": 1}])
+                                    "volte": 1}])
 t = _L.tidy()
-assert t["unite"] and len([x for x in _L.load() if "blocco al centro" in x["lezione"]]) == 1, (t, _L.load())
+left = [x for x in _L.load() if "blocco al centro" in x["lezione"]]
+assert t["unite"] == ["L099 → L001"] and len(left) == 2, (t, left)
+assert {(x.get("condizioni") or {}).get("tipo_avversario") for x in left} == {"Aggro", "Control"}
 store.save("lessons", [])
 
 # verifica del simulatore e round andato bene/male
@@ -325,6 +331,10 @@ store.upsert("cards", [{"nome": "Ariete", "costo": 3, "attacco": 6, "vita": 2, "
                        {"nome": "Muro", "costo": 2, "attacco": 0, "vita": 9, "tipo": "creatura"}], "0.7")
 assert combat.effects(store.find("cards", "Bomba")) == [{"tipo": "danno_barrier", "valore": 4}]
 assert combat.effects(store.find("cards", "Furia")) == [], "gli effetti con condizioni non si simulano"
+for t in ("On Reveal: your other creatures in this lane get +1/+1", "On Reveal: Deal 2 damage to enemy creatures here",
+          "On Reveal: deal 2 damage to the enemy creature with the highest attack"):
+    assert combat.effects({"testo": t}) == [], t
+assert combat.effects({"testo": "On Reveal: deal 2 damage to the enemy creature in front"})[0]["tipo"] == "danno_fronte"
 mm = {"mana": 5, "mia_mano": ["Ariete", "Scudo", "Bomba", "Lampo"],
       "campo": {"sinistra": {"mie": [None, None], "avv": [None, None]}, "centro": {"mie": [None, None], "avv": [None, None]},
                 "destra": {"mie": [None, None], "avv": [None, None]}},
@@ -335,6 +345,8 @@ assert "VINCI TU" in (best["vincitore"] or "") and any(g["corsia"] == "centro" f
 assert r["magie"] == ["Lampo"] and r["valutate"] > 10
 r2 = search.search(mm, [{"carta": "Muro", "p_mano": 0.9}], 0.9)
 assert r2["mosse"][0]["peggiore"] and r2["mosse"][0]["peggiore"]["carta"] == "Muro", r2["mosse"][0]
+r3 = search.search(mm, [{"carta": "Muro", "p_mano": 0.9}], 0.9, time_limit=0.0005)
+assert all(mv.get("peggiore") or not r3["mosse"] for mv in r3["mosse"][:1]) or r3["mosse"][0]["peggiore"] is None
 txt = "\n".join(search.lines(r2))
 assert txt.startswith("MOSSE CALCOLATE") and "risposta peggiore: Muro" in txt and "Lampo" in txt, txt
 assert len({tuple((g["carta"], g["corsia"]) for g in mv["giocate"]) for mv in r2["mosse"]}) == len(r2["mosse"])

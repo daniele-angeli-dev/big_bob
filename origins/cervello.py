@@ -511,17 +511,46 @@ def rules_view(local: list[dict]) -> tuple[dict, list[dict]]:
     return notes, extra
 
 
+def _when(text: str):
+    """Data come istante assoluto: quelle del server sono in UTC ("…Z"), quelle locali sono ora del PC."""
+    from datetime import datetime, timezone
+    t = str(text or "").strip()
+    if not t:
+        return None
+    try:
+        if t.endswith("Z") or "+" in t[10:]:
+            return datetime.fromisoformat(t.replace("Z", "+00:00"))
+        return datetime.fromisoformat(t.replace(" ", "T")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
 def _stale(item: dict) -> bool:
     """Una voce comune è superata se una sua carta è cambiata (statistiche o testo, in una patch) dopo l'ultimo voto."""
-    agg = str(item.get("agg") or "")[:19]
-    if not agg:
+    agg = _when(item.get("voto") or item.get("agg"))  # "voto" = ultimo voto (server nuovo)
+    if agg is None:
         return False
     for c in item.get("carte") or []:
         e = store.find("cards", c) or {}
         for h in e.get("storico") or []:
-            if str(h.get("data") or "")[:19] > agg and str(h.get("patch") or "") not in ("cervello comune", ""):
+            when = _when(h.get("data"))
+            if when and when > agg and str(h.get("patch") or "") not in ("cervello comune", ""):
                 return True
     return False
+
+
+NEG = {"non", "not", "no", "mai", "never", "nessun", "nessuna", "senza", "without", "cannot", "can't", "doesn't",
+       "don't", "isn't"}
+
+
+def _negated(text: str) -> bool:
+    words = re.findall(r"[a-zà-ù']+", str(text or "").lower())
+    return sum(1 for w in words if w in NEG) % 2 == 1
+
+
+def same_polarity(a: str, b: str) -> bool:
+    """Le parole simili non bastano: "il danno passa" e "il danno non passa" sono regole opposte."""
+    return _negated(a) == _negated(b)
 
 
 def _patch_weight(item: dict) -> float:
@@ -614,7 +643,8 @@ def cross_confirm(data: dict | None = None) -> dict:
             if y.get("stato") != "ipotesi":
                 continue
             for x in comm_l:
-                if lesson_score(x["testo"], x.get("carte", []), y.get("lezione", ""), y.get("carte", [])) >= SOGLIA_LEZIONI:
+                if lesson_score(x["testo"], x.get("carte", []), y.get("lezione", ""), y.get("carte", [])) >= SOGLIA_LEZIONI \
+                        and same_polarity(x["testo"], y.get("lezione", "")):
                     y["stato"] = "confermata"
                     y["confermata_da_cervello"] = x["id"]
                     y.setdefault("prove", []).append({"data": store.now(), "fonte": "cervello comune",
@@ -632,7 +662,8 @@ def cross_confirm(data: dict | None = None) -> dict:
             if r.get("stato") not in ("ipotesi", "probabile", "domanda"):
                 continue
             for c in comm_r:
-                if rule_score(r.get("testo", ""), c.get("testo", ""), c.get("categoria") == r.get("categoria")) >= SOGLIA_REGOLE:
+                if rule_score(r.get("testo", ""), c.get("testo", ""), c.get("categoria") == r.get("categoria")) >= SOGLIA_REGOLE \
+                        and same_polarity(r.get("testo", ""), c.get("testo", "")):
                     r["stato"] = "confermata"
                     r["confermata_da_cervello"] = c["id"]
                     r.setdefault("fonti", []).append("cervello comune")

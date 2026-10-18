@@ -161,8 +161,10 @@ c.capture_excluded = True
 from PIL import Image as _I  # noqa: E402
 sig = _I.new("L", (96, 54), 40)
 c._last_sig = sig
+store.save("match", {**store.load("match"), "turno": 4})
 c._preread(sig)
-assert c._pre and c._pre["state"].startswith("Stato aggiornato"), c._pre
+assert c._pre and c._pre["mine"] and store.load("match")["turno"] == 4, \
+    "la lettura anticipata legge e basta: lo stato si aggiorna all'F8"
 wait(ui, c.analyze)
 diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
 assert "Lettura anticipata usata" in diario and "letto=si" in ui.of("answer")[-1]["text"], diario[-400:]
@@ -181,6 +183,7 @@ tb = controller.thinking_budget
 assert tb({"turno": 1, "barrier_mie": [20] * 3, "barrier_avv": [20] * 3}, {"max_thinking_live": 4000})[0] < 4000
 assert tb({"turno": 5, "barrier_mie": [20, 6, 20], "barrier_avv": [20] * 3}, {"max_thinking_live": 4000})[0] > 4000
 assert tb({"turno": 5, "barrier_mie": [20] * 3, "barrier_avv": [20] * 3}, {"max_thinking_live": 4000})[0] == 4000
+assert tb({"turno": 5, "barrier_mie": [20, 3, 20]}, {"max_thinking_live": 0})[0] == 0, "0 resta 0"
 
 hud = [e for e in ui.of("hud") if e["match"]][-1]["match"]
 assert hud["avv"][2] == {"v": 31, "max": 40, "rinf": True} and hud["mie"][1]["max"] == 20, hud

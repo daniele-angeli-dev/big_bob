@@ -21,7 +21,7 @@ from origins import combat, store
 
 TIME_LIMIT = 0.9   # secondi
 MAX_CREATURE = 3   # creature giocate nello stesso round, al massimo
-MIN_SLOTS = 2
+MIN_SLOTS = 3  # solo se il campo non dice quanti spazi ci sono (i lettori scrivono tutti gli slot, anche vuoti)
 
 
 def _card(name: str) -> dict:
@@ -42,7 +42,13 @@ def _is_creature(e: dict) -> bool:
 
 
 def _slots(lanes: list[dict]) -> int:
-    return max([MIN_SLOTS] + [len(l["mie"]) for l in lanes])
+    seen = max([len(l["mie"]) for l in lanes] + [0])
+    if seen:
+        return seen
+    try:
+        return int(store.load("config").get("slot_per_corsia") or MIN_SLOTS)
+    except (TypeError, ValueError):
+        return MIN_SLOTS
 
 
 def _free(lanes: list[dict], n_slots: int) -> list[tuple[int, int]]:
@@ -179,9 +185,11 @@ def search(m: dict, opp_cards: list[dict] | None = None, p_reply: float | None =
             break
     for ev in shortlist:
         worst = None
+        ev["controllata"] = not replies
         for rc in replies:
             if time.time() - t0 > time_limit:
                 break
+            ev["controllata"] = True
             for i in range(3):
                 for k in range(n_slots):
                     row = ev["lanes"][i]["avv"]
@@ -196,7 +204,9 @@ def search(m: dict, opp_cards: list[dict] | None = None, p_reply: float | None =
                                  "slot": k + 1, "res": res}
         ev["peggiore"] = worst
         ev["totale"] = round(ev["base"] * (1 - pr) + (worst["score"] if worst else ev["base"]) * pr, 1)
-    shortlist.sort(key=lambda x: (-x["totale"], -x["mana"]))
+    # le mosse non messe alla prova contro la risposta avversaria (tempo finito) vanno dopo quelle controllate: senza
+    # la penalità della risposta sembrerebbero migliori di quello che sono
+    shortlist.sort(key=lambda x: (not x.get("controllata"), -x["totale"], -x["mana"]))
     out = []
     for ev in shortlist[:top]:
         out.append({"giocate": [{"carta": c, "corsia": combat.LANES[i], "slot": k + 1} for c, i, k in ev["giocate"]],

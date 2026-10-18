@@ -131,6 +131,8 @@ def upsert(testo: str = "", categoria: str = "", stato: str = "", fonte: str = "
             r.setdefault("storico", []).append({"data": store.now(), **prima})
     if fonte and fonte not in r["fonti"]:
         r["fonti"].append(fonte)
+    if (fonte or stato) and "cervello" not in str(fonte or "").lower():
+        r.pop("confermata_da_cervello", None)  # confermata o cambiata da te: il voto che mandi è il tuo
     if prova:
         r["prove"].append({"data": store.now(), "fonte": fonte, "nota": prova})
     r["aggiornata"] = store.now()

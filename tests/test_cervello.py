@@ -257,6 +257,13 @@ check(cc["lezioni"] == ["L050"] and l50["stato"] == "confermata" and l50["confer
 pl = [x for x in cervello._lessons_payload() if x["cid"] == "L050"]
 check(pl and pl[0]["stato"] == "ipotesi", "al server va il tuo voto (ipotesi), non quello degli altri: niente eco")
 
+check(not cervello.same_polarity("Il danno in eccesso passa alla barrier", "Il danno in eccesso non passa alla barrier")
+      and cervello.same_polarity("Defender difende sempre", "Defender difende sempre e più volte"), "negazioni")
+store.upsert("cards", [{"nome": "Bat", "costo": 1, "attacco": 1, "vita": 1}], "0.8")
+store.upsert("cards", [{"nome": "Bat", "costo": 2}], "0.9")
+check(cervello._stale({"carte": ["Bat"], "voto": "2000-01-01T00:00:00.000Z"})
+      and not cervello._stale({"carte": ["Bat"], "voto": "2999-01-01T00:00:00.000Z"}), "date UTC e locali confrontate bene")
+
 print("6. stesso testo, stesse regole di unione del server")
 check(cervello.tokens("Una barrier a 0 si rigenera a 40 e il danno in eccesso non passa") ==
       ["0", "40", "barrier", "danno", "eccesso", "passa", "rigenera"], "tokens come merge.js")

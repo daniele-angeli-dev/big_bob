@@ -47,11 +47,23 @@ def load(kind: str):
 
 
 def save(kind: str, data) -> None:
+    """Scrittura atomica. Il file temporaneo ha un nome per processo e thread (BIG-BOB e il server MCP possono scrivere
+    lo stesso file insieme) e la sostituzione si ritenta se Windows lo tiene aperto un istante."""
+    import os
+    import threading
+    import time as _time
     p = FILES[kind]
-    tmp = p.with_suffix(".tmp")
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     with tmp.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    tmp.replace(p)
+    for attempt in range(8):
+        try:
+            tmp.replace(p)
+            return
+        except PermissionError:
+            if attempt == 7:
+                raise
+            _time.sleep(0.05 * (attempt + 1))
 
 
 def slug(name: str) -> str:
@@ -135,11 +147,14 @@ def find(kind: str, name: str) -> dict | None:
     sid = slug(name)
     e = by_id.get(sid)
     if e is None:
-        close = _CLOSE_CACHE.get((kind, sid, len(ids)))
+        ver = _FIND_CACHE.get(kind, (None,))[0]
+        close = _CLOSE_CACHE.get((kind, sid, ver))
         if close is None:
             m = get_close_matches(sid, ids, n=1, cutoff=0.75)
             close = m[0] if m else ""
-            _CLOSE_CACHE[(kind, sid, len(ids))] = close
+            if len(_CLOSE_CACHE) > 3000:
+                _CLOSE_CACHE.clear()
+            _CLOSE_CACHE[(kind, sid, ver)] = close
         e = by_id.get(close) if close else None
     return dict(e) if e is not None else None  # copia: chi la modifica non tocca l'indice
 

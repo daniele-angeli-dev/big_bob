@@ -369,13 +369,16 @@ def _key(m: dict, meta, top) -> str | None:
     if meta is not None:
         return None  # meta passato a mano (test, simulazioni): niente memoria
     import json as _json
-    try:
-        st = store.FILES["meta"].stat()
-        mk = (st.st_mtime_ns, st.st_size)
-    except OSError:
-        mk = None
+    mk = []
+    for kind in ("meta", "cards"):
+        try:
+            st = store.FILES[kind].stat()
+            mk.append((st.st_mtime_ns, st.st_size))
+        except OSError:
+            mk.append(None)
     fields = {k: m.get(k) for k in ("avv_leggendaria", "avv_giocati", "avv_scartati", "avv_creati", "avv_mano", "mana",
-                                    "turno", "barrier_mie", "leggendaria_mia")}
+                                    "turno", "barrier_mie", "barrier_avv", "rinforzate_mie", "leggendaria_mia",
+                                    "campo")}
     return _json.dumps([fields, mk, top, str(store.FILES["meta"])], sort_keys=True, default=str)
 
 

@@ -83,7 +83,9 @@ def record(lezione: str, tipo: str = "strategia", carte: list[str] | None = None
     cards = _norm_cards(carte)
     target = next((x for x in ls if x["id"].lower() == id.lower()), None) if id else None
     if target is None and not id:
-        best = max(ls, key=lambda a: _similar(a, tipo, cards, lezione), default=None)
+        cond_new = clean_conditions(condizioni)
+        same_sit = [a for a in ls if not cond_new or (a.get("condizioni") or {}) == cond_new]  # situazioni diverse
+        best = max(same_sit, key=lambda a: _similar(a, tipo, cards, lezione), default=None)
         if best is not None and _similar(best, tipo, cards, lezione) >= 0.62:
             target = best
     prova = {"data": store.now(), "fonte": fonte or "partita", "situazione": situazione,
@@ -105,6 +107,8 @@ def record(lezione: str, tipo: str = "strategia", carte: list[str] | None = None
         target["condizioni"] = {**(target.get("condizioni") or {}), **cond}
     target["volte"] = target.get("volte", 0) + 1
     target["prove"] = (target.get("prove", []) + [prova])[-8:]
+    if "cervello" not in str(prova.get("fonte") or "").lower():
+        target.pop("confermata_da_cervello", None)  # ora c'è una prova tua: il voto che mandi è il tuo
     target["ultima"] = store.now()
     # le opinioni non dimostrate non confermano una lezione: servono fatti (partite, verifiche) o la parola di Daniele
     # su un fatto del gioco; così una risposta compiacente non diventa una lezione «confermata» per tutti
@@ -238,6 +242,7 @@ def tidy() -> dict:
             keep.append(a)
             continue
         twin = next((k for k in keep if k.get("stato") != "smentita"
+                     and (k.get("condizioni") or {}) == (a.get("condizioni") or {})  # situazioni diverse: restano due
                      and _similar(k, a.get("tipo"), a.get("carte", []), a.get("lezione", "")) >= 0.72), None)
         if twin is None:
             keep.append(a)
@@ -247,8 +252,6 @@ def tidy() -> dict:
         twin["volte"] = twin.get("volte", 0) + a.get("volte", 0)
         for k in ("round_buoni", "round_cattivi"):
             twin[k] = twin.get(k, 0) + a.get(k, 0)
-        if a.get("condizioni") and not twin.get("condizioni"):
-            twin["condizioni"] = a["condizioni"]
         if a.get("stato") == "confermata":
             twin["stato"] = "confermata"
         merged.append(f"{a['id']} → {twin['id']}")

@@ -397,7 +397,10 @@ def thinking_budget(m: dict, cfg: dict) -> tuple[int, str]:
     """Quanto ragionare nel prossimo round: poco nei round facili, di più in quelli decisivi. Base = max_thinking_live.
     Decisivo: una barrier non rinforzata a 8 o meno, o una barrier già distrutta da una parte e un'altra sotto metà
     (la partita si chiude a 2), o tardi nella partita. Facile: primi round con poche carte giocabili."""
-    base = int(cfg.get("max_thinking_live", 4000) or 4000)
+    raw = cfg.get("max_thinking_live", 4000)
+    base = int(raw) if isinstance(raw, (int, float)) else 4000
+    if base <= 0:
+        return 0, "senza ragionamento esteso (impostazione)"
     if not cfg.get("ragionamento_dosato", True) or not m:
         return base, "fisso"
     bm = [b for b in (m.get("barrier_mie") or []) if isinstance(b, (int, float))]
@@ -409,7 +412,7 @@ def thinking_budget(m: dict, cfg: dict) -> tuple[int, str]:
     if low_any or close or turn >= 8:
         return min(12000, int(base * 2)), "round decisivo"
     if turn and turn <= 2:
-        return max(1024, int(base * 0.4)), "round iniziale"
+        return max(min(base, 1024), int(base * 0.4)), "round iniziale"
     return base, "normale"
 
 
@@ -1477,9 +1480,13 @@ class Controller:
         return out.get("mio"), out.get("avv"), times
 
     def _apply_reading(self, mine: dict, opp: dict) -> tuple[str, dict, list[str]]:
-        """Unisce le letture, controlla che siano coerenti con lo stato di prima e chiama update_match."""
+        """Unisce le letture, controlla che siano coerenti con lo stato di prima e chiama update_match. Prima aspetta
+        che il turno di apprendimento del round prima sia finito: anche quello scrive lo stato della partita."""
         from origins import reader
         from origins import server as srv
+        if not self._session_free.is_set():
+            self.status("Finisco di imparare dal round precedente…")
+            self._session_free.wait(45)
         before = store.load("match")
         args, warn = reader.merge(mine, opp)
         warn += reader.check(before, args)
@@ -1520,10 +1527,10 @@ class Controller:
                 with self._obs_lock:  # i fotogrammi restano per l'F8
                     self.obs_frames = frames + self.obs_frames
                 return
-            state, args, warn = self._apply_reading(mine, opp)
-            self._pre = {"t": time.time(), "sig": sig, "shot": shot, "region": region, "state": state, "args": args,
-                         "warn": warn, "frames": len(frames), "secs": round(time.time() - t0, 1), "times": times}
-            self._emit_hud(force=True)
+            # solo la lettura: lo stato della partita si aggiorna all'F8, se lo schermo intanto non è cambiato (così
+            # non si registrano carte che stai ancora trascinando, e non si scrive mentre BIG-BOB impara)
+            self._pre = {"t": time.time(), "sig": sig, "shot": shot, "region": region, "mine": mine, "opp": opp,
+                         "frames": len(frames), "secs": round(time.time() - t0, 1), "times": times}
             log.info("lettura anticipata in %.1fs %s", time.time() - t0, times)
         except Exception:  # noqa: BLE001
             log.exception("lettura anticipata")
@@ -1543,7 +1550,8 @@ class Controller:
             pre = self._fresh_pre()
             self._pre = None
             if pre:
-                shot, region, state, args, warn = pre["shot"], pre["region"], pre["state"], pre["args"], pre["warn"]
+                shot, region = pre["shot"], pre["region"]
+                state, args, warn = self._apply_reading(pre["mine"], pre["opp"])
                 self._journal("")
                 self._journal(f"Lettura anticipata usata (fatta {time.time() - pre['t']:.0f}s prima dell'F8 in "
                               f"{pre['secs']}s, {pre['frames']} immagini dell'osservatore)\n"
@@ -1601,7 +1609,11 @@ class Controller:
         out = list((m.get("sorprese_round") or {}).get("voci") or []) \
             if (m.get("sorprese_round") or {}).get("turno") == m.get("turno") else []
         snaps = [s for s in (m.get("storico") or []) if isinstance(s.get("turno"), int)]
-        prev = self._recent_moves[-2] if len(self._recent_moves) >= 2 else ""
+        t_cur = m.get("turno")
+        prev = next((x for x in reversed(self._recent_moves)
+                     if isinstance(t_cur, int) and x.startswith(f"R{t_cur - 1} ")), "")
+        if prev and history._is_mulligan(prev.split("▶", 1)[-1].strip()):
+            prev = ""
         if prev and len(snaps) >= 2:
             t_now = snaps[-1]["turno"]
             before = next((s for s in reversed(snaps) if s["turno"] < t_now), None)
@@ -2068,7 +2080,9 @@ class Controller:
             return
         if learn:
             sur = self._round_surprises()
-            prev = self._recent_moves[-2] if len(self._recent_moves) >= 2 else "nessuno"
+            t_cur = (store.load("match") or {}).get("turno") if store.FILES["match"].exists() else None
+            prev = next((x for x in reversed(self._recent_moves)
+                         if isinstance(t_cur, int) and x.startswith(f"R{t_cur - 1} ")), "nessuno")
             ctx = (f"Il tuo consiglio del round prima: {prev}.\nSORPRESE trovate da BIG-BOB in questo round (parti da "
                    "queste, non cercarne altre se non le vedi chiaramente): " + " · ".join(sur) + "\n")
             prompt = PROMPT_IMPARA.format(valuta=valuta, contesto=ctx)
@@ -2249,6 +2263,7 @@ class Controller:
                 continue
             # lettura anticipata: lo schermo è cambiato parecchio (nuovo round) ed è fermo da un secondo
             if (observing and cfg.get("lettura_anticipata", True) and excluded and self.readers and not self.busy
+                    and not getattr(self, "learning", False) and self._session_free.is_set()
                     and now_t - self.last_call > 6 and now_t - last_pre > 12 and still_since
                     and now_t - still_since >= 1.0 and (ref_pre is None or d(sig, ref_pre) > 5)):
                 ref_pre, last_pre = sig, now_t

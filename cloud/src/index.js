@@ -95,6 +95,8 @@ async function contribute(request, env, ctx) {
   if (!(await bump(env, "chi:" + chi, LIMITE_INVII_GIOCATORE))) return json({ errore: "troppi invii oggi" }, 429);
 
   const stmts = [];
+
+  const patchStmts = [];
   const res = { regole: 0, lezioni: 0, carte: 0, location: 0, partite: 0, nuove_regole: 0, nuove_lezioni: 0 };
 
   // mappe già note di questo giocatore (cid locale → gruppo)
@@ -130,7 +132,7 @@ async function contribute(request, env, ctx) {
       stmts.push(env.DB.prepare(
         "INSERT OR REPLACE INTO regole_voti (regola_id, contributore, stato, testo, prove, aggiornato) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
       ).bind(gid, chi, r.stato, r.testo, JSON.stringify(r.prove), t));
-      if (c.patch) stmts.push(env.DB.prepare(
+      if (c.patch) patchStmts.push(env.DB.prepare(
         "INSERT OR REPLACE INTO voti_patch (tipo, gruppo_id, contributore, patch) VALUES ('regola', ?1, ?2, ?3)",
       ).bind(gid, chi, c.patch));
       res.regole++;
@@ -173,7 +175,7 @@ async function contribute(request, env, ctx) {
       stmts.push(env.DB.prepare(
         "INSERT OR REPLACE INTO lezioni_voti (lezione_id, contributore, stato, volte, testo, aggiornato) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
       ).bind(gid, chi, l.stato, l.volte, l.testo, t));
-      if (c.patch) stmts.push(env.DB.prepare(
+      if (c.patch) patchStmts.push(env.DB.prepare(
         "INSERT OR REPLACE INTO voti_patch (tipo, gruppo_id, contributore, patch) VALUES ('lezione', ?1, ?2, ?3)",
       ).bind(gid, chi, c.patch));
       res.lezioni++;
@@ -203,6 +205,8 @@ async function contribute(request, env, ctx) {
   stmts.push(env.DB.prepare("UPDATE contributori SET ultimo = ?1, invii = invii + 1, versione = ?2 WHERE hash = ?3")
     .bind(t, c.versione, chi));
   await runBatch(env, stmts);
+  // la patch dei voti a parte: se la tabella non c'è ancora (server pubblicato prima dello schema) l'invio vale lo stesso
+  if (patchStmts.length) await env.DB.batch(patchStmts).catch(() => {});
 
   const last = await env.DB.prepare("SELECT creato FROM riassunto WHERE id = 1").first();
   if (!last || Date.parse(last.creato) < Date.now() - RICALCOLA_DOPO_MIN * 60000) ctx.waitUntil(rebuild(env));
@@ -244,7 +248,7 @@ async function rebuild(env) {
     for (const v of vs.sort((a, b) => b.aggiornato.localeCompare(a.aggiornato))) {
       for (const p of JSON.parse(v.prove || "[]")) if (prove.length < 3 && !prove.includes(p)) prove.push(p);
     }
-    regole.push({ id: "C" + g.id, categoria: g.categoria, testo: g.testo, ...cons, prove, agg: latest(vs),
+    regole.push({ id: "C" + g.id, categoria: g.categoria, testo: g.testo, ...cons, prove, voto: latest(vs),
       patch: patchOf("regola", g.id) });
   }
   regole.sort((a, b) => b.giocatori - a.giocatori || a.id.localeCompare(b.id));
@@ -258,7 +262,7 @@ async function rebuild(env) {
     const vs = votesByLesson.get(g.id);
     if (!vs?.length) continue;
     lezioni.push({ id: "CL" + g.id, tipo: g.tipo, testo: g.testo, carte: JSON.parse(g.carte || "[]"),
-      ...lessonConsensus(vs, S), agg: latest(vs), patch: patchOf("lezione", g.id) });
+      ...lessonConsensus(vs, S), voto: latest(vs), patch: patchOf("lezione", g.id) });
   }
   lezioni.sort((a, b) => b.sostengono - a.sostengono || b.volte - a.volte);
 
@@ -275,7 +279,7 @@ async function rebuild(env) {
   const carte = [], location = [];
   for (const e of byCard.values()) {
     const cons = cardConsensus(e.prop, S);
-    (e.tipo === "location" ? location : carte).push({ chiave: e.chiave, ...cons, agg: e.agg });
+    (e.tipo === "location" ? location : carte).push({ chiave: e.chiave, ...cons, voto: e.agg });
   }
 
   // partite
@@ -289,8 +293,23 @@ async function rebuild(env) {
     "SELECT COUNT(*) AS n FROM contributori WHERE bannato = 0 AND ultimo >= ?1",
   ).bind(daysAgo(90)).first())?.n || 0;
 
+  // per lo scarico incrementale: "agg" cambia quando cambia il CONTENUTO di una voce (nuovi voti, testo modificato
+  // dall'amministratore, unione, giocatore bloccato, soglia diversa), non solo quando arriva un voto
+  const creato = now();
+  const prevRow = await env.DB.prepare("SELECT json FROM riassunto WHERE id = 1").first();
+  const prev = prevRow ? JSON.parse(prevRow.json) : {};
+  for (const [k, idk] of [["regole", "id"], ["lezioni", "id"], ["carte", "chiave"], ["location", "chiave"]]) {
+    const old = new Map((prev[k] || []).map((x) => [x[idk], x]));
+    const items = { regole, lezioni, carte, location }[k];
+    for (const x of items) {
+      const { agg: _a, h: _h, ...body } = x;
+      x.h = (await sha(JSON.stringify(body))).slice(0, 16);
+      const o = old.get(x[idk]);
+      x.agg = o && o.h === x.h ? o.agg : creato;
+    }
+  }
   const out = {
-    api: VERSIONE_API, creato: now(), soglia_conferma: S, giocatori, giorni_partite: GIORNI_PARTITE,
+    api: VERSIONE_API, creato, soglia_conferma: S, giocatori, giorni_partite: GIORNI_PARTITE,
     regole, lezioni, carte, location, ...stats,
   };
   await env.DB.batch([
@@ -317,7 +336,7 @@ async function knowledge(request, env, ctx) {
     for (const [k, idk] of [["regole", "id"], ["lezioni", "id"], ["carte", "chiave"], ["location", "chiave"]]) {
       const items = full[k] || [];
       out.ids[k] = items.map((x) => x[idk]);
-      out[k] = items.filter((x) => !x.agg || x.agg > da);
+      out[k] = items.filter((x) => !x.agg || x.agg > da);  // agg = creato del riassunto in cui la voce è cambiata
     }
     return new Response(JSON.stringify(out), {
       headers: { "content-type": "application/json; charset=utf-8", etag, "cache-control": "private, max-age=60" },

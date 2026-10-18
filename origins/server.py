@@ -490,7 +490,9 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
     except Exception:  # noqa: BLE001
         pass
     if sorprese:
-        m["sorprese_round"] = {"turno": m.get("turno"), "voci": sorprese}
+        prev_s = m.get("sorprese_round") or {}
+        voci = (prev_s.get("voci") or []) if prev_s.get("turno") == m.get("turno") else []
+        m["sorprese_round"] = {"turno": m.get("turno"), "voci": list(dict.fromkeys(voci + sorprese))}
     save("match", m)
     view = _match_view(m)
     if my_deck_left is not None:

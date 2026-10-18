@@ -38,10 +38,13 @@ def _keywords(e: dict) -> set[str]:
 # nel campo "effetti" della carta: [{"tipo": "danno_barrier" | "danno_fronte" | "potenzia", "valore": 3, "vita": 0}]
 _ENEMY = r"(?:the\s+)?(?:enemy|opposing|opponent'?s?)"
 _FX = [
-    ("danno_barrier", re.compile(r"on reveal[^.]*?deal\s+(\d+)\s+damage\s+to\s+" + _ENEMY + r"\s+barrier", re.I)),
-    ("danno_fronte", re.compile(r"on reveal[^.]*?deal\s+(\d+)\s+damage\s+to\s+" + _ENEMY +
-                                r"\s+(?:creature|unit|minion)s?(?:\s+(?:in front|opposite|across))?", re.I)),
-    ("potenzia", re.compile(r"on reveal[^.]*?(?:gain|gains|get|gets)\s*\+(\d+)\s*/\s*\+(\d+)", re.I)),
+    ("danno_barrier", re.compile(r"on reveal\s*:?\s*deal\s+(\d+)\s+damage\s+to\s+" + _ENEMY + r"\s+barrier", re.I)),
+    # solo la creatura DI FRONTE (non "enemy creatures", non "the one with the highest attack")
+    ("danno_fronte", re.compile(r"on reveal\s*:?\s*deal\s+(\d+)\s+damage\s+to\s+" + _ENEMY +
+                                r"\s+(?:creature|unit|minion)\s+(?:in front(?: of (?:it|this))?|opposite|across)", re.I)),
+    # solo la carta stessa: "On Reveal: gain +2/+1" o "this creature gets +2/+1"
+    ("potenzia", re.compile(r"on reveal\s*:?\s*(?:this (?:creature|unit|card)\s+)?(?:gain|gains|get|gets)\s*"
+                            r"\+(\d+)\s*/\s*\+(\d+)", re.I)),
 ]
 
 
@@ -57,7 +60,8 @@ def effects(e: dict) -> list[dict]:
             continue
         end = text.find(".", m.end())
         sentence = text[m.start(): end if end != -1 else len(text)].lower()
-        if re.search(r"\bfor each\b|\bif\b|\bwhen\b|\bunless\b|\brandom", sentence):
+        if re.search(r"\bfor each\b|\bif\b|\bwhen\b|\bunless\b|\brandom|\ball\b|\beach\b|\bother\b|\ballies\b|"
+                     r"\bhighest\b|\blowest\b|\bstrongest\b|\bweakest\b|\bcreatures\b", sentence):
             continue  # effetto con condizioni: meglio non simularlo che simularlo sbagliato
         if kind == "potenzia":
             out.append({"tipo": kind, "valore": int(m.group(1)), "vita": int(m.group(2))})
