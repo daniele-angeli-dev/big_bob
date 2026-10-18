@@ -388,6 +388,8 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
     m = load("match")
     if not m:
         return "Nessuna partita attiva: usa start_match."
+    import copy as _copy
+    old_m = _copy.deepcopy(m)
     upd = {"turno": turn, "mia_mano": my_hand, "miei_giocati": my_played, "miei_scartati": my_discarded,
            "avv_giocati": opp_played, "avv_scartati": opp_discarded, "miei_creati": my_created,
            "avv_creati": opp_created}
@@ -457,16 +459,38 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
         v = m.get(k)
         snap[k] = list(v) if isinstance(v, list) else v
     m["storico"] = (m.get("storico") or [])[-59:] + [snap]
+    # nuovo round: com'è andato quello prima (utilità delle lezioni mostrate, verifica del simulatore, sorprese)
+    sorprese = []
+    if isinstance(m.get("turno"), int) and isinstance(old_m.get("turno"), int) and m["turno"] > old_m["turno"]:
+        from origins import verify
+        try:
+            shown = (old_m.get("lezioni_mostrate") or {})
+            good = verify.round_good(old_m, m)
+            if good is not None and shown.get("turno") == old_m.get("turno"):
+                lessons.mark_outcome(shown.get("ids") or [], good)
+            vc = verify.check(old_m, m)
+            if vc:
+                m["verifiche"] = (m.get("verifiche") or [])[-19:] + [vc]
+                if vc["differenze"]:
+                    sorprese.append(f"combattimento del round {vc['turno']} diverso dal previsto: "
+                                    + "; ".join(vc["differenze"]) + " (effetto di carta o regola non simulata?)")
+        except Exception:  # noqa: BLE001
+            pass
     # previsione delle carte avversarie: prima controllo com'è andata quella del round scorso, poi ne faccio una nuova
     try:
         chk = archetype.check_previous(m)
         if chk:
             m["previsioni"] = (m.get("previsioni") or [])[-39:] + [chk]
+            if chk.get("sorprese"):
+                sorprese.append(f"l'avversario ha giocato carte non previste nel round {chk.get('turno')}: "
+                                + ", ".join(chk["sorprese"]))
         pr = archetype.predict(m)
         m["previsione"] = {"turno": m.get("turno"), "viste": dict(evaluate.seen_opp(m)),
                            "carte": [x["carta"] for x in (pr.get("giocabili") or pr.get("carte") or [])[:4]]}
     except Exception:  # noqa: BLE001
         pass
+    if sorprese:
+        m["sorprese_round"] = {"turno": m.get("turno"), "voci": sorprese}
     save("match", m)
     view = _match_view(m)
     if my_deck_left is not None:
@@ -476,8 +500,8 @@ def update_match(turn: int | None = None, my_hand: list[str] | None = None,
         if calc != my_deck_left:
             view += (f"\n⚠ Il gioco mostra {my_deck_left} carte nel mazzo ma dal tracciamento ne risultano {calc}: "
                      "probabilmente manca una carta in mano/campo/scarti, o un effetto ha aggiunto/rimosso carte.")
-    return ("Stato aggiornato.\n" + view + _counters_summary(m) + _locations_summary(m) + _combat_summary(m) + "\n\n"
-            + _odds_summary(m) + _lessons_summary(m))
+    return ("Stato aggiornato.\n" + view + _counters_summary(m) + _locations_summary(m) + _combat_summary(m)
+            + _moves_summary(m) + "\n\n" + _odds_summary(m) + _lessons_summary(m) + _surprise_summary(m))
 
 
 def _counters_summary(m: dict) -> str:
@@ -535,12 +559,42 @@ def _combat_summary(m: dict) -> str:
         "\n\nPREVISIONE COMBATTIMENTO (se nessuno gioca altro; effetti On Reveal esclusi):\n" + combat.summary(res)
 
 
+def _surprise_summary(m: dict) -> str:
+    sr = m.get("sorprese_round") or {}
+    if sr.get("turno") != m.get("turno") or not sr.get("voci"):
+        return ""
+    return "\n\nSORPRESE DEL ROUND PRIMA (materiale per le lezioni): " + " · ".join(sr["voci"])
+
+
+def _moves_summary(m: dict) -> str:
+    """MOSSE CALCOLATE: la ricerca della mossa (solo allenamento e creazione: in ranked BIG-BOB non suggerisce)."""
+    from origins import search
+    if load("config").get("modalita") == "ranked" or not m.get("mia_mano"):
+        return ""
+    try:
+        pr = archetype.predict(m)
+        opp = [x for x in (pr.get("giocabili") or pr.get("carte") or []) if x.get("giocabile", True)]
+        r = search.search(m, opp, pr.get("p_giocabile"))
+        m["ricerca"] = {"turno": m.get("turno"), "mosse": r.get("mosse", [])[:3]}
+        save("match", m)
+        rows = search.lines(r)
+    except Exception as e:  # noqa: BLE001
+        return f"\n\nMOSSE CALCOLATE: non disponibili ({e})"
+    return ("\n\n" + "\n".join(rows)) if rows else ""
+
+
 def _lessons_summary(m: dict) -> str:
     """Lezioni già imparate che riguardano le carte in gioco adesso: entrano nel ragionamento senza altre chiamate."""
     cards = (m.get("mia_mano", []) + m.get("miei_giocati", []) + m.get("avv_giocati", []) + m.get("avv_scartati", [])
              + [m.get("avv_leggendaria") or "", m.get("leggendaria_mia") or ""] + (m.get("location") or []))
-    rel = lessons.relevant(cards)
-    rows = [f"- {x['id']} {'✅' if x['stato'] == 'confermata' else '❓'} {x['lezione']} (vista {x.get('volte', 1)}×)"
+    rel = lessons.relevant(cards, limit=3, m=m)
+    if rel:  # per il punteggio di utilità: quali lezioni erano davanti al coach in questo round
+        m["lezioni_mostrate"] = {"turno": m.get("turno"), "ids": [x["id"] for x in rel]}
+        save("match", m)
+    def _u(x):
+        u = lessons.utility(x)
+        return f", utile {round(u * 100)}%" if u is not None else ""
+    rows = [f"- {x['id']} {'✅' if x['stato'] == 'confermata' else '❓'} {x['lezione']} (vista {x.get('volte', 1)}×{_u(x)})"
             for x in rel]
     try:  # lezioni del cervello comune che non hai ancora (🌐 = di altri giocatori)
         comm = cervello.lessons_view(cards, limit=2 if rel else 3)
@@ -998,7 +1052,8 @@ def note_round(round: int, consiglio_seguito: bool | None = None, esito: str = "
 
 @mcp.tool()
 def record_lesson(lezione: str, tipo: str, carte: list[str] | None = None, situazione: str = "",
-                  accaduto: str = "", perche: str = "", fonte: str = "", id: str = "") -> str:
+                  accaduto: str = "", perche: str = "", fonte: str = "", id: str = "",
+                  condizioni: dict | None = None) -> str:
     """Registra una lezione appresa da qualcosa che non avevi previsto.
     lezione: UNA frase pratica e generale, utile la prossima volta ("Se Dracula ha 3+ mana e il centro è
     sotto 10, aspettati Brides of Dracula lì: tieni un blocco al centro").
@@ -1006,9 +1061,13 @@ def record_lesson(lezione: str, tipo: str, carte: list[str] | None = None, situa
     carte: le carte (e location) coinvolte, per ritrovarla quando tornano in gioco.
     situazione / accaduto / perche: la prova concreta (round, stato, cosa è successo, la spiegazione).
     fonte: "partita R<n>" | "Daniele" | "postpartita" | "video …". Lezioni simili vengono fuse e rafforzate;
-    passa id per rafforzare esplicitamente una lezione esistente."""
+    passa id per rafforzare esplicitamente una lezione esistente.
+    condizioni (facoltative, servono a richiamarla solo quando vale): {"corsia": "centro", "mana_min": 3, "mana_max": 6,
+    "round_min": 2, "round_max": 5, "tipo_avversario": "Aggro", "leggendaria_avversaria": "Dracula",
+    "mia_leggendaria": "Robin Hood"}."""
     try:
-        return _j(lessons.record(lezione, tipo, carte, situazione, accaduto, perche, fonte, id))
+        return _j(lessons.record(lezione, tipo, carte, situazione, accaduto, perche, fonte, id,
+                                 condizioni=condizioni))
     except ValueError as e:
         return f"Errore: {e}"
 
@@ -1042,7 +1101,8 @@ def lessons_get(carte: list[str] | None = None, tipo: str = "", stato: str = "")
 def cervello_comune(argomento: str = "") -> str:
     """Il cervello comune: ciò che hanno imparato tutti i giocatori di BIG-BOB (anonimo). argomento:
     "" = riassunto (giocatori, winrate per leggendaria, matchup, mazzi avversari più visti); "regole"; "lezioni";
-    "carte" (testi concordi tra più giocatori); "mazzi" (carte più viste per leggendaria avversaria).
+    "carte" (testi concordi tra più giocatori); "mazzi" (carte più viste per leggendaria avversaria);
+    "contrasti" (regole in cui tu e gli altri siete in contrasto netto: da verificare con /esperimento).
     Le regole e le lezioni comuni compaiono già in rules_get / lessons_get / update_match con id C… / CL…:
     una regola 'confermata' nel cervello comune è stata confermata da più giocatori diversi."""
     k = cervello.knowledge()
@@ -1060,6 +1120,8 @@ def cervello_comune(argomento: str = "") -> str:
         return _j({**head, "carte": k.get("carte", [])[:200], "location": k.get("location", [])[:80]})
     if a.startswith("mazz"):
         return _j({**head, "mazzi_avversari": k.get("mazzi_avversari", [])})
+    if a.startswith("contrast"):
+        return _j({**head, "contrasti": cervello.contrasts()})
     return _j({**head, "partite": k.get("partite"), "giorni": k.get("giorni_partite"),
                "leggendarie": k.get("leggendarie", [])[:30], "matchup": k.get("matchup", [])[:60],
                "mazzi_avversari": [{x: d.get(x) for x in ("leggendaria", "partite", "giocatori", "winrate_contro")}

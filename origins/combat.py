@@ -8,8 +8,8 @@
 - Una barrier a 0 viene distrutta: si rigenera a 40 (rinforzata) e il danno in eccesso si perde.
 - Vince chi arriva per primo a 2 barrier distrutte. Se entrambi ci arrivano nella stessa corsia
   il risultato è segnalato come "da verificare" (regola non ancora confermata).
-- Gli effetti speciali (On Reveal, ecc.) non sono simulati: i danni diretti alle barrier si passano
-  a parte (danni_diretti) e vengono applicati prima del combattimento.
+- Effetti alla rivelazione: quelli riconosciuti (danni alla barrier, danni alla creatura di fronte, +A/+V) li applica
+  apply_reveal; gli altri non sono simulati e i danni diretti alle barrier si passano a parte (danni_diretti).
 """
 from __future__ import annotations
 
@@ -32,6 +32,66 @@ def lane_index(x) -> int:
 def _keywords(e: dict) -> set[str]:
     words = " ".join([e.get("testo") or ""] + list(e.get("tag") or [])).lower()
     return {k for k in ("defender", "move") if k in words}
+
+
+# effetti "On Reveal" riconosciuti nel testo delle carte (in inglese, come nel gioco). Si possono anche scrivere a mano
+# nel campo "effetti" della carta: [{"tipo": "danno_barrier" | "danno_fronte" | "potenzia", "valore": 3, "vita": 0}]
+_ENEMY = r"(?:the\s+)?(?:enemy|opposing|opponent'?s?)"
+_FX = [
+    ("danno_barrier", re.compile(r"on reveal[^.]*?deal\s+(\d+)\s+damage\s+to\s+" + _ENEMY + r"\s+barrier", re.I)),
+    ("danno_fronte", re.compile(r"on reveal[^.]*?deal\s+(\d+)\s+damage\s+to\s+" + _ENEMY +
+                                r"\s+(?:creature|unit|minion)s?(?:\s+(?:in front|opposite|across))?", re.I)),
+    ("potenzia", re.compile(r"on reveal[^.]*?(?:gain|gains|get|gets)\s*\+(\d+)\s*/\s*\+(\d+)", re.I)),
+]
+
+
+def effects(e: dict) -> list[dict]:
+    """Gli effetti alla rivelazione che il simulatore sa applicare (dal campo 'effetti' o dal testo)."""
+    if isinstance(e.get("effetti"), list):
+        return [x for x in e["effetti"] if isinstance(x, dict) and x.get("tipo")]
+    text = e.get("testo") or ""
+    out = []
+    for kind, rx in _FX:
+        m = rx.search(text)
+        if not m:
+            continue
+        end = text.find(".", m.end())
+        sentence = text[m.start(): end if end != -1 else len(text)].lower()
+        if re.search(r"\bfor each\b|\bif\b|\bwhen\b|\bunless\b|\brandom", sentence):
+            continue  # effetto con condizioni: meglio non simularlo che simularlo sbagliato
+        if kind == "potenzia":
+            out.append({"tipo": kind, "valore": int(m.group(1)), "vita": int(m.group(2))})
+        else:
+            out.append({"tipo": kind, "valore": int(m.group(1))})
+    return out
+
+
+def apply_reveal(lanes: list[dict], side: str, i: int, k: int, card: str) -> tuple[list[dict], list[str]]:
+    """Applica gli effetti alla rivelazione della carta appena messa (corsia i, slot k): ritorna (danni diretti alle
+    barrier da passare a simulate, note di cosa è stato simulato)."""
+    e = store.find("cards", card) or {}
+    direct, notes = [], []
+    enemy = "avv" if side == "mie" else "mie"
+    for fx in effects(e):
+        v = int(fx.get("valore") or 0)
+        if fx["tipo"] == "danno_barrier" and v:
+            direct.append({"corsia": i, "bersaglio": "avv" if side == "mie" else "mia", "danno": v,
+                           "nota": f"{e.get('nome', card)} alla rivelazione"})
+            notes.append(f"{e.get('nome', card)}: {v} danni alla barrier")
+        elif fx["tipo"] == "danno_fronte" and v:
+            row = lanes[i][enemy]
+            if k < len(row) and row[k]:
+                row[k]["hp"] -= v
+                notes.append(f"{e.get('nome', card)}: {v} danni a {row[k]['nome']}")
+                if row[k]["hp"] <= 0:
+                    row[k] = None
+        elif fx["tipo"] == "potenzia":
+            u = lanes[i][side][k] if k < len(lanes[i][side]) else None
+            if u:
+                u["atk"] += v
+                u["hp"] += int(fx.get("vita") or 0)
+                notes.append(f"{u['nome']}: +{v}/+{int(fx.get('vita') or 0)}")
+    return direct, notes
 
 
 def make_unit(spec) -> dict | None:

@@ -13,6 +13,30 @@ Max, oppure con una chiave API a consumo).
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
 **18/10/2026**
+- **Il timer non si azzera più**: dalla lettura della schermata al ragionamento sulla mossa il conteggio continua,
+  quindi vedi il tempo vero dall'F8 alla risposta.
+- **Ricerca della mossa**: prima di chiedere al coach, BIG-BOB prova da solo tutte le giocate che puoi pagare, in tutti
+  gli spazi liberi (centinaia di combattimenti simulati in meno di un secondo), le mette alla prova contro la risposta
+  più dannosa delle carte che l'avversario probabilmente ha, e passa al coach le 3 migliori con i numeri. Il coach
+  sceglie e spiega, senza fare conti a mente. Gli effetti alla rivelazione più comuni (danni alla barrier, danni alla
+  creatura di fronte, +attacco/+vita) sono ora simulati; quelli con condizioni no, per non sbagliare. Solo in
+  allenamento e creazione: in ranked niente mosse.
+- **Più veloce**: la mossa compare mentre Claude la scrive; a inizio round i lettori leggono già la schermata prima
+  che tu prema F8 (se lo schermo poi non cambia, l'F8 deve solo pensare); il ragionamento è dosato (poco nei round
+  facili, il doppio in quelli decisivi); il tuo lato lo legge Haiku, più rapido; il database delle carte e la
+  previsione sull'avversario non vengono più ricalcolati a ogni richiesta.
+- **Controlli**: BIG-BOB confronta la lettura con il round prima (mana, carte in mano, barrier che salgono) e segnala
+  le incoerenze al coach; al round dopo confronta il combattimento previsto con quello vero e, se non tornano, lo
+  segnala come sorpresa (di solito un effetto di carta da insegnare al simulatore).
+- **Lezioni più mirate**: una lezione può avere condizioni (mana, round, tipo di mazzo avversario, leggendarie) e
+  allora esce solo quando valgono; BIG-BOB tiene il conto dei round andati bene o male quando era mostrata, e quelle
+  inutili smettono di uscire; le quasi uguali si uniscono da sole; il turno di apprendimento parte solo quando c'è una
+  sorpresa, così il round dopo non aspetta.
+- **Cervello comune più leggero e più affidabile**: si scarica solo ciò che è cambiato, compresso; le lezioni sono
+  indicizzate per carta; le voci di altre patch pesano meno e quelle su carte cambiate dopo spariscono; le tue ipotesi
+  confermate dagli altri diventano confermate (senza rimandare indietro il loro voto); i contrasti netti con gli altri
+  sono nello Studio, con la proposta di un esperimento contro il bot. Per la parte server serve ripubblicare il
+  cervello con pubblica_cervello.bat (BIG-BOB funziona anche con il server vecchio).
 - **Mossa più veloce**: due "lettori" leggono la schermata in parallelo, uno il tuo lato e uno quello avversario con i
   fotogrammi dell'osservatore, ognuno partendo da quello che era già registrato al round prima. BIG-BOB registra lo
   stato da solo e il coach riceve tutto già pronto: pensa solo alla mossa, senza trascrivere la schermata né fare il

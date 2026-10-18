@@ -101,6 +101,15 @@ CREATE TABLE IF NOT EXISTS partite (
 );
 CREATE INDEX IF NOT EXISTS partite_data ON partite (ricevuta);
 
+-- La patch del gioco con cui un giocatore ha votato una regola o una lezione (le voci di patch vecchie pesano meno).
+CREATE TABLE IF NOT EXISTS voti_patch (
+  tipo TEXT NOT NULL,           -- 'regola' | 'lezione'
+  gruppo_id INTEGER NOT NULL,
+  contributore TEXT NOT NULL,
+  patch TEXT NOT NULL,
+  PRIMARY KEY (tipo, gruppo_id, contributore)
+);
+
 -- Ultimo riassunto calcolato (lo scaricano tutti i BIG-BOB).
 CREATE TABLE IF NOT EXISTS riassunto (
   id INTEGER PRIMARY KEY CHECK (id = 1),

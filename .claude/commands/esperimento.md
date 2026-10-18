@@ -1,7 +1,8 @@
 ---
 description: Progetta prove da fare contro il bot per chiarire le regole incerte
 ---
-1. `rules_get` e scegli le 2-3 regole più importanti ancora in stato domanda, ipotesi o probabile
+1. `rules_get` e `cervello_comune("contrasti")`: scegli le 2-3 regole più importanti ancora in stato domanda, ipotesi o
+   probabile, o in contrasto netto con il cervello comune (prima queste: tu dici una cosa, gli altri il contrario)
    (priorità: ciò che cambia le decisioni in partita, come vittoria, risorse, rivelazione).
 2. Per ognuna progetta un esperimento da fare **contro il bot**, preciso e breve:
    - obiettivo: quale dubbio risolve

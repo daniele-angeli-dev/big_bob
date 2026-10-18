@@ -109,17 +109,42 @@ def upsert(kind: str, items: list[dict], patch: str | None = None) -> dict:
     return {"aggiunte": added, "modificate": changed, "invariate": len(unchanged), "totale": len(by_id)}
 
 
-def find(kind: str, name: str) -> dict | None:
+_FIND_CACHE: dict = {}
+
+
+def _index(kind: str) -> tuple[dict, list[str]]:
+    """Indice per id del database, riletto solo quando il file cambia: find viene chiamata migliaia di volte (ricerca
+    della mossa, probabilità) e rileggere tutto il file ogni volta era la parte lenta."""
+    p = FILES[kind]
+    try:
+        st = p.stat()
+        key = (str(p), st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = (str(p), None, None)
+    hit = _FIND_CACHE.get(kind)
+    if hit and hit[0] == key:
+        return hit[1], hit[2]
     db = load(kind)
+    by_id = {e["id"]: e for e in db if isinstance(e, dict) and "id" in e}
+    _FIND_CACHE[kind] = (key, by_id, list(by_id))
+    return by_id, list(by_id)
+
+
+def find(kind: str, name: str) -> dict | None:
+    by_id, ids = _index(kind)
     sid = slug(name)
-    for e in db:
-        if e["id"] == sid:
-            return e
-    ids = [e["id"] for e in db]
-    m = get_close_matches(sid, ids, n=1, cutoff=0.75)
-    if m:
-        return next(e for e in db if e["id"] == m[0])
-    return None
+    e = by_id.get(sid)
+    if e is None:
+        close = _CLOSE_CACHE.get((kind, sid, len(ids)))
+        if close is None:
+            m = get_close_matches(sid, ids, n=1, cutoff=0.75)
+            close = m[0] if m else ""
+            _CLOSE_CACHE[(kind, sid, len(ids))] = close
+        e = by_id.get(close) if close else None
+    return dict(e) if e is not None else None  # copia: chi la modifica non tocca l'indice
+
+
+_CLOSE_CACHE: dict = {}
 
 
 def search(kind: str, query: str = "", limit: int = 50) -> list[dict]:

@@ -427,6 +427,8 @@ body.inmatch .score .l{font-size:11px}
     <label class="opt"><input type="checkbox" id="oObs"> Osserva la partita tra un F8 e l'altro (vede magie scartate e creature morte)</label>
     <div class="hint" id="spaceTxt" style="margin:4px 0 6px">–</div>
     <label class="opt"><input type="checkbox" id="oFast"> Lettura veloce: due lettori leggono la schermata in parallelo e il coach pensa solo alla mossa</label>
+    <label class="opt"><input type="checkbox" id="oPre"> Lettura anticipata: a inizio round legge la schermata prima che tu prema F8 (consuma un po' di più)</label>
+    <label class="opt"><input type="checkbox" id="oDose"> Ragionamento dosato: poco nei round facili, di più in quelli decisivi</label>
     <label class="opt"><input type="checkbox" id="oClean"> Contesto pulito a ogni round (risposte più rapide: le immagini dei round prima non rallentano)</label>
     <label class="opt"><input type="checkbox" id="oInv"> BIG-BOB invisibile alle catture: le schermate vedono il gioco sotto la finestra, senza farla sparire (spegnilo solo per fotografare BIG-BOB)</label>
     <label class="opt"><input type="checkbox" id="oEval"> Barra di vantaggio: BIG-BOB stima chi sta vincendo dopo ogni risposta</label>
@@ -624,6 +626,14 @@ body.inmatch .score .l{font-size:11px}
   function chip(type, label, text, wide){
     var c = el('div', 'chip t-' + type + (wide ? ' wide' : '')); c.appendChild(el('small', null, label)); c.appendChild(document.createTextNode(text)); return c;
   }
+  function showPreview(ev){  // la mossa mentre Claude la scrive: si legge qualche secondo prima
+    showThinking(false);
+    var mv = $('move');
+    mv.classList.remove('hidden','tracker');
+    $('moveK').textContent = 'LA MOSSA';
+    $('moveM').textContent = ev.mossa || ''; $('moveW').textContent = ev.perche || '';
+    $('moveT').textContent = (ev.secs != null ? ev.secs + ' s · ' : '') + 'sto finendo…';
+  }
   function renderAnswer(ev){
     var p = ev.parsed;
     if (!p){ addMsg('bob', ev.text); return; }
@@ -746,14 +756,15 @@ body.inmatch .score .l{font-size:11px}
     } else t.classList.add('hidden');
   }
   var curBudget = 40;  // 0 = nessun limite (creazione mazzo, fine partita): il limite vale solo in partita
-  function setBusy(on, what, budget){
+  function setBusy(on, what, budget, since){
     $('btnF8').disabled = on; $('btnF8').textContent = on ? '…' : 'F8';
     clearInterval(busyTimer);
+    var keepT0 = on && since != null && busyT0;  // stesso F8 (lettura → mossa): il timer continua, non riparte da 0
     if (on) curBudget = (budget === undefined || budget === null) ? BUDGET : budget;
     showThinking(on, what);
     if (on){
       $('thinkSec').lastChild.textContent = curBudget ? ('/ ' + curBudget + ' s') : 'secondi';
-      busyT0 = Date.now();
+      busyT0 = keepT0 ? Date.now() - since * 1000 : Date.now();
       busyTimer = setInterval(function(){
         var s = (Date.now() - busyT0) / 1000;
         paintTimer(s, curBudget);
@@ -813,7 +824,8 @@ body.inmatch .score .l{font-size:11px}
           if (!$('think').classList.contains('hidden') && ev.text && ev.text.indexOf('⚙') === 0){
             var tool = ev.text.replace('⚙', '').trim(); $('thinkS').textContent = STEPS[tool] || ('Uso ' + tool + '…');
           } break;
-        case 'busy': setBusy(ev.value, ev.what, ev.budget); if (ev.value) $('status').textContent = ev.budget === 0 ? 'Sto lavorando…' : 'Sto guardando…'; break;
+        case 'busy': setBusy(ev.value, ev.what, ev.budget, ev.continua ? ev.da : null); if (ev.value) $('status').textContent = ev.budget === 0 ? 'Sto lavorando…' : 'Sto guardando…'; break;
+        case 'preview': showPreview(ev); break;
         case 'answer': showThinking(false); renderAnswer(ev); break;
         case 'timing': setTiming(ev.secs, ev.budget); $('status').textContent = ''; break;
         case 'usage': showUsage(ev); break;
@@ -914,7 +926,7 @@ body.inmatch .score .l{font-size:11px}
     $('apiKey').value = ''; $('apiKey').placeholder = v.api_key_impostata ? 'chiave salvata · scrivi per cambiarla' : 'sk-ant-…';
     $('modello').value = v.modello_live || 'sonnet';
     $('oVoce').checked = v.voce !== false; $('oImpara').checked = v.apprendimento_live !== false;
-    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false; $('oObs').checked = v.osservatore !== false; $('oInv').checked = v.invisibile_catture !== false; $('oFast').checked = v.lettura_veloce !== false; $('oClean').checked = v.contesto_pulito !== false; $('oEval').checked = v.barra_vantaggio !== false;
+    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false; $('oObs').checked = v.osservatore !== false; $('oInv').checked = v.invisibile_catture !== false; $('oFast').checked = v.lettura_veloce !== false; $('oClean').checked = v.contesto_pulito !== false; $('oPre').checked = v.lettura_anticipata !== false; $('oDose').checked = v.ragionamento_dosato !== false; $('oEval').checked = v.barra_vantaggio !== false;
     $('oThink').value = v.max_thinking_live != null ? v.max_thinking_live : 4000;
     $('oShare').checked = v.cervello_contribuisci !== false; $('oUse').checked = v.cervello_usa !== false;
     var cb = ev.cervello || {};
@@ -938,7 +950,7 @@ body.inmatch .score .l{font-size:11px}
     e.preventDefault();
     var vals = { connessione: connValue(), modello_live: $('modello').value, voce: $('oVoce').checked,
       apprendimento_live: $('oImpara').checked, apri_claude_code_all_avvio: $('oTerm').checked,
-      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, invisibile_catture: $('oInv').checked, lettura_veloce: $('oFast').checked, contesto_pulito: $('oClean').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10),
+      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, invisibile_catture: $('oInv').checked, lettura_veloce: $('oFast').checked, contesto_pulito: $('oClean').checked, lettura_anticipata: $('oPre').checked, ragionamento_dosato: $('oDose').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10),
       cervello_contribuisci: $('oShare').checked, cervello_usa: $('oUse').checked };
     var k = $('apiKey').value.trim(); if (k) vals.api_key = k;
     hide(); call('save_settings', vals);

@@ -99,6 +99,10 @@ con i fotogrammi) e BIG-BOB chiama già update_match: la richiesta dice "scherma
 update_match. In quel caso NON rifare update_match (salvo un errore di lettura evidente nella schermata allegata che
 cambia la mossa: allora correggi solo quel campo), al massimo UNA simulate_combat, poi rispondi. Il contesto riparte
 pulito a ogni round: i consigli dei round prima sono nella riga "Consigli dei round prima", la partita è nel server.
+Spesso la lettura è già stata fatta prima dell'F8 (lettura anticipata, a inizio round): per te non cambia niente. Gli
+"Avvisi della lettura" sono incoerenze trovate da BIG-BOB (mana, carte in mano, barrier salite): se cambiano la mossa,
+guarda la schermata e correggi solo quel campo. Quanto ragionare lo decide BIG-BOB round per round (poco nei round facili,
+di più in quelli decisivi): nei round decisivi controlla due volte la chiusura e il rischio.
 
 **Osservatore.** Durante la partita BIG-BOB guarda lo schermo ogni ~0,35 s e salva un fotogramma quando una zona
 cambia, anche durante le animazioni; all'F8 ti allega fino a 10 immagini (quando i momenti sono tanti, fogli con i ritagli numerati [1], [2]… in ordine di
@@ -142,7 +146,11 @@ location, carte probabili dell'avversario, chi rivela prima, fatica). Passa anch
 
 **Conti di combattimento: non farli a mente.** Passa sempre `board` a `update_match` (creature in campo
 per corsia e slot, con le statistiche attuali): ti restituisce la PREVISIONE DEL COMBATTIMENTO se nessuno
-gioca altro. Se la mossa migliore non è evidente, fai UNA chiamata `simulate_combat` con 2-3 scenari
+gioca altro e, in allenamento e creazione, le MOSSE CALCOLATE: BIG-BOB prova tutte le giocate che puoi pagare, negli
+spazi liberi, contro la risposta più dannosa delle carte che l'avversario probabilmente ha, e ti dà le 3 migliori con i
+numeri (gli effetti alla rivelazione riconosciuti sono già dentro; le magie e gli altri effetti li valuti tu). Parti da
+quelle: la scelta e il "perché" sono tuoi. Un effetto si può insegnare al simulatore scrivendolo nel campo `effetti`
+della carta con `upsert_cards` (`danno_barrier`, `danno_fronte`, `potenzia`). Se la mossa migliore non è evidente, fai UNA chiamata `simulate_combat` con 2-3 scenari
 (le tue giocate candidate, e per la migliore anche la risposta più pericolosa dell'avversario) e scegli
 in base ai numeri. Gli effetti speciali (On Reveal ecc.) non sono simulati: aggiungili in `danni_diretti`
 o tienine conto tu. Massimo 2 chiamate in tutto per le analisi live (update_match + simulate_combat).
@@ -198,7 +206,13 @@ leggibili in `data/lezioni.md`) vengono rilette a ogni partita.
   non il racconto del round. Metti le carte coinvolte, così la lezione torna fuori quando servono.
   Le prove concrete vanno in situazione/accaduto/perche.
 - **Non** registrare cose ovvie o già scritte nel testo delle carte, né lezioni durante la risposta live
-  (c'è un turno apposito di apprendimento subito dopo, mentre Daniele gioca).
+  (c'è un turno apposito di apprendimento subito dopo, mentre Daniele gioca). Quel turno parte solo quando BIG-BOB trova
+  delle SORPRESE (carte avversarie non previste, combattimento diverso da quello simulato, consiglio non seguito):
+  parti da quelle. Il resto si impara a fine partita, rileggendo il diario.
+- **Condizioni**: se una lezione vale solo in certe situazioni passa `condizioni` a `record_lesson` (corsia, mana_min/max,
+  round_min/max, tipo_avversario, leggendaria_avversaria, mia_leggendaria): BIG-BOB la mostra solo quando valgono.
+- BIG-BOB segna se i round in cui una lezione era mostrata sono andati bene o male ("utile N%"): quelle rivelatesi
+  inutili smettono di uscire in partita; quelle quasi uguali vengono unite da sole dopo ogni partita.
 - Una lezione vista una volta è un'ipotesi ❓; diventa ✅ quando si ripete o quando Daniele la conferma.
   Se una partita dimostra che una lezione era sbagliata: `lesson_review` con stato "smentita".
 - Se la sorpresa rivela una regola del gioco, aggiorna anche il regolamento (`rules_upsert`).
@@ -253,7 +267,11 @@ Tutti i BIG-BOB mettono in comune, in forma anonima, regole, lezioni, testi di c
   con id `C…`; `lessons_get` e le LEZIONI di `update_match` includono quelle degli altri con id `CL…` (🌐).
 - Sono di altri giocatori: pesale come indizi forti quando sono ✅ confermate (2+ giocatori), come ipotesi altrimenti.
   Per farne una regola tua usa `rules_upsert` (testo tuo, `fonte="cervello comune"`); gli id C/CL non si modificano.
-- Se una tua regola è smentita dagli altri, controllala alla prima occasione invece di cambiarla subito.
+- Se una tua regola è smentita dagli altri, controllala alla prima occasione invece di cambiarla subito: i contrasti
+  netti sono in `cervello_comune("contrasti")` e `/esperimento` propone la prova contro il bot.
+- Una tua lezione o regola ancora ipotesi che il cervello comune ha confermato (2+ giocatori) diventa confermata da sola
+  (prova "cervello comune"); al server però va il tuo voto, non quello degli altri.
+- Le voci comuni di patch diverse pesano meno, e quelle su carte cambiate dopo i voti non vengono più mostrate.
 - `cervello_comune` dà winrate per leggendaria, matchup e mazzi avversari più visti tra i giocatori di BIG-BOB
   (fonte diversa da OriginsMeta: tienile distinte, come nella sezione Meta).
 

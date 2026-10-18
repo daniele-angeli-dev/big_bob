@@ -113,7 +113,12 @@ assert c._session_free.wait(10) and c.session.proc and c.session.proc.pid != pid
     "dopo ogni round una sessione nuova (senza le immagini dei round prima), già accesa per il prossimo F8"
 assert ui.hides >= 2 and ui.vis, "la finestra si nasconde durante la cattura e ricompare"
 
-# secondo round: risposta subito, poi apprendimento in background
+# secondo round: risposta subito, poi apprendimento in background (parte solo se c'è una sorpresa)
+c._session_free.wait(10)
+assert not [e for e in ui.events if e.get("role") == "lesson"], "senza sorprese nessun turno di apprendimento"
+_m = store.load("match")
+_m["sorprese_round"] = {"turno": _m.get("turno"), "voci": ["l'avversario ha giocato carte non previste: Bat"]}
+store.save("match", _m)
 t = time.time()
 wait(ui, c.analyze)
 assert time.time() - t < 3, "la risposta live non deve aspettare l'apprendimento"
@@ -147,8 +152,35 @@ assert m1["campo"]["sinistra"] == {"mie": ["Friar Tuck 4/3", None], "avv": ["Bat
 assert m1["rivela_prima"] == "avversario" and m1["avv_mano"] == 4
 diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
 assert "Lettura veloce:" in diario and "update_match:" in diario, diario[-600:]
+busy_on = [e for e in ui.of("busy") if e["value"]]
+assert busy_on[-2]["what"] == "Leggo la schermata" and busy_on[-1].get("continua"), \
+    "il timer della finestra continua dalla lettura alla mossa, non si azzera"
+# lettura anticipata: fatta a inizio round, all'F8 si usa senza rileggere
+c._session_free.wait(10)
+c.capture_excluded = True
+from PIL import Image as _I  # noqa: E402
+sig = _I.new("L", (96, 54), 40)
+c._last_sig = sig
+c._preread(sig)
+assert c._pre and c._pre["state"].startswith("Stato aggiornato"), c._pre
+wait(ui, c.analyze)
+diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
+assert "Lettura anticipata usata" in diario and "letto=si" in ui.of("answer")[-1]["text"], diario[-400:]
+assert c._pre is None
+c._pre = {"t": time.time(), "sig": sig, "shot": None}
+c._last_sig = _I.new("L", (96, 54), 200)  # lo schermo è cambiato: la lettura anticipata non vale più
+assert c._fresh_pre() is None
+c._pre = None
+c.capture_excluded = False
 c._session_free.wait(10)
 c.readers = {}
+assert controller.preview_move("▶ Marian al centro\nperché: blocca\n⚠") == {"mossa": "Marian al centro",
+                                                                            "perche": "blocca"}
+assert controller.preview_move("▶ Marian al cen") is None, "la riga ▶ si mostra solo quando è finita"
+tb = controller.thinking_budget
+assert tb({"turno": 1, "barrier_mie": [20] * 3, "barrier_avv": [20] * 3}, {"max_thinking_live": 4000})[0] < 4000
+assert tb({"turno": 5, "barrier_mie": [20, 6, 20], "barrier_avv": [20] * 3}, {"max_thinking_live": 4000})[0] > 4000
+assert tb({"turno": 5, "barrier_mie": [20] * 3, "barrier_avv": [20] * 3}, {"max_thinking_live": 4000})[0] == 4000
 
 hud = [e for e in ui.of("hud") if e["match"]][-1]["match"]
 assert hud["avv"][2] == {"v": 31, "max": 40, "rinf": True} and hud["mie"][1]["max"] == 20, hud

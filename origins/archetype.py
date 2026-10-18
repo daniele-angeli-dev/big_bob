@@ -111,7 +111,7 @@ def _candidates(m: dict, meta: list[dict]) -> tuple[str, list[str], list[dict]]:
     return leg, seen, cands
 
 
-def identify(m: dict, meta: list[dict] | None = None, top: int = 3) -> dict:
+def _identify(m: dict, meta: list[dict] | None = None, top: int = 3) -> dict:
     """Mazzi più probabili dell'avversario e tipo, dalle carte viste nella partita m."""
     meta = meta if meta is not None else store.load("meta")
     leg, seen, cands = _candidates(m, meta)
@@ -250,7 +250,7 @@ def _timing(cost, mana, avg_round, turn, label: str) -> float:
     return w
 
 
-def predict(m: dict, meta: list[dict] | None = None, top: int = 6) -> dict:
+def _predict(m: dict, meta: list[dict] | None = None, top: int = 6) -> dict:
     """Cosa ha probabilmente in mano l'avversario e cosa può giocare in questo round, dal mazzo stimato."""
     from origins import odds
     meta = meta if meta is not None else store.load("meta")
@@ -358,3 +358,44 @@ def check_previous(m: dict) -> dict | None:
     return {"turno": prev.get("turno"), "previste": prev.get("carte") or [], "giocate": played,
             "azzeccate": [c for c in played if store.slug(c) in predicted],
             "sorprese": [c for c in played if store.slug(c) not in predicted]}
+
+
+# ---- memoria dei calcoli: update_match chiede identify/predict più volte con lo stesso stato (ricerca della mossa,
+# probabilità, previsione); il calcolo sul meta è la parte lenta, quindi si fa una volta sola per stato
+_MEMO: dict = {}
+
+
+def _key(m: dict, meta, top) -> str | None:
+    if meta is not None:
+        return None  # meta passato a mano (test, simulazioni): niente memoria
+    import json as _json
+    try:
+        st = store.FILES["meta"].stat()
+        mk = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        mk = None
+    fields = {k: m.get(k) for k in ("avv_leggendaria", "avv_giocati", "avv_scartati", "avv_creati", "avv_mano", "mana",
+                                    "turno", "barrier_mie", "leggendaria_mia")}
+    return _json.dumps([fields, mk, top, str(store.FILES["meta"])], sort_keys=True, default=str)
+
+
+def _memo(name, fn, m, meta, top):
+    import copy as _copy
+    k = _key(m, meta, top)
+    if k is None:
+        return fn(m, meta, top)
+    hit = _MEMO.get((name, k))
+    if hit is None:
+        hit = fn(m, meta, top)
+        if len(_MEMO) > 64:
+            _MEMO.clear()
+        _MEMO[(name, k)] = hit
+    return _copy.deepcopy(hit)
+
+
+def identify(m: dict, meta: list[dict] | None = None, top: int = 3) -> dict:
+    return _memo("identify", _identify, m, meta, top)
+
+
+def predict(m: dict, meta: list[dict] | None = None, top: int = 6) -> dict:
+    return _memo("predict", _predict, m, meta, top)

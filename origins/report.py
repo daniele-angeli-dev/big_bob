@@ -776,6 +776,13 @@ def brain_body() -> str:
                        f"<td>{icon.get(c['stato'], '?')} {e(c['stato'])} ({c.get('giocatori', 0)})</td></tr>" for r, c in diff[:30])
         out.append("<h3>Dove gli altri la vedono diversamente</h3><table><thead><tr><th>Id</th><th>Regola</th>"
                    f"<th>Per te</th><th>Per gli altri</th></tr></thead><tbody>{rows}</tbody></table>")
+    con = cervello.contrasts()
+    if con:
+        items = "".join(f"<li><b>{e(c['id'])}</b> {e(c['testo'] or '')} — per te {e(c['tuo'])}, per {c.get('giocatori') or 0} "
+                        f"giocatori {e(c['comune'])}</li>" for c in con[:10])
+        out.append("<h3>Da verificare con un esperimento</h3><div class='note'>Qui tu e gli altri siete in contrasto netto: "
+                   "in Claude Code scrivi <b>/esperimento</b> e BIG-BOB ti propone una prova contro il bot per capire chi ha "
+                   f"ragione.</div><ul>{items}</ul>")
     ls = cervello.lessons_view(None, limit=30, local=lessons.load())
     if ls:
         rows = "".join(f"<tr><td>{icon.get(x['stato'], '?')}</td><td>{e(x['testo'])}</td><td>{e(', '.join(x.get('carte') or []))}</td>"

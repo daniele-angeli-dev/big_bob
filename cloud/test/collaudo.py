@@ -11,6 +11,7 @@ import json
 import secrets
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 URL = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:8787"
@@ -100,6 +101,19 @@ try:
     ok(False, "doveva rispondere 304")
 except urllib.error.HTTPError as e:
     ok(e.code == 304, f"304 → {e.code}")
+
+print("4b. scarico incrementale e patch")
+s, r = call("/v1/contributi", {"install": players[0], "versione": "test", "patch": "0.8", "lezioni": [
+    {"cid": "L009", "tipo": "strategia", "testo": "Tieni Garlic per il round in cui Dracula ha 5 mana",
+     "carte": ["Garlic"], "stato": "ipotesi", "volte": 1}]})
+ok(s == 200, f"invio con patch → {r}")
+call("/v1/admin/ricalcola", {}, admin=True)
+s, d = call("/v1/conoscenza?da=" + urllib.parse.quote(k["creato"]))
+ok(s == 200 and d.get("delta") and [x["testo"] for x in d["lezioni"]] == [
+    "Tieni Garlic per il round in cui Dracula ha 5 mana"], f"solo la lezione nuova: {d.get('lezioni')}")
+ok(len(d["ids"]["lezioni"]) == len(k["lezioni"]) + 1 and d["regole"] == [], "id di tutte, nessuna regola cambiata")
+ok(d["lezioni"][0].get("patch") == "0.8" and d["lezioni"][0].get("agg"), f"patch e data: {d['lezioni'][0]}")
+k = call("/v1/conoscenza")[1]
 
 print("5. sicurezza e limiti")
 s, r = call("/v1/admin/panoramica")

@@ -50,8 +50,29 @@ def _similar(a: dict, tipo: str, cards: list[str], text: str) -> float:
     return 0.5 * overlap + 0.5 * txt
 
 
+COND_KEYS = ("corsia", "mana_min", "mana_max", "round_min", "round_max", "tipo_avversario", "leggendaria_avversaria",
+             "mia_leggendaria")
+
+
+def clean_conditions(c: dict | None) -> dict:
+    """Condizioni in cui la lezione vale (servono a richiamarla solo quando serve)."""
+    out = {}
+    for k, v in (c or {}).items():
+        if k not in COND_KEYS or v in (None, "", []):
+            continue
+        if k.endswith(("_min", "_max")):
+            try:
+                out[k] = int(v)
+            except (TypeError, ValueError):
+                continue
+        else:
+            out[k] = str(v).strip()
+    return out
+
+
 def record(lezione: str, tipo: str = "strategia", carte: list[str] | None = None, situazione: str = "",
-           accaduto: str = "", perche: str = "", fonte: str = "", id: str = "", stato: str = "") -> dict:
+           accaduto: str = "", perche: str = "", fonte: str = "", id: str = "", stato: str = "",
+           condizioni: dict | None = None) -> dict:
     if tipo not in TIPI:
         raise ValueError(f"tipo deve essere uno di {list(TIPI)}")
     if stato and stato not in STATI:
@@ -79,6 +100,9 @@ def record(lezione: str, tipo: str = "strategia", carte: list[str] | None = None
         if lezione.strip() and len(lezione.strip()) > len(target["lezione"]) * 0.6:
             target["lezione"] = lezione.strip()  # la formulazione più recente è di solito la più precisa
         target["carte"] = list(dict.fromkeys(target.get("carte", []) + cards))
+    cond = clean_conditions(condizioni)
+    if cond:
+        target["condizioni"] = {**(target.get("condizioni") or {}), **cond}
     target["volte"] = target.get("volte", 0) + 1
     target["prove"] = (target.get("prove", []) + [prova])[-8:]
     target["ultima"] = store.now()
@@ -113,9 +137,58 @@ def review(id: str, stato: str = "", lezione: str = "", elimina: bool = False) -
     return {"aggiornata": t}
 
 
-def relevant(cards: list[str], limit: int = 4) -> list[dict]:
-    """Le lezioni più utili per le carte in gioco adesso (confermate prima, poi le più viste)."""
+def context(m: dict | None) -> dict:
+    """La situazione della partita per confrontarla con le condizioni delle lezioni."""
+    if not m:
+        return {}
+    ctx = {"mana": m.get("mana"), "round": m.get("turno"), "leggendaria_avversaria": m.get("avv_leggendaria"),
+           "mia_leggendaria": m.get("leggendaria_mia"), "tipo_avversario": m.get("tipo_avversario_stimato")}
+    if not ctx["tipo_avversario"]:
+        try:
+            from origins import archetype
+            ctx["tipo_avversario"] = (archetype.identify(m).get("tipo") or {}).get("etichetta")
+        except Exception:  # noqa: BLE001
+            pass
+    return ctx
+
+
+def fits(cond: dict | None, ctx: dict) -> tuple[bool, int]:
+    """(la lezione vale qui?, quante condizioni sono soddisfatte). Una condizione che non si può verificare non esclude."""
+    if not cond or not ctx:
+        return True, 0
+    ok = 0
+    for k, v in cond.items():
+        if k in ("mana_min", "mana_max", "round_min", "round_max"):
+            cur = ctx.get("mana" if k.startswith("mana") else "round")
+            if not isinstance(cur, int):
+                continue
+            if (k.endswith("_min") and cur < v) or (k.endswith("_max") and cur > v):
+                return False, 0
+            ok += 1
+        elif k in ("tipo_avversario", "leggendaria_avversaria", "mia_leggendaria"):
+            cur = ctx.get(k)
+            if not cur:
+                continue
+            if store.slug(str(v)) not in store.slug(str(cur)) and store.slug(str(cur)) not in store.slug(str(v)):
+                return False, 0
+            ok += 1
+    return True, ok
+
+
+def utility(a: dict) -> float | None:
+    """Quanto è stata utile: frazione dei round andati bene quando era mostrata (None se visto troppo poco)."""
+    good, bad = a.get("round_buoni", 0), a.get("round_cattivi", 0)
+    if good + bad < 4:
+        return None
+    return (good + 1) / (good + bad + 2)
+
+
+def relevant(cards: list[str], limit: int = 4, m: dict | None = None) -> list[dict]:
+    """Le lezioni più utili adesso: carte in gioco, condizioni soddisfatte (mana, round, tipo di mazzo avversario,
+    leggendarie), confermate prima, poi le più viste e quelle che si sono dimostrate utili. Quelle che si sono
+    dimostrate inutili (molti round andati male quando erano mostrate) non escono più in partita."""
     cs = {c.lower() for c in cards if c}
+    ctx = context(m)
     scored = []
     for a in load():
         if a.get("stato") == "smentita":
@@ -123,12 +196,66 @@ def relevant(cards: list[str], limit: int = 4) -> list[dict]:
         hit = len(cs & {c.lower() for c in a.get("carte", [])})
         if not hit and a.get("carte"):
             continue
-        if not a.get("carte") and a.get("tipo") != "strategia":
+        if not a.get("carte") and a.get("tipo") != "strategia" and not a.get("condizioni"):
             continue
-        score = hit * 2 + (3 if a["stato"] == "confermata" else 0) + min(a.get("volte", 1), 5) * 0.5
+        good, n_cond = fits(a.get("condizioni"), ctx)
+        if not good:
+            continue
+        u = utility(a)
+        if u is not None and u < 0.3 and a.get("round_buoni", 0) + a.get("round_cattivi", 0) >= 8:
+            continue
+        score = hit * 2 + n_cond * 1.5 + (3 if a["stato"] == "confermata" else 0) + min(a.get("volte", 1), 5) * 0.5
+        if u is not None:
+            score += (u - 0.5) * 4
         scored.append((score, a))
     scored.sort(key=lambda x: -x[0])
     return [a for _, a in scored[:limit]]
+
+
+def mark_outcome(ids: list[str], good: bool) -> None:
+    """Esito del round in cui queste lezioni erano mostrate (per il punteggio di utilità)."""
+    if not ids:
+        return
+    ls = load()
+    key = "round_buoni" if good else "round_cattivi"
+    changed = False
+    for a in ls:
+        if a["id"] in ids:
+            a[key] = a.get(key, 0) + 1
+            changed = True
+    if changed:
+        save(ls)
+
+
+def tidy() -> dict:
+    """Riordino: unisce le lezioni quasi uguali (stesso tipo, carte in comune, testo simile) in una sola, tenendo
+    tutte le prove. Senza Claude: è un conto sui testi, si fa a fine partita."""
+    ls = load()
+    merged = []
+    keep: list[dict] = []
+    for a in sorted(ls, key=lambda x: (x.get("stato") != "confermata", -x.get("volte", 0))):
+        if a.get("stato") == "smentita":
+            keep.append(a)
+            continue
+        twin = next((k for k in keep if k.get("stato") != "smentita"
+                     and _similar(k, a.get("tipo"), a.get("carte", []), a.get("lezione", "")) >= 0.72), None)
+        if twin is None:
+            keep.append(a)
+            continue
+        twin["carte"] = list(dict.fromkeys(twin.get("carte", []) + a.get("carte", [])))
+        twin["prove"] = (twin.get("prove", []) + a.get("prove", []))[-8:]
+        twin["volte"] = twin.get("volte", 0) + a.get("volte", 0)
+        for k in ("round_buoni", "round_cattivi"):
+            twin[k] = twin.get(k, 0) + a.get(k, 0)
+        if a.get("condizioni") and not twin.get("condizioni"):
+            twin["condizioni"] = a["condizioni"]
+        if a.get("stato") == "confermata":
+            twin["stato"] = "confermata"
+        merged.append(f"{a['id']} → {twin['id']}")
+    if merged:
+        order = {x["id"]: i for i, x in enumerate(ls)}
+        save(sorted(keep, key=lambda x: order.get(x["id"], 0)))
+    return {"unite": merged}
 
 
 def render(ls: list[dict] | None = None) -> str:

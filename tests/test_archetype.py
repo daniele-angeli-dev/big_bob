@@ -141,6 +141,8 @@ out = call("update_match", turn=4, mana=5, opp_played=["Lenta 1", prev["carte"][
 pv = store.load("match")["previsioni"][-1]
 check(pv["azzeccate"] == [prev["carte"][0]] and pv["sorprese"] == ["Rapida 7"], f"confronto: {pv}")
 check("Previsione del round 3" in out and "Rapida 7 ✗" in out and "PREVISIONE AVVERSARIO" in out, "update_match lo dice")
+check("SORPRESE DEL ROUND PRIMA" in out and "Rapida 7" in out.split("SORPRESE DEL ROUND PRIMA")[1],
+      "la carta non prevista diventa una sorpresa da cui imparare")
 import controller as _ctl  # noqa: E402
 hud = _ctl.Controller._opp_deck(store.load("match"))
 check(hud and len(hud["probabili"]) >= 1 and "p" in hud["probabili"][0], f"finestra: {hud and hud['probabili']}")

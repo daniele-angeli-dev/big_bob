@@ -171,3 +171,38 @@ def merge(mine: dict | None, opp: dict | None) -> tuple[dict, list[str]]:
 def usable(mine: dict | None, opp: dict | None) -> bool:
     """La lettura veloce vale solo in fase di gioco e se almeno il lato di Daniele è stato letto."""
     return bool(mine) and (mine.get("fase") in (None, "gioco")) and opp is not None
+
+
+def check(before: dict, args: dict) -> list[str]:
+    """Controllo di coerenza della lettura con lo stato di prima: le cose che non tornano arrivano al coach come avvisi
+    (può guardare la schermata e correggere solo quel campo)."""
+    warn: list[str] = []
+    b = before or {}
+    t_old, t_new = b.get("turno"), args.get("turn")
+    if isinstance(t_old, int) and isinstance(t_new, int) and t_new < t_old:
+        warn.append(f"round letto {t_new} ma prima era {t_old}")
+    if isinstance(t_new, int) and isinstance(args.get("mana"), int):
+        exp = min(10, t_new + 1)
+        if args["mana"] != exp:
+            warn.append(f"mana letto {args['mana']}, al round {t_new} di solito è {exp} (location o effetti?)")
+    rd = b.get("mia_mano_letta") or {}
+    hand = args.get("my_hand_size") if isinstance(args.get("my_hand_size"), int) else (
+        len(args["my_hand"]) if isinstance(args.get("my_hand"), list) else None)
+    if hand is not None and isinstance(rd.get("mano"), int) and isinstance(rd.get("turno"), int) \
+            and isinstance(t_new, int) and t_new > rd["turno"]:
+        exp = min(10, rd["mano"] + (t_new - rd["turno"]) - len(args.get("my_played_new") or []))
+        if abs(hand - exp) >= 2:
+            warn.append(f"in mano lette {hand} carte, dal round prima ne aspettavo circa {exp} (carta non letta o "
+                        f"pescata extra?)")
+    for key, old_key, reinf_key, who in (("my_barriers", "barrier_mie", "my_reinforced", "tua"),
+                                         ("opp_barriers", "barrier_avv", "opp_reinforced", "avversaria")):
+        new, old = args.get(key), b.get(old_key)
+        if isinstance(new, list) and isinstance(old, list) and len(new) == len(old) == 3:
+            for i in range(3):
+                if isinstance(new[i], int) and isinstance(old[i], (int, float)) and new[i] > old[i] \
+                        and new[i] != 40 and not (args.get(reinf_key) or [False] * 3)[i]:
+                    warn.append(f"barrier {who} {LANES[i]} salita da {old[i]} a {new[i]}: lettura da controllare")
+    oh_new, oh_old = args.get("opp_hand_size"), b.get("avv_mano")
+    if isinstance(oh_new, int) and isinstance(oh_old, int) and oh_new > oh_old + 2:
+        warn.append(f"mano avversaria letta {oh_new}, prima era {oh_old}")
+    return warn

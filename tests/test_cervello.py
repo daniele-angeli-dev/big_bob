@@ -228,6 +228,35 @@ out = cervello.sync(force=True, opener=Down())
 check(out["invio"].get("errore") and out["ricezione"].get("errore") and "timed out" in cervello.summary_line(out),
       f"server irraggiungibile: errore chiaro ({cervello.summary_line(out)})")
 
+print("5c. scarico incrementale, patch, conferme incrociate, contrasti")
+old_k = {"creato": "2026-10-01T00:00:00Z", "regole": [{"id": "C1", "testo": "a"}, {"id": "C2", "testo": "b"}],
+         "lezioni": [{"id": "CL1", "testo": "x"}], "carte": [{"chiave": "marian"}], "location": [], "giocatori": 2}
+delta = {"delta": True, "creato": "2026-10-02T00:00:00Z", "giocatori": 3,
+         "ids": {"regole": ["C1"], "lezioni": ["CL1", "CL2"], "carte": ["marian"], "location": []},
+         "regole": [], "lezioni": [{"id": "CL2", "testo": "nuova"}, {"id": "CL1", "testo": "x2"}], "carte": [],
+         "location": []}
+mk = cervello.merge_delta(old_k, delta)
+check([r["id"] for r in mk["regole"]] == ["C1"] and [x["testo"] for x in mk["lezioni"]] == ["x2", "nuova"]
+      and mk["giocatori"] == 3 and "delta" not in mk and mk["carte"] == [{"chiave": "marian"}], f"delta: {mk}")
+store.upsert("cards", [{"nome": "Garlic", "costo": 2, "attacco": 1, "vita": 3}], "0.7")
+store.upsert("cards", [{"nome": "Garlic", "costo": 3}], "0.8")  # cambiata in una patch dopo
+check(cervello._stale({"carte": ["Garlic"], "agg": "2026-01-01T00:00:00Z"}), "voce votata prima che la carta cambiasse")
+check(not cervello._stale({"carte": ["Garlic"], "agg": "2099-01-01T00:00:00Z"}), "voce votata dopo: valida")
+cfg = store.load("config")
+cfg["patch_corrente"] = "0.8"
+store.save("config", cfg)
+check(cervello._patch_weight({"patch": "0.7"}) < 1 and cervello._patch_weight({"patch": "0.8"}) == 1, "peso per patch")
+store.save("lessons", [{"id": "L050", "tipo": "mossa_avversaria", "lezione": "Se Dracula ha 3 mana aspettati Brides al centro",
+                        "carte": ["Brides of Dracula"], "stato": "ipotesi", "volte": 1, "prove": [{"fonte": "partita R3"}]}])
+kn = {"lezioni": [{"id": "CL9", "tipo": "mossa_avversaria", "testo": "Se Dracula ha 3 mana aspettati Brides al centro",
+                   "carte": ["Brides of Dracula"], "stato": "confermata", "sostengono": 3}], "regole": []}
+cc = cervello.cross_confirm(kn)
+l50 = lessons.load()[0]
+check(cc["lezioni"] == ["L050"] and l50["stato"] == "confermata" and l50["confermata_da_cervello"] == "CL9",
+      f"conferma incrociata: {cc}")
+pl = [x for x in cervello._lessons_payload() if x["cid"] == "L050"]
+check(pl and pl[0]["stato"] == "ipotesi", "al server va il tuo voto (ipotesi), non quello degli altri: niente eco")
+
 print("6. stesso testo, stesse regole di unione del server")
 check(cervello.tokens("Una barrier a 0 si rigenera a 40 e il danno in eccesso non passa") ==
       ["0", "40", "barrier", "danno", "eccesso", "passa", "rigenera"], "tokens come merge.js")

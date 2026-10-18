@@ -270,5 +270,83 @@ assert reader.usable(mine, opp) and not reader.usable({**mine, "fase": "mulligan
 assert "[LETTORE · lato di Daniele]" in reader.prompt("mio", {"carte_mie": ["Marian"], "turno": 3})
 assert "Marian" in reader.prompt("avv", {"carte_mie": ["Marian"]}) and "STATO REGISTRATO" in reader.prompt("avv", {})
 
+w = reader.check({"turno": 4, "barrier_mie": [20, 8, 20], "barrier_avv": [20, 20, 20], "avv_mano": 3,
+                  "mia_mano_letta": {"turno": 4, "mano": 5}},
+                 {"turn": 5, "mana": 9, "my_hand": ["A", "B"], "my_barriers": [20, 15, 20], "opp_hand_size": 8})
+assert any("mana" in x for x in w) and any("in mano" in x for x in w) and any("salita" in x for x in w), w
+assert any("mano avversaria" in x for x in w) and len(w) == 4, w
+assert reader.check({"turno": 4, "barrier_mie": [20, 3, 20]}, {"turn": 5, "mana": 6, "my_barriers": [20, 40, 20]}) == []
+
+# lezioni: condizioni, utilità, riordino
+from origins import lessons as _L, verify  # noqa: E402
+store.save("lessons", [])
+a = _L.record("Contro Aggro tieni un blocco al centro", "strategia", ["Scudo"], fonte="partita R3",
+              condizioni={"tipo_avversario": "Aggro", "mana_min": 3, "pippo": 1})["lezione"]
+assert a["condizioni"] == {"tipo_avversario": "Aggro", "mana_min": 3}, a
+b = _L.record("Con Ariete attacca la barrier più bassa", "strategia", ["Ariete"], fonte="partita R4")["lezione"]
+ctx_m = {"mana": 2, "turno": 2, "tipo_avversario_stimato": "Control"}
+assert [x["id"] for x in _L.relevant(["Scudo", "Ariete"], m=ctx_m)] == [b["id"]], "condizioni non soddisfatte: esclusa"
+ctx_m = {"mana": 4, "turno": 3, "tipo_avversario_stimato": "Aggro"}
+assert _L.relevant(["Scudo", "Ariete"], m=ctx_m)[0]["id"] == a["id"], "condizioni soddisfatte: sale in cima"
+for _ in range(9):
+    _L.mark_outcome([b["id"]], False)
+assert _L.utility(_L.load()[1]) < 0.3 and [x["id"] for x in _L.relevant(["Ariete"], m=ctx_m)] == [], \
+    "una lezione rivelatasi inutile non esce più in partita"
+_L.record("Contro Aggro tieni sempre un blocco al centro", "strategia", ["Scudo", "Muro"], fonte="partita R7")
+store.save("lessons", _L.load() + [{**_L.load()[0], "id": "L099", "lezione": "Contro Aggro tieni un blocco al centro!",
+                                     "volte": 1}])
+t = _L.tidy()
+assert t["unite"] and len([x for x in _L.load() if "blocco al centro" in x["lezione"]]) == 1, (t, _L.load())
+store.save("lessons", [])
+
+# verifica del simulatore e round andato bene/male
+store.upsert("cards", [{"nome": "Ariete", "costo": 3, "attacco": 6, "vita": 2, "tipo": "creatura"},
+                       {"nome": "Lampo", "costo": 1, "tipo": "spell", "testo": "Deal 2 damage."}], "0.7")
+old_m = {"turno": 3, "campo": {"centro": {"mie": [None], "avv": [None]}}, "barrier_mie": [20, 20, 20],
+         "barrier_avv": [20, 20, 20], "miei_giocati": [], "avv_giocati": []}
+new_m = {"turno": 4, "campo": {"centro": {"mie": ["Ariete 6/2"], "avv": [None]}}, "barrier_mie": [20, 20, 20],
+         "barrier_avv": [20, 14, 20], "miei_giocati": ["Ariete"], "avv_giocati": []}
+v = verify.check(old_m, new_m)
+assert v and v["differenze"] == [], v
+v = verify.check(old_m, {**new_m, "barrier_avv": [20, 10, 20]})
+assert v["differenze"] == ["barrier avversaria centro: prevista 14, reale 10"], v
+assert verify.check(old_m, {**new_m, "miei_giocati": ["Ariete", "Lampo"]}) is None, "con una magia non si verifica"
+assert verify.round_good(old_m, new_m) is True and verify.round_good(new_m, {**new_m, "barrier_mie": [5, 20, 20]}) is False
+
+# ricerca della mossa: trova la chiusura e tiene conto della risposta avversaria
+from origins import combat, search  # noqa: E402
+store.upsert("cards", [{"nome": "Ariete", "costo": 3, "attacco": 6, "vita": 2, "tipo": "creatura"},
+                       {"nome": "Scudo", "costo": 2, "attacco": 1, "vita": 6, "tipo": "creatura"},
+                       {"nome": "Bomba", "costo": 2, "attacco": 1, "vita": 1, "tipo": "creatura",
+                        "testo": "On Reveal: deal 4 damage to the enemy barrier."},
+                       {"nome": "Furia", "costo": 2, "attacco": 2, "vita": 1, "tipo": "creatura",
+                        "testo": "On Reveal: gain +2/+2 for each spell you played."},
+                       {"nome": "Lampo", "costo": 1, "tipo": "spell", "testo": "Deal 2 damage."},
+                       {"nome": "Muro", "costo": 2, "attacco": 0, "vita": 9, "tipo": "creatura"}], "0.7")
+assert combat.effects(store.find("cards", "Bomba")) == [{"tipo": "danno_barrier", "valore": 4}]
+assert combat.effects(store.find("cards", "Furia")) == [], "gli effetti con condizioni non si simulano"
+mm = {"mana": 5, "mia_mano": ["Ariete", "Scudo", "Bomba", "Lampo"],
+      "campo": {"sinistra": {"mie": [None, None], "avv": [None, None]}, "centro": {"mie": [None, None], "avv": [None, None]},
+                "destra": {"mie": [None, None], "avv": [None, None]}},
+      "barrier_mie": [20, 20, 20], "barrier_avv": [20, 9, 20], "distrutte_da_me": 1, "distrutte_a_me": 0}
+r = search.search(mm, [], 0)
+best = r["mosse"][0]
+assert "VINCI TU" in (best["vincitore"] or "") and any(g["corsia"] == "centro" for g in best["giocate"]), best
+assert r["magie"] == ["Lampo"] and r["valutate"] > 10
+r2 = search.search(mm, [{"carta": "Muro", "p_mano": 0.9}], 0.9)
+assert r2["mosse"][0]["peggiore"] and r2["mosse"][0]["peggiore"]["carta"] == "Muro", r2["mosse"][0]
+txt = "\n".join(search.lines(r2))
+assert txt.startswith("MOSSE CALCOLATE") and "risposta peggiore: Muro" in txt and "Lampo" in txt, txt
+assert len({tuple((g["carta"], g["corsia"]) for g in mv["giocate"]) for mv in r2["mosse"]}) == len(r2["mosse"])
+_cfg = store.load("config")
+_cfg["modalita"] = "allenamento"
+store.save("config", _cfg)
+assert "MOSSE CALCOLATE" in srv._moves_summary(dict(mm)), "in allenamento le mosse calcolate ci sono"
+_cfg["modalita"] = "ranked"
+store.save("config", _cfg)
+assert srv._moves_summary(dict(mm)) == "", "in ranked BIG-BOB non suggerisce mosse"
+_cfg["modalita"] = "allenamento"
+store.save("config", _cfg)
+
 shutil.rmtree(tmp)
 print("TUTTI I TEST OK")

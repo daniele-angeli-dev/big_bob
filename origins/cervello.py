@@ -23,6 +23,7 @@ import secrets
 import time
 import unicodedata
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from origins import store
@@ -83,11 +84,40 @@ def load_state() -> dict:
     return st
 
 
+_KCACHE: dict = {}
+
+
 def knowledge() -> dict:
-    """L'ultima conoscenza comune scaricata ({} se non c'è o se l'uso è spento)."""
+    """L'ultima conoscenza comune scaricata ({} se non c'è o se l'uso è spento). Riletta solo quando il file cambia:
+    update_match la consulta a ogni round."""
     if not config()["usa"]:
         return {}
-    return _load_json(KNOW_FILE, {})
+    p = _path(KNOW_FILE)
+    try:
+        st = p.stat()
+        key = (str(p), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return {}
+    if _KCACHE.get("key") != key:
+        _KCACHE.clear()
+        _KCACHE.update(key=key, data=_load_json(KNOW_FILE, {}))
+    return _KCACHE["data"]
+
+
+def _index() -> dict:
+    """Indice delle lezioni comuni per carta (slug → posizioni), con i token già calcolati. Ricostruito solo quando
+    cambia la conoscenza scaricata."""
+    k = knowledge()
+    if _KCACHE.get("idx_for") is k and "idx" in _KCACHE:
+        return _KCACHE["idx"]
+    by_card: dict[str, list[int]] = {}
+    lez = k.get("lezioni") or []
+    for i, x in enumerate(lez):
+        for c in x.get("carte") or []:
+            by_card.setdefault(store.slug(c), []).append(i)
+    idx = {"by_card": by_card, "generali": [i for i, x in enumerate(lez) if not x.get("carte")]}
+    _KCACHE.update(idx=idx, idx_for=k)
+    return idx
 
 
 # =========================================================================== testo (come cloud/src/merge.js)
@@ -166,8 +196,11 @@ def _rules_payload() -> list[dict]:
         if _only_from_brain(r.get("fonti"), r.get("prove")):
             continue  # presa dal cervello comune senza prove tue: rimandarla sarebbe un voto falso
         prove = [anonymize(p.get("nota", ""), 300) for p in (r.get("prove") or [])[-3:] if p.get("nota")]
+        rstato = r.get("stato") or "ipotesi"
+        if rstato == "confermata" and r.get("confermata_da_cervello"):
+            rstato = "probabile"  # confermata dagli altri, non da te
         out.append({"cid": r["id"], "categoria": r.get("categoria") or "altro", "testo": anonymize(r["testo"]),
-                    "stato": r.get("stato") or "ipotesi", "prove": [p for p in prove if p]})
+                    "stato": rstato, "prove": [p for p in prove if p]})
     return out
 
 
@@ -187,8 +220,11 @@ def _lessons_payload() -> list[dict]:
         if prove and all("opinion" in str(p.get("fonte") or "").lower() for p in prove) and x.get("stato") != "confermata":
             continue  # solo opinioni non ancora confermate da una partita: restano qui, non vanno a tutti
         volte = sum(1 for p in x.get("prove") or [] if "cervello" not in str(p.get("fonte") or "").lower())
+        stato = x.get("stato") or "ipotesi"
+        if stato == "confermata" and x.get("confermata_da_cervello"):
+            stato = "ipotesi"  # confermata dagli altri, non da te: il tuo voto resta ipotesi (niente eco)
         out.append({"cid": x["id"], "tipo": x.get("tipo") or "strategia", "testo": anonymize(x.get("lezione", "")),
-                    "stato": x.get("stato") or "ipotesi", "carte": list(x.get("carte") or [])[:12],
+                    "stato": stato, "carte": list(x.get("carte") or [])[:12],
                     "volte": max(1, min(int(x.get("volte") or 1), volte or 1))})
     return out
 
@@ -250,7 +286,8 @@ def pending(st: dict | None = None) -> dict:
 def _request(url: str, body: dict | None = None, headers: dict | None = None, opener=None):
     from origins import updates
     data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
-    h = {"content-type": "application/json", "user-agent": f"BIG-BOB/{updates.installed_version()}"}
+    h = {"content-type": "application/json", "user-agent": f"BIG-BOB/{updates.installed_version()}",
+         "accept-encoding": "gzip"}
     h.update(headers or {})
     req = urllib.request.Request(url, data=data, headers=h, method="POST" if data is not None else "GET")
     op = opener or urllib.request.build_opener()
@@ -307,10 +344,19 @@ def download(opener=None) -> dict:
     if not cfg["usa"]:
         return {"saltato": "uso spento"}
     st = load_state()
-    headers = {"if-none-match": st["etag"]} if st.get("etag") and _path(KNOW_FILE).exists() else {}
+    have = _path(KNOW_FILE).exists()
+    headers = {"if-none-match": st["etag"]} if st.get("etag") and have else {}
+    old = _load_json(KNOW_FILE, {}) if have else {}
+    url = cfg["url"] + "/v1/conoscenza"
+    if old.get("creato"):  # solo ciò che è cambiato dall'ultimo scarico
+        url += "?da=" + urllib.parse.quote(old["creato"])
     try:
-        with _request(cfg["url"] + "/v1/conoscenza", headers=headers, opener=opener) as r:
-            data = json.loads(r.read())
+        with _request(url, headers=headers, opener=opener) as r:
+            raw = r.read()
+            if (r.headers.get("content-encoding") or "").lower() == "gzip" or raw[:2] == b"\x1f\x8b":
+                import gzip
+                raw = gzip.decompress(raw)
+            data = json.loads(raw)
             etag = r.headers.get("etag")
     except urllib.error.HTTPError as e:
         if e.code == 304:
@@ -320,6 +366,8 @@ def download(opener=None) -> dict:
         return {"errore": f"HTTP {e.code}"}
     except Exception as e:  # noqa: BLE001
         return {"errore": str(e)}
+    if isinstance(data, dict) and data.get("delta"):
+        data = merge_delta(old, data)
     if not isinstance(data, dict) or "regole" not in data:
         return {"errore": "risposta non valida"}
     _save_json(KNOW_FILE, data)
@@ -327,6 +375,21 @@ def download(opener=None) -> dict:
     st["ultimo_download"] = store.now()
     _save_json(STATE_FILE, st)
     return {"scaricato": True, "giocatori": data.get("giocatori"), **apply(data)}
+
+
+def merge_delta(old: dict, delta: dict) -> dict:
+    """Applica uno scarico incrementale: le voci cambiate sostituiscono le vecchie, quelle non più presenti (in 'ids')
+    spariscono, le statistiche arrivano sempre intere."""
+    out = {k: v for k, v in delta.items() if k not in ("delta", "ids", "regole", "lezioni", "carte", "location")}
+    ids = delta.get("ids") or {}
+    for key, idk in (("regole", "id"), ("lezioni", "id"), ("carte", "chiave"), ("location", "chiave")):
+        cur = {x.get(idk): x for x in old.get(key) or []}
+        for x in delta.get(key) or []:
+            cur[x.get(idk)] = x
+        keep = ids.get(key)
+        items = [cur[i] for i in keep if i in cur] if isinstance(keep, list) else list(cur.values())
+        out[key] = items
+    return out
 
 
 def due() -> bool:
@@ -414,6 +477,11 @@ def apply(data: dict | None = None) -> dict:
                      "ultimo": data.get("creato", "")[:16].replace("T", " "), "creato": store.now()})
         rep["mazzi"] += 1
     store.save("meta", meta)
+    try:
+        cc = cross_confirm(data)
+        rep["confermate_incrociate"] = len(cc["lezioni"]) + len(cc["regole"])
+    except Exception:  # noqa: BLE001
+        rep["confermate_incrociate"] = 0
     return rep
 
 
@@ -443,26 +511,137 @@ def rules_view(local: list[dict]) -> tuple[dict, list[dict]]:
     return notes, extra
 
 
+def _stale(item: dict) -> bool:
+    """Una voce comune è superata se una sua carta è cambiata (statistiche o testo, in una patch) dopo l'ultimo voto."""
+    agg = str(item.get("agg") or "")[:19]
+    if not agg:
+        return False
+    for c in item.get("carte") or []:
+        e = store.find("cards", c) or {}
+        for h in e.get("storico") or []:
+            if str(h.get("data") or "")[:19] > agg and str(h.get("patch") or "") not in ("cervello comune", ""):
+                return True
+    return False
+
+
+def _patch_weight(item: dict) -> float:
+    """Peso per patch: una voce votata in una patch diversa da quella attuale conta meno."""
+    cur = str(store.load("config").get("patch_corrente") or "")
+    p = str(item.get("patch") or "")
+    if not p or not cur:
+        return 1.0
+    return 1.0 if store.slug(p).startswith(store.slug(cur)) or store.slug(cur).startswith(store.slug(p)) else 0.6
+
+
+def _covered(local: list[dict]) -> set:
+    """Le lezioni comuni che hai già (calcolato una volta per versione delle due raccolte)."""
+    k = knowledge()
+    try:
+        lm = store.FILES["lessons"].stat().st_mtime_ns
+    except OSError:
+        lm = None
+    key = (id(k), lm, len(local))
+    if _KCACHE.get("cov_key") == key:
+        return _KCACHE["cov"]
+    cov = set()
+    for x in k.get("lezioni") or []:
+        if any(lesson_score(x["testo"], x.get("carte", []), y.get("lezione", ""), y.get("carte", [])) >= SOGLIA_LEZIONI
+               for y in local):
+            cov.add(x["id"])
+    _KCACHE.update(cov=cov, cov_key=key)
+    return cov
+
+
 def lessons_view(cards: list[str] | None = None, limit: int = 4, local: list[dict] | None = None) -> list[dict]:
-    """Lezioni comuni utili (escluse le smentite e quelle che hai già)."""
+    """Lezioni comuni utili: escluse le smentite, quelle che hai già e quelle superate da una patch (una carta è
+    cambiata dopo i voti); le altre pesate per carte in comune, conferme, giocatori e patch."""
     from origins import lessons
-    comm = [x for x in (knowledge().get("lezioni") or []) if x.get("stato") in ("confermata", "ipotesi")]
+    k = knowledge()
+    lez = k.get("lezioni") or []
     local = local if local is not None else lessons.load()
-    comm = [x for x in comm if not any(lesson_score(x["testo"], x.get("carte", []), y.get("lezione", ""),
-                                                    y.get("carte", [])) >= SOGLIA_LEZIONI for y in local)]
+    covered = _covered(local)
     if cards is not None:
+        idx = _index()
         cs = {store.slug(c) for c in cards if c}
-        scored = []
-        for x in comm:
-            hit = len(cs & {store.slug(c) for c in x.get("carte", [])})
-            if not hit and (x.get("carte") or x.get("tipo") != "strategia"):
-                continue
-            scored.append((hit * 2 + (3 if x["stato"] == "confermata" else 0) + min(x.get("sostengono", 1), 5), x))
-        scored.sort(key=lambda t: -t[0])
-        comm = [x for _, x in scored]
+        hits: dict[int, int] = {}
+        for c in cs:
+            for i in idx["by_card"].get(c, []):
+                hits[i] = hits.get(i, 0) + 1
+        for i in idx["generali"]:
+            if lez[i].get("tipo") == "strategia":
+                hits.setdefault(i, 0)
+        cand = [(hits[i], lez[i]) for i in hits]
     else:
-        comm.sort(key=lambda x: (x["stato"] != "confermata", -x.get("sostengono", 0)))
-    return comm[:limit]
+        cand = [(0, x) for x in lez]
+    scored = []
+    for hit, x in cand:
+        if x.get("stato") not in ("confermata", "ipotesi") or x["id"] in covered or _stale(x):
+            continue
+        sc = (hit * 2 + (3 if x["stato"] == "confermata" else 0) + min(x.get("sostengono", 1), 5)) * _patch_weight(x)
+        scored.append((sc, x))
+    scored.sort(key=lambda t: -t[0])
+    return [x for _, x in scored[:limit]]
+
+
+def contrasts() -> list[dict]:
+    """Regole tue in contrasto con il cervello comune (tu confermata e gli altri smentita, o il contrario): da
+    verificare con un esperimento contro il bot."""
+    from origins import rules
+    notes, _ = rules_view(rules.load())
+    out = []
+    for r in rules.load():
+        n = notes.get(r["id"])
+        if not n:
+            continue
+        mine, theirs = r.get("stato"), n.get("stato")
+        if (mine == "confermata" and theirs == "smentita") or (mine == "smentita" and theirs == "confermata"):
+            out.append({"id": r["id"], "testo": r.get("testo"), "tuo": mine, "comune": theirs,
+                        "giocatori": n.get("giocatori"), "comune_id": n.get("id")})
+    return out
+
+
+def cross_confirm(data: dict | None = None) -> dict:
+    """Conferme incrociate: una tua lezione o regola ancora ipotesi che il cervello comune ha confermato (2+ giocatori)
+    diventa confermata, con la prova "cervello comune". Il voto che mandi al server resta il tuo (non si rimbalza)."""
+    from origins import lessons, rules
+    k = data if data is not None else knowledge()
+    rep = {"lezioni": [], "regole": []}
+    comm_l = [x for x in k.get("lezioni") or [] if x.get("stato") == "confermata" and (x.get("sostengono") or 0) >= 2]
+    if comm_l:
+        ls = lessons.load()
+        changed = False
+        for y in ls:
+            if y.get("stato") != "ipotesi":
+                continue
+            for x in comm_l:
+                if lesson_score(x["testo"], x.get("carte", []), y.get("lezione", ""), y.get("carte", [])) >= SOGLIA_LEZIONI:
+                    y["stato"] = "confermata"
+                    y["confermata_da_cervello"] = x["id"]
+                    y.setdefault("prove", []).append({"data": store.now(), "fonte": "cervello comune",
+                                                      "situazione": f"{x['id']}: {x.get('sostengono')} giocatori"})
+                    rep["lezioni"].append(y["id"])
+                    changed = True
+                    break
+        if changed:
+            lessons.save(ls)
+    comm_r = [x for x in k.get("regole") or [] if x.get("stato") == "confermata" and (x.get("giocatori") or 0) >= 2]
+    if comm_r:
+        rs = rules.load()
+        changed = False
+        for r in rs:
+            if r.get("stato") not in ("ipotesi", "probabile", "domanda"):
+                continue
+            for c in comm_r:
+                if rule_score(r.get("testo", ""), c.get("testo", ""), c.get("categoria") == r.get("categoria")) >= SOGLIA_REGOLE:
+                    r["stato"] = "confermata"
+                    r["confermata_da_cervello"] = c["id"]
+                    r.setdefault("fonti", []).append("cervello comune")
+                    rep["regole"].append(r["id"])
+                    changed = True
+                    break
+        if changed:
+            rules.save(rs)
+    return rep
 
 
 def status() -> dict:

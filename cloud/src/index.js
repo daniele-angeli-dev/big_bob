@@ -130,6 +130,9 @@ async function contribute(request, env, ctx) {
       stmts.push(env.DB.prepare(
         "INSERT OR REPLACE INTO regole_voti (regola_id, contributore, stato, testo, prove, aggiornato) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
       ).bind(gid, chi, r.stato, r.testo, JSON.stringify(r.prove), t));
+      if (c.patch) stmts.push(env.DB.prepare(
+        "INSERT OR REPLACE INTO voti_patch (tipo, gruppo_id, contributore, patch) VALUES ('regola', ?1, ?2, ?3)",
+      ).bind(gid, chi, c.patch));
       res.regole++;
     }
   }
@@ -170,6 +173,9 @@ async function contribute(request, env, ctx) {
       stmts.push(env.DB.prepare(
         "INSERT OR REPLACE INTO lezioni_voti (lezione_id, contributore, stato, volte, testo, aggiornato) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
       ).bind(gid, chi, l.stato, l.volte, l.testo, t));
+      if (c.patch) stmts.push(env.DB.prepare(
+        "INSERT OR REPLACE INTO voti_patch (tipo, gruppo_id, contributore, patch) VALUES ('lezione', ?1, ?2, ?3)",
+      ).bind(gid, chi, c.patch));
       res.lezioni++;
     }
   }
@@ -211,6 +217,19 @@ async function rebuild(env) {
   const banned = new Set((await all("SELECT hash FROM contributori WHERE bannato = 1")).map((r) => r.hash));
   const ok = (r) => !banned.has(r.contributore);
   const hidden = new Set((await all("SELECT tipo, chiave FROM nascosti")).map((r) => r.tipo + ":" + r.chiave));
+  // patch più votata per ogni regola/lezione (per pesare le voci di patch vecchie)
+  const patchVotes = new Map();
+  for (const v of (await all("SELECT tipo, gruppo_id, contributore, patch FROM voti_patch").catch(() => [])).filter(ok)) {
+    const k = v.tipo + ":" + v.gruppo_id;
+    const m = patchVotes.get(k) || patchVotes.set(k, new Map()).get(k);
+    m.set(v.patch, (m.get(v.patch) || 0) + 1);
+  }
+  const patchOf = (tipo, id) => {
+    const m = patchVotes.get(tipo + ":" + id);
+    if (!m) return null;
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0][0];
+  };
+  const latest = (vs) => vs.reduce((a, v) => (v.aggiornato > a ? v.aggiornato : a), "");
 
   // regole
   const rv = (await all("SELECT regola_id, contributore, stato, prove, aggiornato FROM regole_voti")).filter(ok);
@@ -225,12 +244,13 @@ async function rebuild(env) {
     for (const v of vs.sort((a, b) => b.aggiornato.localeCompare(a.aggiornato))) {
       for (const p of JSON.parse(v.prove || "[]")) if (prove.length < 3 && !prove.includes(p)) prove.push(p);
     }
-    regole.push({ id: "C" + g.id, categoria: g.categoria, testo: g.testo, ...cons, prove });
+    regole.push({ id: "C" + g.id, categoria: g.categoria, testo: g.testo, ...cons, prove, agg: latest(vs),
+      patch: patchOf("regola", g.id) });
   }
   regole.sort((a, b) => b.giocatori - a.giocatori || a.id.localeCompare(b.id));
 
   // lezioni
-  const lv = (await all("SELECT lezione_id, contributore, stato, volte FROM lezioni_voti")).filter(ok);
+  const lv = (await all("SELECT lezione_id, contributore, stato, volte, aggiornato FROM lezioni_voti")).filter(ok);
   const votesByLesson = new Map();
   for (const v of lv) (votesByLesson.get(v.lezione_id) || votesByLesson.set(v.lezione_id, []).get(v.lezione_id)).push(v);
   const lezioni = [];
@@ -238,22 +258,24 @@ async function rebuild(env) {
     const vs = votesByLesson.get(g.id);
     if (!vs?.length) continue;
     lezioni.push({ id: "CL" + g.id, tipo: g.tipo, testo: g.testo, carte: JSON.parse(g.carte || "[]"),
-      ...lessonConsensus(vs, S) });
+      ...lessonConsensus(vs, S), agg: latest(vs), patch: patchOf("lezione", g.id) });
   }
   lezioni.sort((a, b) => b.sostengono - a.sostengono || b.volte - a.volte);
 
   // carte e location
-  const cr = (await all("SELECT tipo, chiave, contributore, dati FROM carte WHERE aggiornato >= ?1", daysAgo(GIORNI_CARTE)))
+  const cr = (await all("SELECT tipo, chiave, contributore, dati, aggiornato FROM carte WHERE aggiornato >= ?1", daysAgo(GIORNI_CARTE)))
     .filter(ok).filter((r) => !hidden.has(r.tipo + ":" + r.chiave));
   const byCard = new Map();
   for (const r of cr) {
     const k = r.tipo + ":" + r.chiave;
-    (byCard.get(k) || byCard.set(k, { tipo: r.tipo, chiave: r.chiave, prop: [] }).get(k)).prop.push(JSON.parse(r.dati));
+    const e = byCard.get(k) || byCard.set(k, { tipo: r.tipo, chiave: r.chiave, prop: [], agg: "" }).get(k);
+    e.prop.push(JSON.parse(r.dati));
+    if (r.aggiornato > e.agg) e.agg = r.aggiornato;
   }
   const carte = [], location = [];
   for (const e of byCard.values()) {
     const cons = cardConsensus(e.prop, S);
-    (e.tipo === "location" ? location : carte).push({ chiave: e.chiave, ...cons });
+    (e.tipo === "location" ? location : carte).push({ chiave: e.chiave, ...cons, agg: e.agg });
   }
 
   // partite
@@ -286,6 +308,21 @@ async function knowledge(request, env, ctx) {
   }
   const etag = `"${row.creato}"`;
   if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { etag } });
+  // scarico incrementale: ?da=<creato dell'ultimo scarico> → solo le voci cambiate da allora, più gli id di tutte
+  // (così il client toglie quelle sparite) e le statistiche intere
+  const da = new URL(request.url).searchParams.get("da");
+  if (da && !Number.isNaN(Date.parse(da))) {
+    const full = JSON.parse(row.json);
+    const out = { ...full, delta: true, da, ids: {} };
+    for (const [k, idk] of [["regole", "id"], ["lezioni", "id"], ["carte", "chiave"], ["location", "chiave"]]) {
+      const items = full[k] || [];
+      out.ids[k] = items.map((x) => x[idk]);
+      out[k] = items.filter((x) => !x.agg || x.agg > da);
+    }
+    return new Response(JSON.stringify(out), {
+      headers: { "content-type": "application/json; charset=utf-8", etag, "cache-control": "private, max-age=60" },
+    });
+  }
   return new Response(row.json, {
     headers: { "content-type": "application/json; charset=utf-8", etag, "cache-control": "public, max-age=300",
       "access-control-allow-origin": "*" },
