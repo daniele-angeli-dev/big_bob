@@ -92,6 +92,7 @@ ui = FakeUI()
 c = controller.Controller(ui)
 c.claude = "fake"
 c.session = FakeSession("fake", tmp)
+c.readers = {}  # i lettori veri non partono nei test (quelli finti più sotto)
 c.start()
 store.save("match", {"turno": 4, "mana": 5, "barrier_mie": [20, 8, 20], "barrier_avv": [12, 20, 31],
                      "rinforzate_avv": [False, False, True], "distrutte_da_me": 1, "distrutte_a_me": 0,
@@ -107,7 +108,9 @@ assert not [e for e in ui.events if e.get("role") == "lesson"], "al primo round 
 ans = ui.of("answer")[-1]
 assert ans["parsed"]["mossa"] == "Little John a destra, Marian al centro", ans
 assert "img=True" in ans["text"], "la schermata deve essere allegata all'analisi"
-assert c.session.proc.pid == pid1, "il processo Claude deve restare acceso tra un F8 e l'altro"
+time.sleep(1.2)  # apprendimento in background, poi il contesto riparte pulito con un processo già acceso
+assert c._session_free.wait(10) and c.session.proc and c.session.proc.pid != pid1 and c.session.alive(), \
+    "dopo ogni round una sessione nuova (senza le immagini dei round prima), già accesa per il prossimo F8"
 assert ui.hides >= 2 and ui.vis, "la finestra si nasconde durante la cattura e ricompare"
 
 # secondo round: risposta subito, poi apprendimento in background
@@ -120,6 +123,32 @@ assert "img=False" in ui.of("answer")[-1]["text"], "le domande in chat non alleg
 les = [e for e in ui.events if e.get("role") == "lesson"]
 assert les and les[-1]["text"] == "Dracula tiene Brides per il centro", les
 assert ui.of("learning")
+
+# lettura veloce: due lettori in parallelo, update_match fatto da BIG-BOB, il coach pensa solo alla mossa
+class FakeReader(controller.ReaderSession):
+    def _cmd(self):
+        return [sys.executable, str(ROOT / "tests" / "fake_claude.py")]
+
+
+c._session_free.wait(10)
+c.readers = {"mio": FakeReader("fake", tmp), "avv": FakeReader("fake", tmp)}
+m0 = store.load("match")
+m0.update({"carte_mie": ["Marian", "Little John", "Friar Tuck"], "leggendaria_mia": "Robin Hood",
+           "avv_leggendaria": "Dracula"})
+store.save("match", m0)
+t = time.time()
+wait(ui, c.analyze)
+ans = ui.of("answer")[-1]
+assert "letto=si" in ans["text"] and "img=True" in ans["text"], ans
+assert "recenti=si" in ans["text"], "il coach riceve i consigli dei round prima (il contesto riparte pulito)"
+m1 = store.load("match")
+assert m1["turno"] == 5 and m1["mia_mano"] == ["Marian", "Little John"] and "Bat" in m1["avv_giocati"], m1
+assert m1["campo"]["sinistra"] == {"mie": ["Friar Tuck 4/3", None], "avv": ["Bat 2/1", None]}, m1["campo"]
+assert m1["rivela_prima"] == "avversario" and m1["avv_mano"] == 4
+diario = (c.journal_dir / "diario.md").read_text(encoding="utf-8")
+assert "Lettura veloce:" in diario and "update_match:" in diario, diario[-600:]
+c._session_free.wait(10)
+c.readers = {}
 
 hud = [e for e in ui.of("hud") if e["match"]][-1]["match"]
 assert hud["avv"][2] == {"v": 31, "max": 40, "rinf": True} and hud["mie"][1]["max"] == 20, hud

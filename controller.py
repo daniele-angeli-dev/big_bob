@@ -77,6 +77,16 @@ PROMPT_TURNO = (
     "Se non c'è una partita attiva e dallo schermo non capisci il mio mazzo, chiedimelo in una riga. "
     "Tempo massimo 40 secondi. Modalità attuale: {mode}."
 )
+PROMPT_TURNO_LETTO = (
+    "[F8 · analisi round · schermata già letta] Due lettori hanno già trascritto la schermata e BIG-BOB ha già chiamato "
+    "update_match: il risultato è qui sotto (stato, contatori, combattimento previsto, probabilità, mazzo e previsione "
+    "avversaria, lezioni). NON chiamare update_match di nuovo, a meno che nella schermata allegata vedi un errore di "
+    "lettura che cambia la mossa (allora correggi solo quel campo). Se la mossa non è evidente puoi fare UNA chiamata "
+    "simulate_combat. Poi rispondi subito nel formato 'Risposta live' di CLAUDE.md. Modalità attuale: {mode}.\n"
+    "{recenti}"
+    "Avvisi della lettura: {avvisi}\n\n"
+    "RISULTATO DI update_match:\n{stato}"
+)
 PROMPT_AUTO = (
     "[AUTO · lo schermo è cambiato] La schermata è allegata: NON chiamare get_screen. Se è iniziato un nuovo "
     "round o sono state rivelate carte, chiama UNA volta update_match e rispondi nel formato 'Risposta live' "
@@ -306,6 +316,48 @@ class ClaudeSession:
 
 
 # ---------------------------------------------------------------- parser risposta live
+
+class ReaderSession(ClaudeSession):
+    """Un lettore della schermata (sottoagente): sessione minima, senza CLAUDE.md, senza server MCP, senza ragionamento
+    esteso. Legge un'immagine e risponde con un JSON. Ogni lettura parte da una sessione nuova (niente storia)."""
+
+    def __init__(self, exe: str, root: Path) -> None:
+        cwd = root / "logs" / "lettore"  # cartella vuota: niente CLAUDE.md del progetto da caricare
+        cwd.mkdir(parents=True, exist_ok=True)
+        super().__init__(exe, cwd, live=False)
+
+    def _cmd(self) -> list[str]:
+        from origins import reader
+        cfg = store.load("config")
+        empty = self.cwd / "nessun-server.json"  # nessun server MCP: il lettore non usa strumenti
+        if not empty.exists():
+            empty.write_text('{"mcpServers": {}}', encoding="utf-8")
+        return [self.exe, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                "--model", cfg.get("modello_lettura") or cfg.get("modello_live", "sonnet"),
+                "--mcp-config", str(empty), "--strict-mcp-config", "--tools", "Read",
+                "--system-prompt", reader.SYSTEM]
+
+    def _env(self) -> dict:
+        import configura
+        env = configura.claude_env(store.load("config"))
+        env.pop("MAX_THINKING_TOKENS", None)
+        return env
+
+    def read(self, content: list[dict], timeout: float = 25.0) -> str:
+        """Testo della risposta ('' se fallisce). Poi la sessione si chiude: la prossima lettura riparte pulita."""
+        text = ""
+        try:
+            for ev in self.ask(content, timeout=timeout):
+                if ev.get("type") == "result":
+                    text = (ev.get("result") or "").strip()
+                    usage.add_from_result(ev, self)
+        except Exception:  # noqa: BLE001
+            log.exception("lettura della schermata fallita")
+        finally:
+            self.reset()
+        return text
+
+
 MARKERS = {"▶": "mossa", "⚠": "minacce", "🎴": "pescate", "👁": "avv_mano", "📍": "location", "🤖": "pilota"}
 
 PROMPT_PILOTA = (
@@ -384,6 +436,10 @@ class Controller:
         self._pilot_stop = False
         self._pilot_rounds: dict = {}
         self._shot_region = None       # regione dello schermo della schermata mandata a Claude (per le coordinate)
+        self.readers = ({"mio": ReaderSession(self.claude, ROOT), "avv": ReaderSession(self.claude, ROOT)}
+                        if self.claude else {})
+        self._recent_moves: list[str] = []  # gli ultimi consigli: con il contesto pulito a ogni round restano qui
+        self._last_live = ""
         self.rec_on = False
         self.rec_dir: Path | None = None
         self.rec_count = 0
@@ -787,7 +843,8 @@ class Controller:
     # ------------------------------------------------ impostazioni e collegamento a Claude
     SETTINGS_KEYS = ("modello_live", "connessione", "voce", "apprendimento_live", "apri_claude_code_all_avvio",
                      "max_thinking_live", "modalita", "meta_originsmeta", "osservatore", "barra_vantaggio",
-                     "cervello_contribuisci", "cervello_usa", "invisibile_catture")
+                     "cervello_contribuisci", "cervello_usa", "invisibile_catture", "lettura_veloce",
+                     "contesto_pulito")
 
     def get_settings(self) -> None:
         from origins import cervello, spazio, updates
@@ -809,7 +866,8 @@ class Controller:
         cfg_before = store.load("config")
         extra = {k: vals[k] for k in ("voce", "apprendimento_live", "apri_claude_code_all_avvio",
                                       "meta_originsmeta", "osservatore", "barra_vantaggio", "cervello_contribuisci",
-                                      "cervello_usa", "invisibile_catture") if k in vals}
+                                      "cervello_usa", "invisibile_catture", "lettura_veloce", "contesto_pulito")
+                 if k in vals}
         if "max_thinking_live" in vals:
             try:
                 extra["max_thinking_live"] = max(0, int(vals["max_thinking_live"]))
@@ -1286,6 +1344,13 @@ class Controller:
     def _do_analyze(self, auto: bool) -> None:
         if auto and not self.auto_on:
             return  # AUTO spento mentre questa analisi era in coda: niente cattura, niente finestra che lampeggia
+        if self._fast_read_ok():
+            try:
+                if self._fast_analyze(auto):
+                    return
+            except Exception:  # noqa: BLE001
+                log.exception("lettura veloce fallita: torno al giro normale")
+                self.busy = False
         piloting = getattr(self, "pilot_on", False) and self._mode() != "ranked"
         # con il pilota serve sempre l'analisi completa: il prompt AUTO permette di rispondere "—" (niente da fare),
         # e a schermata ferma il pilota non giocherebbe mai
@@ -1298,8 +1363,125 @@ class Controller:
             prompt = PROMPT_OSSERVATORE.format(n=f"{n_mom} momenti in {len(frames)} immagini") + prompt
         self._ask(prompt, label=None if auto else "Analisi round", attach=True, kind="live", frames=frames)
 
+    # ------------------------------------------------ lettura veloce (due lettori in parallelo) + coach
+    def _fast_read_ok(self) -> bool:
+        cfg = store.load("config")
+        return (cfg.get("lettura_veloce", True) and bool(self.readers) and not self.busy
+                and getattr(self, "_fast_fail", 0) < 2
+                and store.FILES["match"].exists() and bool(store.load("match")))
+
+    def _recent_text(self) -> str:
+        if not self._recent_moves:
+            return ""
+        return "Consigli dei round prima (il contesto riparte pulito a ogni round): " + " · ".join(self._recent_moves[-3:]) + "\n"
+
+    def _fast_analyze(self, auto: bool) -> bool:
+        """Legge la schermata con i due lettori in parallelo, registra lo stato e chiede al coach solo la mossa.
+        False se la lettura non è utilizzabile (mulligan, schermata di fine, JSON non valido): si usa il giro normale."""
+        from origins import archetype, reader
+        from origins import server as srv
+        t0 = time.time()
+        self.busy = True
+        self.emit({"type": "busy", "value": True, "what": "Leggo la schermata", "budget": BUDGET_SECONDS})
+        shot = self.hidden_capture()
+        region = screen.last_region
+        frames = self._take_obs_frames()
+        m = store.load("match")
+        try:
+            predicted = [x["carta"] for x in (archetype.predict(m).get("carte") or [])[:12]]
+        except Exception:  # noqa: BLE001
+            predicted = []
+        import base64
+        shot_img = {"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                                "data": base64.b64encode(shot.read_bytes()).decode()}}
+        frame_imgs = []
+        for i, f in enumerate(frames, 1):
+            try:
+                data = base64.b64encode(Path(f["path"]).read_bytes()).decode()
+            except OSError:
+                continue
+            label = (f"Fotogramma {i}: foglio con ritagli numerati in ordine di tempo"
+                     if f.get("foglio") else f"Fotogramma {i} · {f.get('ora', '')} · {f.get('zona', '')}")
+            frame_imgs += [{"type": "text", "text": label},
+                           {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data}}]
+        jobs = {"mio": [shot_img, {"type": "text", "text": reader.prompt("mio", m, predicted)}],
+                "avv": frame_imgs + [shot_img, {"type": "text", "text": reader.prompt("avv", m, predicted)}]}
+        out: dict = {}
+        times: dict = {}
+
+        def run(side):
+            t = time.time()
+            out[side] = reader.parse_json(self.readers[side].read(jobs[side]))
+            times[side] = round(time.time() - t, 1)
+
+        threads = [threading.Thread(target=run, args=(k,), daemon=True, name=f"bb-lettore-{k}") for k in jobs]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join(30)
+        for r in self.readers.values():  # le prossime letture trovano il processo già acceso
+            threading.Thread(target=self._warm_reader, args=(r,), daemon=True).start()
+        mine, opp = out.get("mio"), out.get("avv")
+        self._journal("")
+        if not reader.usable(mine, opp):
+            fase = (mine or {}).get("fase")
+            if mine is None or opp is None:  # i lettori non hanno risposto: dopo due volte si torna al giro normale
+                self._fast_fail = getattr(self, "_fast_fail", 0) + 1
+                if self._fast_fail >= 2:
+                    self.say("Lettura veloce sospesa per questa partita: i lettori non rispondono. Uso il giro normale.",
+                             "dim")
+            else:
+                self._fast_fail = 0
+            self._journal(f"Lettura veloce non usata ({fase or 'lettura non valida'}, {time.time() - t0:.1f}s): giro normale")
+            self.busy = False
+            # giro normale con la stessa schermata e gli stessi fotogrammi
+            prompt = (PROMPT_AUTO if auto and not self.pilot_on else PROMPT_TURNO).format(mode=self._mode())
+            if getattr(self, "pilot_on", False) and self._mode() != "ranked":
+                prompt += PROMPT_PILOTA
+            if frames:
+                n_mom = sum(len(f.get("foglio") or [f]) for f in frames)
+                prompt = PROMPT_OSSERVATORE.format(n=f"{n_mom} momenti in {len(frames)} immagini") + prompt
+            self._ask(self._recent_text() + prompt, label=None if auto else "Analisi round", attach=True,
+                      kind="live", frames=frames, shot=shot, region=region)
+            return True
+        self._fast_fail = 0
+        args, warn = reader.merge(mine, opp)
+        state = srv.update_match(**args)
+        dt = time.time() - t0
+        self._journal(f"Lettura veloce: {dt:.1f}s (lato tuo {times.get('mio')}s, avversario {times.get('avv')}s, "
+                      f"{len(frames)} immagini dell'osservatore)\nupdate_match: {json.dumps(args, ensure_ascii=False)}")
+        log.info("lettura veloce in %.1fs %s", dt, times)
+        self._emit_hud(force=True)
+        prompt = PROMPT_TURNO_LETTO.format(mode=self._mode(), recenti=self._recent_text(),
+                                           avvisi=", ".join(warn) or "nessuno", stato=state)
+        if getattr(self, "pilot_on", False) and self._mode() != "ranked":
+            prompt += PROMPT_PILOTA
+        self.busy = False
+        self._ask(prompt, label=None if auto else "Analisi round", attach=True, kind="live", shot=shot, region=region)
+        return True
+
+    def _warm_reader(self, r) -> None:
+        try:
+            r.ensure()
+        except Exception:  # noqa: BLE001
+            log.exception("avvio anticipato del lettore fallito")
+
+    def _rotate_live(self) -> None:
+        """Contesto pulito a ogni round: la sessione del round finito (con le sue immagini) si chiude e ne parte una
+        nuova già accesa per il prossimo F8. Le immagini dei round prima rallentavano ogni risposta."""
+        if not store.load("config").get("contesto_pulito", True) or not self.claude:
+            return
+        old = self.session
+        self.session = type(old)(old.exe, old.cwd) if old else ClaudeSession(self.claude, ROOT)
+        threading.Thread(target=self._prewarm, daemon=True, name="bb-prewarm").start()
+        if old:
+            threading.Thread(target=old.close, daemon=True).start()
+
     def _do_chat(self, text: str) -> None:
-        self._ask(PROMPT_CHAT.format(text=text, mode=self._mode()), label=text)
+        ctx = ""
+        if self._last_live and store.load("config").get("contesto_pulito", True):
+            ctx = f"(La tua ultima risposta in partita era:\n{self._last_live}\n)\n"
+        self._ask(ctx + PROMPT_CHAT.format(text=text, mode=self._mode()), label=text)
 
     def _do_scan(self, _=None) -> None:
         try:
@@ -1326,6 +1508,9 @@ class Controller:
         self.req_n = 0
         self.live_n = 0
         self.flags = []
+        self._recent_moves, self._last_live, self._fast_fail = [], "", 0
+        for r in self.readers.values():
+            threading.Thread(target=self._warm_reader, args=(r,), daemon=True).start()
         cfg = store.load("config")
         self._journal(f"# Partita del {time.strftime('%d/%m/%Y %H:%M')}\nMazzo: {deck}\n"
                       f"Modalità: {cfg.get('modalita')} · modello: {cfg.get('modello_live', 'sonnet')}")
@@ -1350,8 +1535,13 @@ class Controller:
                      "niente e diglielo nel riepilogo, con il motivo.")
         cur = store.load("match") if store.FILES["match"].exists() else {}
         test = PROMPT_FINE_TEST.format(nome=cur["progetto"], v=cur.get("versione")) if cur.get("progetto") else ""
+        diary = ""
+        if self.journal_dir is not None and store.load("config").get("contesto_pulito", True):
+            # con il contesto pulito a ogni round la sessione non ricorda la partita: il diario sì
+            diary = (f" Il contesto riparte pulito a ogni round, quindi i round passati non li hai in memoria: leggi il "
+                     f"diario della partita con Read ({self.journal_dir / 'diario.md'}) e get_match.")
         self._ask(f"Partita finita: {result}. Chiama end_match con il risultato e tutte le carte avversarie "
-                  "viste. Ripensa alla partita intera: registra con record_lesson le lezioni sul piano "
+                  f"viste.{diary} Ripensa alla partita intera: registra con record_lesson le lezioni sul piano "
                   "dell'avversario e sui momenti decisivi che non avevi ancora registrato (niente doppioni: quelle "
                   f"simili vengono rafforzate).{flags} Poi dammi in 3 righe di testo semplice (niente markdown, niente "
                   "asterischi): il mio errore principale, cosa ha fatto "
@@ -1550,7 +1740,7 @@ class Controller:
 
     # ------------------------------------------------ chiamata a Claude Code
     def _ask(self, prompt: str, label: str | None, attach: bool = False, kind: str = "other",
-             frames: list | None = None) -> None:
+             frames: list | None = None, shot: Path | None = None, region=None) -> None:
         if not self.claude:
             self.say("Claude Code non trovato.", "warn")
             return
@@ -1564,13 +1754,15 @@ class Controller:
         self.emit({"type": "clear"})
         if label and kind != "live":  # per F8 basta la mossa: la scritta "Analisi round" sarebbe solo rumore
             self.say(label, "me")
-        shot = None
-        try:
-            if kind != "crea":  # creare un mazzo non riguarda lo schermo
-                shot = self.hidden_capture()  # get_screen userà questa cattura (finestra esclusa)
-                self._shot_region = screen.last_region
-        except Exception:  # noqa: BLE001
-            log.exception("pre-cattura fallita: Claude catturerà da solo")
+        if shot is not None:  # cattura già fatta (lettura veloce)
+            self._shot_region = region
+        else:
+            try:
+                if kind != "crea":  # creare un mazzo non riguarda lo schermo
+                    shot = self.hidden_capture()  # get_screen userà questa cattura (finestra esclusa)
+                    self._shot_region = screen.last_region
+            except Exception:  # noqa: BLE001
+                log.exception("pre-cattura fallita: Claude catturerà da solo")
         self.req_n += 1
         img_note = ""
         if shot is not None:
@@ -1656,6 +1848,10 @@ class Controller:
                         if parsed and parsed.get("mossa") and store.load("config").get("voce", True):
                             self.voice.say(parsed["mossa"])
                         if kind == "live":
+                            self._last_live = final
+                            if parsed and parsed.get("mossa"):
+                                turn = (store.load("match") or {}).get("turno") if store.FILES["match"].exists() else None
+                                self._recent_moves = (self._recent_moves + [f"R{turn} ▶ {parsed['mossa']}"])[-6:]
                             self._pilot_after(final)
                             self.live_n += 1
                             learn = self.live_n >= 2 and store.load("config").get("apprendimento_live", True)
@@ -1675,6 +1871,8 @@ class Controller:
                 log.exception("aggiornamento laboratorio")
             if kind == "live" and (learn or store.load("config").get("barra_vantaggio", True)):
                 self._learn(learn)
+            if kind == "live":
+                self._rotate_live()
             if kind == "fine":
                 try:
                     self._link_journal()

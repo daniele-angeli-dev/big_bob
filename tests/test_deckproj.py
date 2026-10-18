@@ -137,6 +137,7 @@ from origins import spazio  # noqa: E402
 spazio.LOGS, spazio.CAPTURES = tmp / "logs", tmp  # la pulizia del test non tocca i dati veri
 ui = UI()
 c = controller.Controller(ui)
+c.readers = {}  # niente lettori veri nei test
 cfg = store.load("config")
 cfg["modalita"] = "allenamento"
 store.save("config", cfg)

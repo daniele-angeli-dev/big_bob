@@ -426,6 +426,8 @@ body.inmatch .score .l{font-size:11px}
     <label class="opt"><input type="checkbox" id="oTerm"> Apri anche il terminale di Claude Code all'avvio (serve solo per i comandi)</label>
     <label class="opt"><input type="checkbox" id="oObs"> Osserva la partita tra un F8 e l'altro (vede magie scartate e creature morte)</label>
     <div class="hint" id="spaceTxt" style="margin:4px 0 6px">–</div>
+    <label class="opt"><input type="checkbox" id="oFast"> Lettura veloce: due lettori leggono la schermata in parallelo e il coach pensa solo alla mossa</label>
+    <label class="opt"><input type="checkbox" id="oClean"> Contesto pulito a ogni round (risposte più rapide: le immagini dei round prima non rallentano)</label>
     <label class="opt"><input type="checkbox" id="oInv"> BIG-BOB invisibile alle catture: le schermate vedono il gioco sotto la finestra, senza farla sparire (spegnilo solo per fotografare BIG-BOB)</label>
     <label class="opt"><input type="checkbox" id="oEval"> Barra di vantaggio: BIG-BOB stima chi sta vincendo dopo ogni risposta</label>
     <label class="opt"><input type="checkbox" id="oMeta"> Aggiorna carte, location e meta da OriginsMeta (al primo avvio di ogni giorno)</label>
@@ -912,7 +914,7 @@ body.inmatch .score .l{font-size:11px}
     $('apiKey').value = ''; $('apiKey').placeholder = v.api_key_impostata ? 'chiave salvata · scrivi per cambiarla' : 'sk-ant-…';
     $('modello').value = v.modello_live || 'sonnet';
     $('oVoce').checked = v.voce !== false; $('oImpara').checked = v.apprendimento_live !== false;
-    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false; $('oObs').checked = v.osservatore !== false; $('oInv').checked = v.invisibile_catture !== false; $('oEval').checked = v.barra_vantaggio !== false;
+    $('oTerm').checked = v.apri_claude_code_all_avvio === true; $('oMeta').checked = v.meta_originsmeta !== false; $('oObs').checked = v.osservatore !== false; $('oInv').checked = v.invisibile_catture !== false; $('oFast').checked = v.lettura_veloce !== false; $('oClean').checked = v.contesto_pulito !== false; $('oEval').checked = v.barra_vantaggio !== false;
     $('oThink').value = v.max_thinking_live != null ? v.max_thinking_live : 4000;
     $('oShare').checked = v.cervello_contribuisci !== false; $('oUse').checked = v.cervello_usa !== false;
     var cb = ev.cervello || {};
@@ -936,7 +938,7 @@ body.inmatch .score .l{font-size:11px}
     e.preventDefault();
     var vals = { connessione: connValue(), modello_live: $('modello').value, voce: $('oVoce').checked,
       apprendimento_live: $('oImpara').checked, apri_claude_code_all_avvio: $('oTerm').checked,
-      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, invisibile_catture: $('oInv').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10),
+      meta_originsmeta: $('oMeta').checked, osservatore: $('oObs').checked, invisibile_catture: $('oInv').checked, lettura_veloce: $('oFast').checked, contesto_pulito: $('oClean').checked, barra_vantaggio: $('oEval').checked, max_thinking_live: parseInt($('oThink').value || '0', 10),
       cervello_contribuisci: $('oShare').checked, cervello_usa: $('oUse').checked };
     var k = $('apiKey').value.trim(); if (k) vals.api_key = k;
     hide(); call('save_settings', vals);

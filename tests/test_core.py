@@ -251,5 +251,24 @@ assert not list((spazio.LOGS / "partite" / "20261001-000001").glob("*.jpg"))
 assert (spazio.LOGS / "partite" / "20261001-000001" / "diario.md").exists() and rep["schermate_tolte"] > 0
 assert spazio.usage()["totale"] < 0.1
 
+# lettura veloce: JSON dei lettori, unione negli argomenti di update_match
+from origins import reader  # noqa: E402
+assert reader.parse_json('Ecco:\n```json\n{"turn": 3, "my_hand": ["A"]}\n```') == {"turn": 3, "my_hand": ["A"]}
+assert reader.parse_json('testo {"a": {"b": 1}} altro') == {"a": {"b": 1}} and reader.parse_json("niente") is None
+mine = {"fase": "gioco", "turn": 4, "mana": "5", "my_hand": ["Marian", 3, ""], "my_barriers": [20, 8, 20],
+        "mie": {"sinistra": ["Friar Tuck 4/3"], "centro": [None, None]}, "reveals_first": "boh",
+        "locations": ["Sherwood", None, None]}
+opp = {"avv": {"sinistra": [None, "Bat 2/1"], "destra": ["Brides 3/3", None]}, "opp_barriers": [12, 20],
+       "opp_hand_size": 4, "opp_played_new": ["Bat", "Bat"]}
+args, warn = reader.merge(mine, opp)
+assert args["turn"] == 4 and "mana" not in args and args["my_hand"] == ["Marian"], args
+assert "opp_barriers" not in args and "reveals_first" not in args and args["locations"] == ["Sherwood"], args
+assert args["board"]["sinistra"] == {"mie": ["Friar Tuck 4/3", None], "avv": [None, "Bat 2/1"]}, args["board"]
+assert args["board"]["destra"] == {"mie": [None, None], "avv": ["Brides 3/3", None]} and "centro" in args["board"]
+assert args["opp_played_new"] == ["Bat", "Bat"] and not warn
+assert reader.usable(mine, opp) and not reader.usable({**mine, "fase": "mulligan"}, opp) and not reader.usable(None, opp)
+assert "[LETTORE · lato di Daniele]" in reader.prompt("mio", {"carte_mie": ["Marian"], "turno": 3})
+assert "Marian" in reader.prompt("avv", {"carte_mie": ["Marian"]}) and "STATO REGISTRATO" in reader.prompt("avv", {})
+
 shutil.rmtree(tmp)
 print("TUTTI I TEST OK")

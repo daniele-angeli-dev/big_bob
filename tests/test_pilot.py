@@ -110,6 +110,7 @@ controller.ROOT = tmp
 ui = UI()
 c = controller.Controller.__new__(controller.Controller)  # senza avviare Claude: servono solo i metodi del pilota
 c.ui, c.busy, c.auto_on, c.pilot_on, c._pilot_stop, c._pilot_rounds = ui, True, False, False, False, {}
+c.readers, c._recent_moves, c._last_live = {}, [], ""
 c._q = controller.queue.Queue()
 c.journal_dir, c.rec_on, c.voice = None, False, type("V", (), {"available": lambda s: False})()
 c.emit, c.say, c.status = ui.emit, (lambda t, r="bob": ui.events.append({"type": "say", "text": t})), (lambda t: None)

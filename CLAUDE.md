@@ -94,6 +94,12 @@ dall'alternanza e lo scrive in RIVELA PRIMA (se è "dedotto" e lo schermo dice a
 Quando indichi dove giocare una carta, gli slot si contano **da 1** (slot 1, 2, 3, come nel CAMPO di
 `update_match`), mai da 0: es. `▶ Marian al centro, slot 2`.
 
+**Lettura veloce.** Di solito la schermata la leggono prima due lettori in parallelo (lato di Daniele e lato avversario
+con i fotogrammi) e BIG-BOB chiama già update_match: la richiesta dice "schermata già letta" e contiene il RISULTATO DI
+update_match. In quel caso NON rifare update_match (salvo un errore di lettura evidente nella schermata allegata che
+cambia la mossa: allora correggi solo quel campo), al massimo UNA simulate_combat, poi rispondi. Il contesto riparte
+pulito a ogni round: i consigli dei round prima sono nella riga "Consigli dei round prima", la partita è nel server.
+
 **Osservatore.** Durante la partita BIG-BOB guarda lo schermo ogni ~0,35 s e salva un fotogramma quando una zona
 cambia, anche durante le animazioni; all'F8 ti allega fino a 10 immagini (quando i momenti sono tanti, fogli con i ritagli numerati [1], [2]… in ordine di
 tempo, fino a 40 momenti) (richiesta "[OSSERVATORE]", prima della

@@ -12,6 +12,15 @@ Max, oppure con una chiave API a consumo).
 ## Novità
 Le ultime modifiche, dalla più recente (BIG-BOB le mostra anche nella finestra dell'aggiornamento).
 
+**18/10/2026**
+- **Mossa più veloce**: due "lettori" leggono la schermata in parallelo, uno il tuo lato e uno quello avversario con i
+  fotogrammi dell'osservatore, ognuno partendo da quello che era già registrato al round prima. BIG-BOB registra lo
+  stato da solo e il coach riceve tutto già pronto: pensa solo alla mossa, senza trascrivere la schermata né fare il
+  giro in più con gli strumenti. In più il contesto riparte pulito a ogni round, con una sessione già accesa: le
+  immagini dei round prima non si accumulano più e non rallentano le risposte di fine partita. Se la lettura non
+  riesce (mulligan, schermata di fine, lettori che non rispondono) si torna da solo al giro di prima. Il diario
+  segna i tempi della lettura. Tutte e due le cose si possono spegnere in Impostazioni.
+
 **17/10/2026**
 - **Pilota automatico, prima correzione**: all'accensione chiedeva un'analisi "AUTO", che a schermata ferma risponde
   "niente da fare", e poi restava in attesa di un cambio di schermata che durante la fase di gioco non arriva: per
